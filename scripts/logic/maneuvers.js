@@ -1,6 +1,5 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, clearNegative } from "./effects.js";
-import { setCooldown } from "./cooldowns.js";
 
 const E = (mods, duration = 1, key = null, label = null) => ({
   key: key || crypto.randomUUID?.() || randomID(),
@@ -90,7 +89,6 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ tnDice: "+5d10", dmgDice: "+4d10" }, 1, "mordhau", "Mordhau Swordsmanship"));
-      await setCooldown(actor, "mordhau", 3);
     }
   },
   riposte: {
@@ -226,7 +224,6 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ tags: { multiShot: 2, multiShotHalf: true } }, 1, "xbow-volley", "Volley Fire"));
-      await setCooldown(actor, "xbowVolley", 2);
     }
   },
   xbowTakeDown: {

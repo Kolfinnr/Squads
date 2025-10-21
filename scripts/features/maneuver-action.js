@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, ROLL } from "../config.js";
 import { maneuversFor, onManeuverFail } from "../logic/maneuvers.js";
 import { aggregateForManeuvers } from "../logic/effects.js";
-import { getCooldown } from "../logic/cooldowns.js";
+import { getCooldown, setCooldown } from "../logic/cooldowns.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
 
 function diffMod(difficulty) {
@@ -47,7 +47,8 @@ export async function openManeuverDialog(actor) {
     content,
     label: game.i18n.localize("W4SQ.Roll"),
     callback: async html => {
-      const select = html.querySelector("select[name=maneuver]");
+      const root = html?.[0] ?? html;
+      const select = root?.querySelector("select[name=maneuver]");
       const key = select?.value;
       if (!key) return;
       const maneuver = maneuvers.find(m => m.key === key);
@@ -91,6 +92,9 @@ async function executeManeuver(actor, maneuver) {
   }
 
   await maneuver.apply({ actor, target });
+  if (maneuver.cooldown) {
+    await setCooldown(actor, maneuver.key, maneuver.cooldown);
+  }
   ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<p>${game.i18n.format("W4SQ.ManeuverSuccess", { name: maneuver.name, roll: roll.total, tn })}</p>`

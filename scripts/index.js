@@ -59,10 +59,12 @@ Hooks.once("ready", () => {
   game.w4sq.openCommand = openCommandDashboard;
 });
 
-Hooks.on("updateCombat", (combat, diff) => {
-  if (!diff) return;
-  if (typeof diff.round === "number" && diff.round > 0) {
-    tickAllActors();
+Hooks.on("updateCombat", async (combat, changed) => {
+  if (!changed) return;
+  const roundChanged = typeof changed.round === "number" && changed.round > 0;
+  const turnReset = typeof changed.turn === "number" && changed.turn === 0;
+  if (roundChanged || turnReset) {
+    await tickAllActors();
   }
 });
 

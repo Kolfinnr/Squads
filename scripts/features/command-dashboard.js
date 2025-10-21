@@ -1,4 +1,4 @@
-import { FLAG_SCOPE, MODULE_ID } from "../config.js";
+import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, clearNegative, getEffects } from "../logic/effects.js";
 import { getCooldowns, setCooldown } from "../logic/cooldowns.js";
@@ -21,8 +21,13 @@ function canSee(token) {
 }
 
 function getCP(actor) {
-  const cp = actor?.getFlag(FLAG_SCOPE, "cp") ?? { current: 0, cap: 0 };
-  return { current: Number(cp.current || 0), cap: Number(cp.cap || 0) };
+  const source = actor?.getFlag(FLAG_SCOPE, "cp") ?? DEFAULT_FLAGS.cp;
+  const cp = foundry.utils.duplicate(source ?? {});
+  const fallback = DEFAULT_FLAGS.cp ?? { current: 0, cap: 0 };
+  return {
+    current: Number(cp.current ?? fallback.current ?? 0),
+    cap: Number(cp.cap ?? fallback.cap ?? 0)
+  };
 }
 
 function isSquadToken(token) {

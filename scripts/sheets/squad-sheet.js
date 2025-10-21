@@ -1,4 +1,4 @@
-import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES } from "../config.js";
+import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
 import { getEffects } from "../logic/effects.js";
@@ -14,6 +14,7 @@ export class SquadActorSheet extends ActorSheet {
     opts.height = 640;
     opts.submitOnChange = true;
     opts.closeOnSubmit = false;
+    opts.tabs = [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "main" }];
     return opts;
   }
 
@@ -35,7 +36,7 @@ export class SquadActorSheet extends ActorSheet {
       unbreakable: f("unbreakable", false),
       playerControlled: f("playerControlled", null),
       isCommander: f("isCommander", false),
-      cp: f("cp", { current: 0, cap: 0 }),
+      cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
       lastTargetName: f("lastTargetName", "")
     };
     data.effects = getEffects(this.actor);

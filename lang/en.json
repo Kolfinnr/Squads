@@ -65,7 +65,7 @@
   "W4SQ.ChatDamage": "Damage",
   "W4SQ.ChatMorale": "Morale Loss",
   "W4SQ.ChatNoSoak": "No soak applied.",
-  "W4SQ.ChatDefense": "Defense {dice} = {total}",
+  "W4SQ.ChatDefense": "Defense roll: {total} ({dice})",
   "W4SQ.ChatEffect": "Effect {formula} = {total}",
   "W4SQ.ChatPenalty": "Penalty {formula} = {total}",
   "W4SQ.ChatArmor": "Armor {dice} = {total}",
