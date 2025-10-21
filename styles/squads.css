@@ -137,6 +137,10 @@
   vertical-align: top;
 }
 
+.w4sq-command .squad-table select {
+  width: 100%;
+}
+
 .w4sq-command .squad-table tr.selected {
   background: rgba(0, 128, 255, 0.1);
 }

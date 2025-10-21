@@ -1,9 +1,24 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, clearNegative, getEffects } from "../logic/effects.js";
-import { getCooldowns, setCooldown } from "../logic/cooldowns.js";
+import { getCooldown, getCooldowns, setCooldown } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
+
+const STANDING_ORDER_OPTIONS = [
+  { value: "", label: "W4SQ.OrderNone" },
+  { value: "move", label: "W4SQ.OrderMove" },
+  { value: "attack", label: "W4SQ.OrderAttack" },
+  { value: "maneuver", label: "W4SQ.OrderManeuverLong" },
+  { value: "idle", label: "W4SQ.OrderIdle" }
+];
+
+const IMMEDIATE_ORDER_LABELS = {
+  melee: "W4SQ.OrderMelee",
+  ranged: "W4SQ.OrderRanged",
+  maneuver: "W4SQ.OrderManeuver",
+  hold: "W4SQ.OrderHold"
+};
 
 function getDisposition(token) {
   return token?.document?.disposition ?? null;
@@ -118,7 +133,7 @@ export class W4SQCommandApp extends Application {
   }
 
   constructor({ token, actor, disposition }) {
-    super({ template: TEMPLATE, classes: ["w4sq", "command-app"] });
+    super({ template: TEMPLATE, classes: ["w4sq", "command-app"], width: 720 });
     this.contextToken = token || null;
     this.contextActor = actor || token?.actor || null;
     this.selectedSquadId = token?.id ?? null;
@@ -154,6 +169,8 @@ export class W4SQCommandApp extends Application {
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+      const standingOrder = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
+      const orderKey = actor.getFlag(FLAG_SCOPE, "order") || "";
       return {
         id: token.id,
         name: token.name,
@@ -168,7 +185,9 @@ export class W4SQCommandApp extends Application {
         effects: getEffects(actor),
         cooldowns: Object.entries(getCooldowns(actor)),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
-        order: actor.getFlag(FLAG_SCOPE, "order") || "",
+        order: orderKey,
+        orderLabel: orderKey ? game.i18n.localize(IMMEDIATE_ORDER_LABELS[orderKey] || orderKey) : "",
+        standingOrder,
         isSelected: this.selectedSquadId === token.id
       };
     });
@@ -199,6 +218,10 @@ export class W4SQCommandApp extends Application {
       commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
       squads,
+      standingOrderOptions: STANDING_ORDER_OPTIONS.map(opt => ({
+        value: opt.value,
+        label: game.i18n.localize(opt.label)
+      })),
       dispositionLabel: dispositionLabel(this.disposition)
     };
   }
@@ -234,6 +257,14 @@ export class W4SQCommandApp extends Application {
         }
       }
       this.render();
+    });
+
+    html.find('[data-order-select]').on("change", async ev => {
+      const select = ev.currentTarget;
+      const tokenId = select.dataset.tokenId;
+      const actorId = select.dataset.actorId;
+      const value = select.value;
+      await this._setStandingOrder({ tokenId, actorId, value });
     });
   }
 
@@ -296,9 +327,14 @@ export class W4SQCommandApp extends Application {
   }
 
   async _commandRanged(commander, squad) {
+    if (getCooldown(squad, "cmdRangedPreempt") > 0) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.CommandOnCooldown"));
+      return;
+    }
     if (!(await this._spendCP(commander, 2))) return;
     await doSquadAction(squad, "ranged");
     await setCooldown(squad, "cmdRangedPreempt", 1);
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdRanged");
   }
 
   async _commandOrders(commander, squad) {
@@ -308,16 +344,21 @@ export class W4SQCommandApp extends Application {
       maneuver: game.i18n.localize("W4SQ.OrderManeuver"),
       hold: game.i18n.localize("W4SQ.OrderHold")
     };
-    const content = `<div class="w4sq-orders">${Object.entries(options).map(([key, label]) => `<label><input type="radio" name="order" value="${key}">${label}</label>`).join("<br/>")}</div>`;
+    const content = `<div class="w4sq-orders">${Object.entries(options).map(([key, label]) => `<label><input type="radio" name="order" value="${key}"> ${label}</label>`).join("<br/>")}</div>`;
     const choice = await Dialog.prompt({
       title: game.i18n.localize("W4SQ.NewOrders"),
       content,
       label: game.i18n.localize("W4SQ.Confirm"),
-      callback: html => html.querySelector('input[name="order"]:checked')?.value
+      callback: html => {
+        const root = html?.[0] ?? html;
+        return root?.querySelector('input[name="order"]:checked')?.value;
+      }
     });
     if (!choice) return;
     if (!(await this._spendCP(commander, 1))) return;
     await squad.setFlag(FLAG_SCOPE, "order", choice);
+    await squad.setFlag(FLAG_SCOPE, "standingOrder", "");
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdOrders", { order: options[choice] || choice });
   }
 
   async _commandReorg(commander, squad) {
@@ -327,6 +368,7 @@ export class W4SQCommandApp extends Application {
     const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdReorg", { value: roll.total });
   }
 
   async _commandRally(commander, squad) {
@@ -335,6 +377,7 @@ export class W4SQCommandApp extends Application {
     const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdRally", { value: roll.total });
   }
 
   async _commandWithdraw(commander, squad) {
@@ -350,6 +393,7 @@ export class W4SQCommandApp extends Application {
       duration: 1,
       mods: { defSoakDice: "+1d10", tags: { disengaged: true } }
     });
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdWithdraw");
   }
 
   async _commandSpecial(commander, squad) {
@@ -357,7 +401,10 @@ export class W4SQCommandApp extends Application {
       title: game.i18n.localize("W4SQ.SpecialAction"),
       content: `<textarea rows="4" style="width:100%"></textarea>`,
       label: game.i18n.localize("W4SQ.Confirm"),
-      callback: html => html.querySelector("textarea")?.value?.trim()
+      callback: html => {
+        const root = html?.[0] ?? html;
+        return root?.querySelector("textarea")?.value?.trim();
+      }
     });
     if (!text) return;
     if (!(await this._spendCP(commander, 1))) return;
@@ -365,6 +412,7 @@ export class W4SQCommandApp extends Application {
       speaker: ChatMessage.getSpeaker({ actor: squad }),
       content: `<p><strong>${game.i18n.localize("W4SQ.SpecialAction")}</strong>: ${text}</p>`
     });
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdSpecial");
   }
 
   async _commandFormation(commander, squad) {
@@ -375,6 +423,7 @@ export class W4SQCommandApp extends Application {
       duration: 1,
       mods: { maneuverTNDice: "+8d10" }
     });
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdFormation");
   }
 
   async _adjustCP(commander, delta) {
@@ -403,6 +452,33 @@ export class W4SQCommandApp extends Application {
     }
     cp.current = Math.floor(cp.current);
     await commander.setFlag(FLAG_SCOPE, "cp", cp);
+  }
+
+  async _setStandingOrder({ tokenId, actorId, value }) {
+    const token = tokenId ? canvas?.tokens?.get(tokenId) : null;
+    const actor = token?.actor ?? (actorId ? game.actors?.get(actorId) : null);
+    if (!actor) return;
+    if (!(game.user.isGM || actor.isOwner)) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
+      return;
+    }
+    await actor.setFlag(FLAG_SCOPE, "standingOrder", value || "");
+    this.render(false);
+  }
+
+  async _announceCommand(commander, squad, key, data = {}) {
+    const squadName = squad?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+    const commanderName = commander?.name ?? game.i18n.localize("W4SQ.UnknownCommander");
+    const template = game.i18n.localize(key);
+    const message = template
+      .replace("{commander}", commanderName)
+      .replace("{squad}", squadName)
+      .replace("{order}", data.order ?? "")
+      .replace("{value}", data.value ?? "");
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: commander ?? squad }),
+      content: `<p>${message}</p>`
+    });
   }
 }
 

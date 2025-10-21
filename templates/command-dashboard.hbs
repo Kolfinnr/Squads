@@ -41,6 +41,7 @@
         <th>{{localize "W4SQ.ActiveEffects"}}</th>
         <th>{{localize "W4SQ.Cooldowns"}}</th>
         <th>{{localize "W4SQ.LastTarget"}}</th>
+        <th>{{localize "W4SQ.StandingOrders"}}</th>
         <th>{{localize "W4SQ.Orders"}}</th>
       </tr>
     </thead>
@@ -76,11 +77,18 @@
             {{/each}}
           </td>
           <td>{{squad.lastTargetName}}</td>
-          <td>{{squad.order}}</td>
+          <td>
+            <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
+              {{#each ../standingOrderOptions as |opt|}}
+                <option value="{{opt.value}}" {{#if (eq opt.value squad.standingOrder)}}selected{{/if}}>{{opt.label}}</option>
+              {{/each}}
+            </select>
+          </td>
+          <td>{{#if squad.orderLabel}}{{squad.orderLabel}}{{else}}—{{/if}}</td>
         </tr>
       {{else}}
         <tr>
-          <td colspan="8">{{localize "W4SQ.NoSquads"}}</td>
+          <td colspan="9">{{localize "W4SQ.NoSquads"}}</td>
         </tr>
       {{/each}}
     </tbody>

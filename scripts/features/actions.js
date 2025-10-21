@@ -156,8 +156,19 @@ export async function doSquadAction(actor, action) {
 
   let defenseOnly = 0;
   let armor = 0;
-  const soakBreakdown = [];
   let rangedResist = 0;
+  const soakNotes = [];
+  let baseDefense = 0;
+  let defenseEffect = 0;
+  let defensePenalty = 0;
+  let polearmBonus = 0;
+  let bowReduction = 0;
+  let firearmIgnore = 0;
+  let armorCut = 0;
+  let armorSource = 0;
+  let armorPierced = false;
+  let rangedResistTotal = 0;
+  let counterSpear = 0;
 
   if (targetActor) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
@@ -165,20 +176,22 @@ export async function doSquadAction(actor, action) {
     const targetWeapon = getF(targetActor, "weapon", "sword");
     const aggDefense = aggregateForDefense(targetActor, { action });
 
-    const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
-    defenseOnly += defRoll.total;
-    soakBreakdown.push(game.i18n.format("W4SQ.ChatDefense", { dice: `${targetExp}d6`, total: defRoll.total }));
+    if (targetExp > 0) {
+      const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
+      defenseOnly += defRoll.total;
+      baseDefense = defRoll.total;
+    }
 
     const effDef = await rollMaybe(aggDefense.defSoakDice);
     if (effDef.total) {
       defenseOnly += effDef.total;
-      soakBreakdown.push(game.i18n.format("W4SQ.ChatEffect", { formula: effDef.formula, total: effDef.total }));
+      defenseEffect += effDef.total;
     }
 
     const effPen = await rollMaybe(aggDefense.defPenaltyDice);
     if (effPen.total) {
       defenseOnly += effPen.total;
-      soakBreakdown.push(game.i18n.format("W4SQ.ChatPenalty", { formula: effPen.formula, total: effPen.total }));
+      defensePenalty += effPen.total;
     }
 
     if (!(weapon.pierceArmor || aggAttack.tags?.pierceArmor)) {
@@ -186,38 +199,39 @@ export async function doSquadAction(actor, action) {
       if (armorDice > 0) {
         const armorRoll = await (new Roll(`${armorDice}d3`).roll({ async: true }));
         armor = armorRoll.total;
+        armorSource = armorRoll.total;
         const ignorePct = Number(aggAttack.tags?.armorIgnorePct || 0);
         if (ignorePct > 0) {
           const cut = Math.floor(armor * ignorePct);
           armor = Math.max(0, armor - cut);
-          soakBreakdown.push(game.i18n.format("W4SQ.ChatArmorIgnore", { pct: Math.round(ignorePct * 100), cut }));
+          armorCut = cut;
         }
-        soakBreakdown.push(game.i18n.format("W4SQ.ChatArmor", { dice: `${armorDice}d3`, total: armor }));
       }
     } else {
-      soakBreakdown.push(game.i18n.localize("W4SQ.ChatArmorPierced"));
+      armorPierced = true;
+      armor = 0;
     }
 
     if (targetWeapon === "polearm") {
       const pole = await (new Roll("1d20").roll({ async: true }));
       defenseOnly += pole.total;
-      soakBreakdown.push(game.i18n.format("W4SQ.ChatPolearm", { total: pole.total }));
+      polearmBonus = pole.total;
     }
 
     if (action === "ranged") {
       if (weaponKey === "bow" || weaponKey === "crossbow") {
         const reduce = Math.floor(defenseOnly / 2);
         defenseOnly = Math.max(0, defenseOnly - reduce);
-        soakBreakdown.push(game.i18n.format("W4SQ.ChatBowHalve", { reduce }));
+        bowReduction = reduce;
       }
       if (weaponKey === "firearm" || weaponKey === "artillery") {
-        soakBreakdown.push(game.i18n.format("W4SQ.ChatFirearmIgnore", { total: defenseOnly }));
+        firearmIgnore = defenseOnly;
         defenseOnly = 0;
       }
       const rr = await rollMaybe(aggDefense.rangedResistDice);
       if (rr.total) {
         rangedResist += rr.total;
-        soakBreakdown.push(game.i18n.format("W4SQ.ChatRangedResist", { formula: rr.formula, total: rr.total }));
+        rangedResistTotal += rr.total;
       }
     }
 
@@ -226,7 +240,7 @@ export async function doSquadAction(actor, action) {
       const aHPMax = Number(getF(actor, "hpMax", 1));
       const aHP = Number(getF(actor, "hp", 0));
       await actor.setFlag(FLAG_SCOPE, "hp", clamp(aHP - counter.total, 0, aHPMax));
-      soakBreakdown.push(game.i18n.format("W4SQ.ChatCounterSpear", { total: counter.total }));
+      counterSpear = counter.total;
     }
   }
 
@@ -251,6 +265,43 @@ export async function doSquadAction(actor, action) {
     }
   }
 
+  if (baseDefense) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseBase", { total: baseDefense }));
+  }
+  if (defenseEffect) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseEffect", { total: defenseEffect }));
+  }
+  if (defensePenalty) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefensePenalty", { total: defensePenalty }));
+  }
+  if (polearmBonus) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefensePolearm", { total: polearmBonus }));
+  }
+  if (bowReduction) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseBow", { total: bowReduction }));
+  }
+  if (firearmIgnore) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseFirearm", { total: firearmIgnore }));
+  }
+  if (armorSource && !firearmIgnore) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatArmorBase", { total: armorSource }));
+  }
+  if (armorCut) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatArmorCut", { total: armorCut }));
+  }
+  if (armorPierced) {
+    soakNotes.push(game.i18n.localize("W4SQ.ChatArmorPierced"));
+  }
+  if (rangedResistTotal) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatRangedResistTotal", { total: rangedResistTotal }));
+  }
+  if (counterSpear) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatCounterSpear", { total: counterSpear }));
+  }
+  if (soakNotes.length) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatSoakTotal", { total: totalSoak }));
+  }
+
   await tickEffects(actor);
   await tickCooldowns(actor);
 
@@ -263,7 +314,7 @@ export async function doSquadAction(actor, action) {
     margin: tn - roll.total,
     dmg: finalDamage,
     moraleLoss,
-    soakDetail: soakBreakdown.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
+    soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
     footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
   });
 }

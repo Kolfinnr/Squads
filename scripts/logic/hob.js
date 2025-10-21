@@ -13,6 +13,7 @@ const goodDouble = [
         duration: 1,
         mods: { tnDice: "+2d10", dmgDice: "+2d10" }
       });
+      return "+2d10 TN / +2d10 damage (1 round)";
     }
   },
   {
@@ -26,6 +27,7 @@ const goodDouble = [
         duration: 1,
         mods: { dmgDice: "+2d10" }
       });
+      return "+2d10 damage (1 round)";
     }
   }
 ];
@@ -37,7 +39,9 @@ const badDouble = [
     text: "The line staggers as leadership falters.",
     apply: async actor => {
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
-      await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, morale - 10));
+      const roll = await (new Roll("1d20").roll({ async: true }));
+      await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, morale - roll.total));
+      return `-${roll.total} Morale`;
     }
   },
   {
@@ -51,6 +55,7 @@ const badDouble = [
         duration: 1,
         mods: { defPenaltyDice: "-1d20", tags: { disorganized: true } }
       });
+      return "Disorganized (1 round)";
     }
   }
 ];
@@ -67,6 +72,7 @@ const hpEvents = [
         duration: 1,
         mods: { dmgDice: "+2d10" }
       });
+      return "+2d10 damage (1 round)";
     }
   },
   {
@@ -77,7 +83,9 @@ const hpEvents = [
       const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const roll = await (new Roll("1d20").roll({ async: true }));
-      await actor.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hp + roll.total));
+      const next = Math.min(hpMax, hp + roll.total);
+      await actor.setFlag(FLAG_SCOPE, "hp", next);
+      return `+${roll.total} HP`;
     }
   }
 ];
@@ -90,8 +98,9 @@ const moraleEvents = [
     apply: async actor => {
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-      const roll = await (new Roll("2d10").roll({ async: true }));
+      const roll = await (new Roll("2d20").roll({ async: true }));
       await actor.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));
+      return `+${roll.total} Morale`;
     }
   },
   {
@@ -106,7 +115,9 @@ const moraleEvents = [
         mods: { defPenaltyDice: "-1d20", tags: { disorganized: true } }
       });
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
-      await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, morale - 10));
+      const roll = await (new Roll("2d20").roll({ async: true }));
+      await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, morale - roll.total));
+      return `-${roll.total} Morale & Disorganized (1 round)`;
     }
   }
 ];
@@ -129,8 +140,9 @@ async function chooseEvent(actor, pool, heading) {
 
 async function applyEvent(actor, entry, heading) {
   if (!entry) return;
-  await entry.apply?.(actor);
-  const content = `<h3>${heading}</h3><p><strong>${entry.title}</strong> – ${entry.text}</p>`;
+  const detail = await entry.apply?.(actor);
+  const extra = detail ? `<br/><em>${detail}</em>` : "";
+  const content = `<h3>${heading}</h3><p><strong>${entry.title}</strong> – ${entry.text}${extra}</p>`;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content
