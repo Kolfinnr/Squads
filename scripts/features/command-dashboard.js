@@ -1,24 +1,17 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
-import { addEffect, clearNegative, getEffects } from "../logic/effects.js";
+import { addEffect, clearNegative, getEffects, getEffectsDetailed } from "../logic/effects.js";
 import { getCooldown, getCooldowns, setCooldown } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
-const STANDING_ORDER_OPTIONS = [
+const ORDER_OPTIONS = [
   { value: "", label: "W4SQ.OrderNone" },
   { value: "move", label: "W4SQ.OrderMove" },
   { value: "attack", label: "W4SQ.OrderAttack" },
-  { value: "maneuver", label: "W4SQ.OrderManeuverLong" },
+  { value: "maneuver", label: "W4SQ.OrderManeuverOption" },
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
-
-const IMMEDIATE_ORDER_LABELS = {
-  melee: "W4SQ.OrderMelee",
-  ranged: "W4SQ.OrderRanged",
-  maneuver: "W4SQ.OrderManeuver",
-  hold: "W4SQ.OrderHold"
-};
 
 function getDisposition(token) {
   return token?.document?.disposition ?? null;
@@ -103,6 +96,10 @@ export class W4SQCommandApp extends Application {
   }
 
   async close(options) {
+    if (this._boundActorUpdate) {
+      Hooks.off("updateActor", this._boundActorUpdate);
+      this._boundActorUpdate = null;
+    }
     await super.close(options);
     for (const [key, inst] of W4SQCommandApp.instances.entries()) {
       if (inst === this) {
@@ -133,15 +130,27 @@ export class W4SQCommandApp extends Application {
   }
 
   constructor({ token, actor, disposition }) {
-    super({ template: TEMPLATE, classes: ["w4sq", "command-app"], width: 720 });
+    super({ template: TEMPLATE, classes: ["w4sq", "command-app"], width: 860 });
     this.contextToken = token || null;
     this.contextActor = actor || token?.actor || null;
     this.selectedSquadId = token?.id ?? null;
     this.disposition = disposition ?? (game.user.isGM ? null : CONST.TOKEN_DISPOSITIONS.FRIENDLY);
+    this._boundActorUpdate = this._onActorUpdate.bind(this);
+    Hooks.on("updateActor", this._boundActorUpdate);
   }
 
   get title() {
     return game.i18n.localize("W4SQ.CommandDashboard");
+  }
+
+  _onActorUpdate(actor) {
+    if (!this.rendered) return;
+    if (!actor || actor.getFlag(FLAG_SCOPE, "hp") === undefined) return;
+    const commander = this._getCommander()?.actor;
+    const relevant = commander?.id === actor.id || this._getSquadTokens().some(token => token.actor?.id === actor.id);
+    if (relevant) {
+      this.render(false);
+    }
   }
 
   _getSquadTokens() {
@@ -169,8 +178,11 @@ export class W4SQCommandApp extends Application {
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-      const standingOrder = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
-      const orderKey = actor.getFlag(FLAG_SCOPE, "order") || "";
+      let order = actor.getFlag(FLAG_SCOPE, "order");
+      if (order === undefined || order === null) {
+        order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
+      }
+      order = order || "";
       return {
         id: token.id,
         name: token.name,
@@ -182,12 +194,10 @@ export class W4SQCommandApp extends Application {
         morale,
         moraleMax,
         moralePct: moraleMax > 0 ? Math.round((morale / moraleMax) * 100) : 0,
-        effects: getEffects(actor),
+        effects: getEffectsDetailed(actor),
         cooldowns: Object.entries(getCooldowns(actor)),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
-        order: orderKey,
-        orderLabel: orderKey ? game.i18n.localize(IMMEDIATE_ORDER_LABELS[orderKey] || orderKey) : "",
-        standingOrder,
+        order,
         isSelected: this.selectedSquadId === token.id
       };
     });
@@ -218,7 +228,7 @@ export class W4SQCommandApp extends Application {
       commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
       squads,
-      standingOrderOptions: STANDING_ORDER_OPTIONS.map(opt => ({
+      orderOptions: ORDER_OPTIONS.map(opt => ({
         value: opt.value,
         label: game.i18n.localize(opt.label)
       })),
@@ -264,7 +274,7 @@ export class W4SQCommandApp extends Application {
       const tokenId = select.dataset.tokenId;
       const actorId = select.dataset.actorId;
       const value = select.value;
-      await this._setStandingOrder({ tokenId, actorId, value });
+      await this._setOrder({ tokenId, actorId, value });
     });
   }
 
@@ -350,14 +360,18 @@ export class W4SQCommandApp extends Application {
       content,
       label: game.i18n.localize("W4SQ.Confirm"),
       callback: html => {
+        if (!html) return null;
+        if (html.jquery) {
+          return html.find('input[name="order"]:checked').val();
+        }
         const root = html?.[0] ?? html;
-        return root?.querySelector('input[name="order"]:checked')?.value;
+        return root?.querySelector('input[name="order"]:checked')?.value ?? null;
       }
     });
     if (!choice) return;
     if (!(await this._spendCP(commander, 1))) return;
-    await squad.setFlag(FLAG_SCOPE, "order", choice);
-    await squad.setFlag(FLAG_SCOPE, "standingOrder", "");
+    await squad.setFlag(FLAG_SCOPE, "order", "");
+    await squad.unsetFlag(FLAG_SCOPE, "standingOrder");
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdOrders", { order: options[choice] || choice });
   }
 
@@ -454,7 +468,7 @@ export class W4SQCommandApp extends Application {
     await commander.setFlag(FLAG_SCOPE, "cp", cp);
   }
 
-  async _setStandingOrder({ tokenId, actorId, value }) {
+  async _setOrder({ tokenId, actorId, value }) {
     const token = tokenId ? canvas?.tokens?.get(tokenId) : null;
     const actor = token?.actor ?? (actorId ? game.actors?.get(actorId) : null);
     if (!actor) return;
@@ -462,7 +476,8 @@ export class W4SQCommandApp extends Application {
       ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
       return;
     }
-    await actor.setFlag(FLAG_SCOPE, "standingOrder", value || "");
+    await actor.setFlag(FLAG_SCOPE, "order", value || "");
+    await actor.unsetFlag(FLAG_SCOPE, "standingOrder");
     this.render(false);
   }
 

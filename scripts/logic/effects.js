@@ -1,5 +1,23 @@
 import { FLAG_SCOPE } from "../config.js";
 
+const NEGATIVE_TAGS = new Set([
+  "tired",
+  "disorganized",
+  "flanked",
+  "encircled",
+  "skipTurn",
+  "halfDamage"
+]);
+
+const NEGATIVE_DICE_KEYS = [
+  "tnDice",
+  "dmgDice",
+  "defSoakDice",
+  "defPenaltyDice",
+  "rangedResistDice",
+  "maneuverTNDice"
+];
+
 function ensureKey(effect) {
   if (!effect.key) {
     effect.key = crypto.randomUUID?.() ?? randomID();
@@ -9,6 +27,30 @@ function ensureKey(effect) {
 
 export function getEffects(actor) {
   return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "effects") ?? []);
+}
+
+export function effectPolarity(effect) {
+  const mods = effect?.mods ?? {};
+  const tags = mods.tags ?? {};
+  for (const tag of Object.keys(tags)) {
+    if (NEGATIVE_TAGS.has(tag) && tags[tag]) return "negative";
+  }
+  for (const key of NEGATIVE_DICE_KEYS) {
+    const value = mods[key];
+    if (typeof value === "string" && value.trim().startsWith("-")) {
+      return "negative";
+    }
+  }
+  const label = (effect?.label || "").toLowerCase();
+  if (label.includes("penalty") || label.includes("disorganized")) return "negative";
+  return "positive";
+}
+
+export function getEffectsDetailed(actor) {
+  return getEffects(actor).map(effect => ({
+    ...effect,
+    polarity: effectPolarity(effect)
+  }));
 }
 
 export async function addEffect(actor, effect) {
@@ -24,11 +66,10 @@ export async function removeEffectByKey(actor, key) {
 
 export async function clearNegative(actor) {
   const list = getEffects(actor).filter(e => {
-    const tags = e?.mods?.tags ?? {};
-    if (tags.disorganized) return false;
-    if (tags.tired) return false;
-    if (tags.flanked) return false;
-    if (tags.encircled) return false;
+    if (effectPolarity(e) === "negative") return false;
+    const label = (e.label || "").toLowerCase();
+    if (label.includes("disorganized")) return false;
+    if ((e.key || "").includes("disorg")) return false;
     return true;
   });
   await actor.setFlag(FLAG_SCOPE, "effects", list);

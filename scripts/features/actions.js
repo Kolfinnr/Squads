@@ -1,6 +1,5 @@
 import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
-import { aggregateForAttack, aggregateForDefense, tickEffects } from "../logic/effects.js";
-import { tickCooldowns } from "../logic/cooldowns.js";
+import { aggregateForAttack, aggregateForDefense } from "../logic/effects.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
 
@@ -124,8 +123,6 @@ export async function doSquadAction(actor, action) {
       const res = await applyDamage(actor, targetActor, chip.total);
       moraleResult = res.moraleLoss;
     }
-    await tickEffects(actor);
-    await tickCooldowns(actor);
     return sendActionMessage({
       actor,
       label: action === "melee" ? "Melee" : "Ranged",
@@ -158,16 +155,7 @@ export async function doSquadAction(actor, action) {
   let armor = 0;
   let rangedResist = 0;
   const soakNotes = [];
-  let baseDefense = 0;
-  let defenseEffect = 0;
-  let defensePenalty = 0;
   let polearmBonus = 0;
-  let bowReduction = 0;
-  let firearmIgnore = 0;
-  let armorCut = 0;
-  let armorSource = 0;
-  let armorPierced = false;
-  let rangedResistTotal = 0;
   let counterSpear = 0;
 
   if (targetActor) {
@@ -179,19 +167,16 @@ export async function doSquadAction(actor, action) {
     if (targetExp > 0) {
       const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
       defenseOnly += defRoll.total;
-      baseDefense = defRoll.total;
     }
 
     const effDef = await rollMaybe(aggDefense.defSoakDice);
     if (effDef.total) {
       defenseOnly += effDef.total;
-      defenseEffect += effDef.total;
     }
 
     const effPen = await rollMaybe(aggDefense.defPenaltyDice);
     if (effPen.total) {
       defenseOnly += effPen.total;
-      defensePenalty += effPen.total;
     }
 
     if (!(weapon.pierceArmor || aggAttack.tags?.pierceArmor)) {
@@ -199,16 +184,13 @@ export async function doSquadAction(actor, action) {
       if (armorDice > 0) {
         const armorRoll = await (new Roll(`${armorDice}d3`).roll({ async: true }));
         armor = armorRoll.total;
-        armorSource = armorRoll.total;
         const ignorePct = Number(aggAttack.tags?.armorIgnorePct || 0);
         if (ignorePct > 0) {
           const cut = Math.floor(armor * ignorePct);
           armor = Math.max(0, armor - cut);
-          armorCut = cut;
         }
       }
     } else {
-      armorPierced = true;
       armor = 0;
     }
 
@@ -222,16 +204,13 @@ export async function doSquadAction(actor, action) {
       if (weaponKey === "bow" || weaponKey === "crossbow") {
         const reduce = Math.floor(defenseOnly / 2);
         defenseOnly = Math.max(0, defenseOnly - reduce);
-        bowReduction = reduce;
       }
       if (weaponKey === "firearm" || weaponKey === "artillery") {
-        firearmIgnore = defenseOnly;
         defenseOnly = 0;
       }
       const rr = await rollMaybe(aggDefense.rangedResistDice);
       if (rr.total) {
         rangedResist += rr.total;
-        rangedResistTotal += rr.total;
       }
     }
 
@@ -265,35 +244,21 @@ export async function doSquadAction(actor, action) {
     }
   }
 
-  if (baseDefense) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseBase", { total: baseDefense }));
-  }
-  if (defenseEffect) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseEffect", { total: defenseEffect }));
-  }
-  if (defensePenalty) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefensePenalty", { total: defensePenalty }));
-  }
-  if (polearmBonus) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefensePolearm", { total: polearmBonus }));
-  }
-  if (bowReduction) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseBow", { total: bowReduction }));
-  }
-  if (firearmIgnore) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseFirearm", { total: firearmIgnore }));
-  }
-  if (armorSource && !firearmIgnore) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatArmorBase", { total: armorSource }));
-  }
-  if (armorCut) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatArmorCut", { total: armorCut }));
-  }
-  if (armorPierced) {
-    soakNotes.push(game.i18n.localize("W4SQ.ChatArmorPierced"));
-  }
-  if (rangedResistTotal) {
-    soakNotes.push(game.i18n.format("W4SQ.ChatRangedResistTotal", { total: rangedResistTotal }));
+  if (targetActor) {
+    const defenseTotal = Math.max(0, Math.floor(defenseOnly));
+    const armorTotal = Math.max(0, Math.floor(armor));
+    const resistTotal = Math.max(0, Math.floor(rangedResist));
+
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseTotal", { total: defenseTotal }));
+    if (polearmBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatDefensePolearm", { total: polearmBonus }));
+    }
+    if (armorTotal) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatArmorTotal", { total: armorTotal }));
+    }
+    if (resistTotal) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatRangedResist", { total: resistTotal }));
+    }
   }
   if (counterSpear) {
     soakNotes.push(game.i18n.format("W4SQ.ChatCounterSpear", { total: counterSpear }));
@@ -301,9 +266,6 @@ export async function doSquadAction(actor, action) {
   if (soakNotes.length) {
     soakNotes.push(game.i18n.format("W4SQ.ChatSoakTotal", { total: totalSoak }));
   }
-
-  await tickEffects(actor);
-  await tickCooldowns(actor);
 
   await sendActionMessage({
     actor,

@@ -45,9 +45,6 @@
         <button type="button" data-action="command">{{localize "W4SQ.BtnCommand"}}</button>
       </div>
       <div class="badges">
-        {{#each effects as |eff|}}
-          <span class="badge" title="{{eff.label}}">{{eff.label}} ({{eff.duration}})</span>
-        {{/each}}
         {{#each cooldowns as |pair|}}
           <span class="badge cooldown" title="{{pair.[0]}}">{{pair.[0]}}: {{pair.[1]}}</span>
         {{/each}}
@@ -80,13 +77,15 @@
         </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
-          <ul>
-            {{#each effects as |eff|}}
-              <li>{{eff.label}} ({{eff.duration}})</li>
-            {{else}}
-              <li>{{localize "W4SQ.None"}}</li>
-            {{/each}}
-          </ul>
+          {{#if effects.length}}
+            <div class="effect-list">
+              {{#each effects as |eff|}}
+                <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.duration}})</span>
+              {{/each}}
+            </div>
+          {{else}}
+            <p>{{localize "W4SQ.None"}}</p>
+          {{/if}}
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
-import { getEffects } from "../logic/effects.js";
+import { getEffectsDetailed } from "../logic/effects.js";
 import { getCooldowns } from "../logic/cooldowns.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 
@@ -39,7 +39,7 @@ export class SquadActorSheet extends ActorSheet {
       cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
       lastTargetName: f("lastTargetName", "")
     };
-    data.effects = getEffects(this.actor);
+    data.effects = getEffectsDetailed(this.actor);
     data.cooldowns = getCooldowns(this.actor);
     data.roles = ROLES;
     data.weapons = WEAPONS;

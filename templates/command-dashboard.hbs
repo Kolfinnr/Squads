@@ -41,7 +41,6 @@
         <th>{{localize "W4SQ.ActiveEffects"}}</th>
         <th>{{localize "W4SQ.Cooldowns"}}</th>
         <th>{{localize "W4SQ.LastTarget"}}</th>
-        <th>{{localize "W4SQ.StandingOrders"}}</th>
         <th>{{localize "W4SQ.Orders"}}</th>
       </tr>
     </thead>
@@ -63,11 +62,15 @@
             <span>{{squad.morale}} / {{squad.moraleMax}}</span>
           </td>
           <td>
-            {{#each squad.effects as |eff|}}
-              <span class="badge">{{eff.label}} ({{eff.duration}})</span>
+            {{#if squad.effects.length}}
+              <div class="effect-list">
+                {{#each squad.effects as |eff|}}
+                  <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.duration}})</span>
+                {{/each}}
+              </div>
             {{else}}
               <span>{{localize "W4SQ.None"}}</span>
-            {{/each}}
+            {{/if}}
           </td>
           <td>
             {{#each squad.cooldowns as |pair|}}
@@ -79,12 +82,11 @@
           <td>{{squad.lastTargetName}}</td>
           <td>
             <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
-              {{#each ../standingOrderOptions as |opt|}}
-                <option value="{{opt.value}}" {{#if (eq opt.value squad.standingOrder)}}selected{{/if}}>{{opt.label}}</option>
+              {{#each ../orderOptions as |opt|}}
+                <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
               {{/each}}
             </select>
           </td>
-          <td>{{#if squad.orderLabel}}{{squad.orderLabel}}{{else}}—{{/if}}</td>
         </tr>
       {{else}}
         <tr>

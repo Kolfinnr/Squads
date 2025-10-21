@@ -56,6 +56,31 @@
   font-size: 0.75rem;
 }
 
+.w4sq .effect-chip {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid transparent;
+}
+
+.w4sq .effect-chip.positive {
+  background: rgba(76, 175, 80, 0.2);
+  border-color: rgba(76, 175, 80, 0.35);
+}
+
+.w4sq .effect-chip.negative {
+  background: rgba(198, 40, 40, 0.18);
+  border-color: rgba(198, 40, 40, 0.35);
+}
+
+.w4sq .effect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .w4sq .badge.cooldown {
   background: rgba(120, 0, 0, 0.3);
 }
@@ -169,6 +194,12 @@
 .w4sq-command .badge {
   display: inline-block;
   margin: 0 0.1rem 0.1rem 0;
+}
+
+.w4sq-command .effect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .w4sq-hud {
