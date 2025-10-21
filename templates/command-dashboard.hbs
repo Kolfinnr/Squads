@@ -1,0 +1,78 @@
+<section class="w4sq-command">
+  <header>
+    <h2>{{localize "W4SQ.CommandDashboard"}}</h2>
+    {{#if commander}}
+      <p>{{localize "W4SQ.Commander"}}: {{commander.name}}</p>
+      <div class="cp-bar">
+        <span>{{localize "W4SQ.CP"}}: {{cp.current}} / {{cp.cap}}</span>
+      </div>
+    {{else}}
+      <p>{{localize "W4SQ.NoCommander"}}</p>
+    {{/if}}
+  </header>
+
+  <div class="command-buttons">
+    <button data-command="cmd-ranged">{{localize "W4SQ.CmdRanged"}}</button>
+    <button data-command="cmd-orders">{{localize "W4SQ.CmdOrders"}}</button>
+    <button data-command="cmd-reorg">{{localize "W4SQ.CmdReorg"}}</button>
+    <button data-command="cmd-rally">{{localize "W4SQ.CmdRally"}}</button>
+    <button data-command="cmd-withdraw">{{localize "W4SQ.CmdWithdraw"}}</button>
+    <button data-command="cmd-special">{{localize "W4SQ.CmdSpecial"}}</button>
+    <button data-command="cmd-formation">{{localize "W4SQ.CmdFormation"}}</button>
+  </div>
+
+  <table class="squad-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>{{localize "W4SQ.Squad"}}</th>
+        <th>{{localize "W4SQ.HP"}}</th>
+        <th>{{localize "W4SQ.Morale"}}</th>
+        <th>{{localize "W4SQ.ActiveEffects"}}</th>
+        <th>{{localize "W4SQ.Cooldowns"}}</th>
+        <th>{{localize "W4SQ.LastTarget"}}</th>
+        <th>{{localize "W4SQ.Orders"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each squads as |squad|}}
+        <tr class="{{#if squad.isSelected}}selected{{/if}}">
+          <td><button data-action="select" data-id="{{squad.id}}">{{localize "W4SQ.Select"}}</button></td>
+          <td>{{squad.name}}</td>
+          <td>
+            <div class="bar">
+              <div class="fill" style="width: {{squad.hpPct}}%"></div>
+            </div>
+            <span>{{squad.hp}} / {{squad.hpMax}}</span>
+          </td>
+          <td>
+            <div class="bar morale">
+              <div class="fill" style="width: {{squad.moralePct}}%"></div>
+            </div>
+            <span>{{squad.morale}} / {{squad.moraleMax}}</span>
+          </td>
+          <td>
+            {{#each squad.effects as |eff|}}
+              <span class="badge">{{eff.label}} ({{eff.duration}})</span>
+            {{else}}
+              <span>{{localize "W4SQ.None"}}</span>
+            {{/each}}
+          </td>
+          <td>
+            {{#each squad.cooldowns as |pair|}}
+              <span class="badge cooldown">{{pair.[0]}}: {{pair.[1]}}</span>
+            {{else}}
+              <span>{{localize "W4SQ.None"}}</span>
+            {{/each}}
+          </td>
+          <td>{{squad.lastTargetName}}</td>
+          <td>{{squad.order}}</td>
+        </tr>
+      {{else}}
+        <tr>
+          <td colspan="8">{{localize "W4SQ.NoSquads"}}</td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
