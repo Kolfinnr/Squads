@@ -8,10 +8,30 @@ function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
 }
 
+function collectSquadActors() {
+  const tokens = new Map();
+  if (game.combat && game.combat.combatants.size) {
+    for (const combatant of game.combat.combatants) {
+      const token = combatant?.token?.object || canvas?.tokens?.get(combatant.tokenId);
+      if (token && !tokens.has(token.id)) tokens.set(token.id, token);
+    }
+  }
+  if (!tokens.size) {
+    for (const token of canvas?.tokens?.placeables ?? []) {
+      if (!tokens.has(token.id)) tokens.set(token.id, token);
+    }
+  }
+  const actors = new Set();
+  for (const token of tokens.values()) {
+    const actor = token?.actor;
+    if (isSquadActor(actor)) actors.add(actor);
+  }
+  return [...actors];
+}
+
 async function tickAllActors() {
-  const actors = game.actors?.contents ?? [];
+  const actors = collectSquadActors();
   for (const actor of actors) {
-    if (!isSquadActor(actor)) continue;
     await tickEffects(actor);
     await tickCooldowns(actor);
   }
@@ -47,30 +67,28 @@ Hooks.on("updateCombat", (combat, diff) => {
 });
 
 Hooks.on("renderTokenHUD", (hud, html) => {
-  const actor = canvas?.tokens?.get(hud.object.id)?.actor;
+  const token = canvas?.tokens?.get(hud.object.id);
+  const actor = token?.actor;
   if (!isSquadActor(actor)) return;
-  if (!canSeeSquad(actor)) return;
+  if (!canSeeSquad(token)) return;
 
   const btn = document.createElement("div");
   btn.classList.add("control-icon", "w4sq-hud");
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
-  btn.addEventListener("click", () => openCommandDashboard(actor));
+  btn.addEventListener("click", () => openCommandDashboard(token));
   html.find(".left").append(btn);
 });
 
-function canSeeSquad(actor) {
+function canSeeSquad(token) {
   if (game.user.isGM) return true;
+  const actor = token?.actor;
+  if (!actor) return false;
   const pc = actor.getFlag(FLAG_SCOPE, "playerControlled");
   if (pc === true) return true;
   if (pc === false) return false;
-  if (actor.isOwner) return true;
-  const token = actor.getActiveTokens(true)[0];
-  if (token) {
-    if (token.isOwner) return true;
-    return token.document.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
-  }
-  return false;
+  if (token.isOwner || actor.isOwner) return true;
+  return token.document.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
 Hooks.on("deleteCombat", () => {

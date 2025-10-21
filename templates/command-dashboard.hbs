@@ -1,10 +1,20 @@
 <section class="w4sq-command">
   <header>
     <h2>{{localize "W4SQ.CommandDashboard"}}</h2>
+    {{#if dispositionLabel}}
+      <p class="group-label">{{dispositionLabel}}</p>
+    {{/if}}
     {{#if commander}}
       <p>{{localize "W4SQ.Commander"}}: {{commander.name}}</p>
       <div class="cp-bar">
         <span>{{localize "W4SQ.CP"}}: {{cp.current}} / {{cp.cap}}</span>
+        {{#if commander.canAdjustCP}}
+          <span class="cp-controls">
+            <button type="button" data-cp-action="delta" data-delta="1" title="{{localize "W4SQ.CPPlus"}}">+1</button>
+            <button type="button" data-cp-action="delta" data-delta="-1" title="{{localize "W4SQ.CPMinus"}}">-1</button>
+            <button type="button" data-cp-action="set" data-value="cap" title="{{localize "W4SQ.CPRefill"}}">⟳</button>
+          </span>
+        {{/if}}
       </div>
     {{else}}
       <p>{{localize "W4SQ.NoCommander"}}</p>

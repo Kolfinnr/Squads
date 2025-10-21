@@ -5,18 +5,71 @@ import { getCooldowns, setCooldown } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
-function canSee(actor) {
+function getDisposition(token) {
+  return token?.document?.disposition ?? null;
+}
+
+function canSee(token) {
   if (game.user.isGM) return true;
+  const actor = token?.actor;
+  if (!actor) return false;
   const pc = actor.getFlag(FLAG_SCOPE, "playerControlled");
   if (pc === true) return true;
   if (pc === false) return false;
-  if (actor.isOwner) return true;
-  return actor?.attitude === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
+  if (token.isOwner || actor.isOwner) return true;
+  return getDisposition(token) === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
 function getCP(actor) {
   const cp = actor?.getFlag(FLAG_SCOPE, "cp") ?? { current: 0, cap: 0 };
   return { current: Number(cp.current || 0), cap: Number(cp.cap || 0) };
+}
+
+function isSquadToken(token) {
+  return Boolean(token?.actor?.getFlag(FLAG_SCOPE, "hp") !== undefined);
+}
+
+function collectActiveTokens() {
+  const tokens = new Map();
+  if (game.combat && game.combat.combatants.size) {
+    for (const combatant of game.combat.combatants) {
+      const token = combatant?.token?.object || canvas?.tokens?.get(combatant.tokenId);
+      if (token && !tokens.has(token.id)) tokens.set(token.id, token);
+    }
+  }
+  if (!tokens.size) {
+    for (const token of canvas?.tokens?.placeables ?? []) {
+      if (!tokens.has(token.id)) tokens.set(token.id, token);
+    }
+  }
+  return [...tokens.values()].filter(isSquadToken);
+}
+
+function resolveContext(target) {
+  if (!target) return { token: null, actor: null };
+  // Token placeable object
+  if (target?.document?.actor) {
+    return { token: target, actor: target.actor };
+  }
+  // Token document
+  if (target?.actor && target?.id && target?.object) {
+    return { token: target.object, actor: target.actor };
+  }
+  const actor = target?.actor ?? target;
+  if (actor?.getActiveTokens) {
+    const [token] = actor.getActiveTokens(true) ?? [];
+    if (token) return { token, actor: token.actor };
+  }
+  return { token: null, actor };
+}
+
+function dispositionLabel(disposition) {
+  switch (disposition) {
+    case CONST.TOKEN_DISPOSITIONS.HOSTILE: return game.i18n.localize("W4SQ.HostileForces");
+    case CONST.TOKEN_DISPOSITIONS.FRIENDLY: return game.i18n.localize("W4SQ.FriendlyForces");
+    case CONST.TOKEN_DISPOSITIONS.NEUTRAL: return game.i18n.localize("W4SQ.NeutralForces");
+    default: return null;
+  }
 }
 
 export class W4SQCommandApp extends Application {
@@ -29,52 +82,78 @@ export class W4SQCommandApp extends Application {
     this.instances.clear();
   }
 
-  static open(actor) {
-    let instance = this.instances.get(game.user.id);
+  async close(options) {
+    await super.close(options);
+    for (const [key, inst] of W4SQCommandApp.instances.entries()) {
+      if (inst === this) {
+        W4SQCommandApp.instances.delete(key);
+      }
+    }
+  }
+
+  static open(target) {
+    const { token, actor } = resolveContext(target);
+    const disposition = getDisposition(token) ?? (game.user.isGM ? null : CONST.TOKEN_DISPOSITIONS.FRIENDLY);
+    const key = `${game.user.id}:${disposition ?? "all"}`;
+    let instance = this.instances.get(key);
     if (!instance) {
-      instance = new W4SQCommandApp(actor);
-      this.instances.set(game.user.id, instance);
-    } else if (actor) {
-      instance.contextActor = actor;
-      instance.selectedSquadId = actor.id;
+      instance = new W4SQCommandApp({ token, actor, disposition });
+      this.instances.set(key, instance);
+    } else {
+      if (token) {
+        instance.contextToken = token;
+        instance.contextActor = token.actor ?? actor ?? instance.contextActor;
+        instance.selectedSquadId = token.id;
+      } else if (actor) {
+        instance.contextActor = actor;
+      }
     }
     instance.render(true);
     return instance;
   }
 
-  constructor(actor) {
+  constructor({ token, actor, disposition }) {
     super({ template: TEMPLATE, classes: ["w4sq", "command-app"] });
-    this.contextActor = actor;
-    this.selectedSquadId = actor?.id ?? null;
+    this.contextToken = token || null;
+    this.contextActor = actor || token?.actor || null;
+    this.selectedSquadId = token?.id ?? null;
+    this.disposition = disposition ?? (game.user.isGM ? null : CONST.TOKEN_DISPOSITIONS.FRIENDLY);
   }
 
   get title() {
     return game.i18n.localize("W4SQ.CommandDashboard");
   }
 
+  _getSquadTokens() {
+    let tokens = collectActiveTokens();
+    if (this.disposition !== null) {
+      tokens = tokens.filter(token => getDisposition(token) === this.disposition);
+    }
+    return tokens.filter(canSee);
+  }
+
   _getCommander() {
-    const all = game.actors?.contents ?? [];
-    let commander = all.find(a => a.getFlag(FLAG_SCOPE, "isCommander"));
-    if (!commander) commander = this.contextActor;
-    return commander;
+    const squads = this._getSquadTokens();
+    const match = squads.find(token => token.actor?.getFlag(FLAG_SCOPE, "isCommander"));
+    if (match) return { actor: match.actor, token: match };
+    if (this.contextToken?.actor) return { actor: this.contextToken.actor, token: this.contextToken };
+    if (this.contextActor) return { actor: this.contextActor, token: this.contextToken ?? null };
+    if (squads.length) return { actor: squads[0].actor, token: squads[0] };
+    return null;
   }
 
   _getVisibleSquads() {
-    const actors = game.actors?.contents ?? [];
-    return actors.filter(a => a.getFlag(FLAG_SCOPE, "hp") !== undefined && canSee(a));
-  }
-
-  async getData() {
-    const commander = this._getCommander();
-    const cp = getCP(commander);
-    const squads = this._getVisibleSquads().map(actor => {
+    return this._getSquadTokens().map(token => {
+      const actor = token.actor;
       const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
       return {
-        id: actor.id,
-        name: actor.name,
+        id: token.id,
+        name: token.name,
+        actorId: actor.id,
+        tokenId: token.id,
         hp,
         hpMax,
         hpPct: hpMax > 0 ? Math.round((hp / hpMax) * 100) : 0,
@@ -85,19 +164,37 @@ export class W4SQCommandApp extends Application {
         cooldowns: Object.entries(getCooldowns(actor)),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order: actor.getFlag(FLAG_SCOPE, "order") || "",
-        isSelected: this.selectedSquadId === actor.id
+        isSelected: this.selectedSquadId === token.id
       };
     });
+  }
 
-    if (!this.selectedSquadId && squads.length) {
-      this.selectedSquadId = squads[0].id;
-      squads[0].isSelected = true;
+  async getData() {
+    const commanderInfo = this._getCommander();
+    const commanderActor = commanderInfo?.actor ?? null;
+    const commanderName = commanderInfo?.token?.name ?? commanderActor?.name ?? null;
+    const canAdjustCP = Boolean(commanderActor && (game.user.isGM || commanderActor.isOwner));
+    const cp = commanderActor ? getCP(commanderActor) : { current: 0, cap: 0 };
+    const squads = this._getVisibleSquads();
+
+    if (squads.length) {
+      if (!this.selectedSquadId || !squads.some(s => s.id === this.selectedSquadId)) {
+        this.selectedSquadId = squads[0].id;
+        squads[0].isSelected = true;
+      } else {
+        for (const squad of squads) {
+          squad.isSelected = squad.id === this.selectedSquadId;
+        }
+      }
+    } else {
+      this.selectedSquadId = null;
     }
 
     return {
-      commander,
+      commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
-      squads
+      squads,
+      dispositionLabel: dispositionLabel(this.disposition)
     };
   }
 
@@ -113,16 +210,43 @@ export class W4SQCommandApp extends Application {
       const cmd = ev.currentTarget.dataset.command;
       await this._handleCommand(cmd);
     });
+
+    html.find('[data-cp-action]').on("click", async ev => {
+      const action = ev.currentTarget.dataset.cpAction;
+      const commanderInfo = this._getCommander();
+      const commander = commanderInfo?.actor ?? null;
+      if (!commander) return;
+      switch (action) {
+        case "delta": {
+          const delta = Number(ev.currentTarget.dataset.delta || 0);
+          await this._adjustCP(commander, delta);
+          break;
+        }
+        case "set": {
+          const value = ev.currentTarget.dataset.value;
+          await this._setCP(commander, value);
+          break;
+        }
+      }
+      this.render();
+    });
   }
 
   _getSelectedActor() {
+    const token = this._getSelectedToken();
+    return token?.actor ?? null;
+  }
+
+  _getSelectedToken() {
     const id = this.selectedSquadId;
     if (!id) return null;
-    return game.actors?.get(id) ?? game.actors?.contents?.find(a => a.id === id) ?? null;
+    const squads = this._getSquadTokens();
+    return squads.find(token => token.id === id) ?? canvas?.tokens?.get(id) ?? null;
   }
 
   async _handleCommand(cmd) {
-    const commander = this._getCommander();
+    const commanderInfo = this._getCommander();
+    const commander = commanderInfo?.actor ?? null;
     const squad = this._getSelectedActor();
     if (!squad) {
       ui.notifications.warn(game.i18n.localize("W4SQ.SelectSquad"));
@@ -246,6 +370,34 @@ export class W4SQCommandApp extends Application {
       duration: 1,
       mods: { maneuverTNDice: "+8d10" }
     });
+  }
+
+  async _adjustCP(commander, delta) {
+    if (!delta) return;
+    const cp = getCP(commander);
+    const cap = Number(cp.cap || 0);
+    const max = cap > 0 ? cap : Number.POSITIVE_INFINITY;
+    cp.current = Math.max(0, Math.min(max, cp.current + delta));
+    if (cap > 0) {
+      cp.current = Math.min(cp.current, cap);
+    }
+    cp.current = Math.floor(cp.current);
+    await commander.setFlag(FLAG_SCOPE, "cp", cp);
+  }
+
+  async _setCP(commander, value) {
+    if (!value) return;
+    const cp = getCP(commander);
+    const cap = Number(cp.cap || 0);
+    if (value === "cap") {
+      cp.current = cap > 0 ? cap : cp.current;
+    } else {
+      const parsed = Number(value);
+      const max = cap > 0 ? cap : Number.POSITIVE_INFINITY;
+      cp.current = Math.max(0, Math.min(max, Number.isNaN(parsed) ? cp.current : parsed));
+    }
+    cp.current = Math.floor(cp.current);
+    await commander.setFlag(FLAG_SCOPE, "cp", cp);
   }
 }
 

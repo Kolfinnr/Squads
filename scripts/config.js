@@ -20,7 +20,7 @@ export const DEFAULT_FLAGS = {
   isCommander: false,
   effects: [],
   cooldowns: {},
-  cp: { current: 0, cap: 0 },
+  cp: { current: 4, cap: 6 },
   hob_hp30: false,
   hob_mo30: false,
   lastTargetName: ""

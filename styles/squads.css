@@ -94,6 +94,31 @@
   padding-bottom: 0.5rem;
 }
 
+.w4sq-command .cp-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.w4sq-command header .group-label {
+  font-size: 0.9rem;
+  font-style: italic;
+  color: var(--color-text-light-heading, #666);
+  margin: 0.25rem 0 0;
+}
+
+.w4sq-command .cp-controls {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.w4sq-command .cp-controls button {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
 .w4sq-command .command-buttons {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
