@@ -1,0 +1,108 @@
+<section class="w4sq-command">
+  <header>
+    <h2>{{localize "W4SQ.CommandDashboard"}}</h2>
+    {{#if dispositionLabel}}
+      <p class="group-label">{{dispositionLabel}}</p>
+    {{/if}}
+    {{#if commander}}
+      <p>{{localize "W4SQ.Commander"}}: {{commander.name}}</p>
+      <div class="cp-bar">
+        <span>{{localize "W4SQ.CP"}}: {{cp.current}} / {{cp.cap}}</span>
+        {{#if commander.canAdjustCP}}
+          <span class="cp-controls">
+            <button type="button" data-cp-action="delta" data-delta="1" title="{{localize "W4SQ.CPPlus"}}">+1</button>
+            <button type="button" data-cp-action="delta" data-delta="-1" title="{{localize "W4SQ.CPMinus"}}">-1</button>
+            <button type="button" data-cp-action="set" data-value="cap" title="{{localize "W4SQ.CPRefill"}}">⟳</button>
+          </span>
+        {{/if}}
+      </div>
+    {{else}}
+      <p>{{localize "W4SQ.NoCommander"}}</p>
+    {{/if}}
+  </header>
+
+  <div class="command-buttons">
+    <button data-command="cmd-ranged">{{localize "W4SQ.CmdRanged"}}</button>
+    <button data-command="cmd-orders">{{localize "W4SQ.CmdOrders"}}</button>
+    <button data-command="cmd-reorg">{{localize "W4SQ.CmdReorg"}}</button>
+    <button data-command="cmd-rally">{{localize "W4SQ.CmdRally"}}</button>
+    <button data-command="cmd-withdraw">{{localize "W4SQ.CmdWithdraw"}}</button>
+    <button data-command="cmd-special">{{localize "W4SQ.CmdSpecial"}}</button>
+    <button data-command="cmd-formation">{{localize "W4SQ.CmdFormation"}}</button>
+  </div>
+
+  <table class="squad-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>{{localize "W4SQ.Squad"}}</th>
+        <th>{{localize "W4SQ.HP"}}</th>
+        <th>{{localize "W4SQ.Morale"}}</th>
+        <th>{{localize "W4SQ.ActiveEffects"}}</th>
+        <th>{{localize "W4SQ.Cooldowns"}}</th>
+        <th>{{localize "W4SQ.LastTarget"}}</th>
+        <th>{{localize "W4SQ.Orders"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each squads as |squad|}}
+        <tr class="{{#if squad.isSelected}}selected{{/if}}">
+          <td><button data-action="select" data-id="{{squad.id}}">{{localize "W4SQ.Select"}}</button></td>
+          <td>{{squad.name}}</td>
+          <td>
+            <div class="bar">
+              <div class="fill" style="width: {{squad.hpPct}}%"></div>
+            </div>
+            <span>{{squad.hp}} / {{squad.hpMax}}</span>
+          </td>
+          <td>
+            <div class="bar morale">
+              <div class="fill" style="width: {{squad.moralePct}}%"></div>
+            </div>
+            <span>{{squad.morale}} / {{squad.moraleMax}}</span>
+          </td>
+          <td>
+            {{#if squad.effects.length}}
+              <div class="effect-list">
+                {{#each squad.effects as |eff|}}
+                  <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.duration}})</span>
+                {{/each}}
+              </div>
+            {{else}}
+              <span>{{localize "W4SQ.None"}}</span>
+            {{/if}}
+          </td>
+          <td>
+            {{#each squad.cooldowns as |pair|}}
+              <span class="badge cooldown">{{pair.[0]}}: {{pair.[1]}}</span>
+            {{else}}
+              <span>{{localize "W4SQ.None"}}</span>
+            {{/each}}
+          </td>
+          <td>{{squad.lastTargetName}}</td>
+          <td>
+            {{#if squad.canReceiveOrders}}
+              <div class="order-controls">
+                <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
+                  {{#each ../orderOptions as |opt|}}
+                    <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
+                  {{/each}}
+                </select>
+                <label class="maneuver-toggle">
+                  <input type="checkbox" data-order-maneuver data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}" {{#if squad.maneuverReady}}checked{{/if}} />
+                  <span>{{localize "W4SQ.OrderManeuverToggle"}}</span>
+                </label>
+              </div>
+            {{else}}
+              <span class="orders-disabled">{{localize "W4SQ.CommanderNoOrders"}}</span>
+            {{/if}}
+          </td>
+        </tr>
+      {{else}}
+        <tr>
+          <td colspan="9">{{localize "W4SQ.NoSquads"}}</td>
+        </tr>
+      {{/each}}
+    </tbody>
+  </table>
+</section>
