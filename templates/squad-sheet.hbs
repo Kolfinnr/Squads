@@ -1,0 +1,116 @@
+<form class="sheet w4sq {{cssClass}}" autocomplete="off">
+  <header class="sheet-header">
+    <img class="profile" src="{{actor.img}}" data-edit="img" title="{{actor.name}}"/>
+    <div class="header-fields">
+      <h1><input name="name" type="text" value="{{actor.name}}"/></h1>
+      <div class="grid stats-grid">
+        <label>{{localize "W4SQ.HP"}}</label>
+        <div class="pair">
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.hp" value="{{squad.hp}}"/>
+          <span>/</span>
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.hpMax" value="{{squad.hpMax}}"/>
+        </div>
+        <label>{{localize "W4SQ.Morale"}}</label>
+        <div class="pair">
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.morale" value="{{squad.morale}}"/>
+          <span>/</span>
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.moraleMax" value="{{squad.moraleMax}}"/>
+        </div>
+        <label>{{localize "W4SQ.Experience"}}</label>
+        <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.experienceTier" value="{{squad.experienceTier}}"/>
+        <label>{{localize "W4SQ.Equipment"}}</label>
+        <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.equipmentTier" value="{{squad.equipmentTier}}"/>
+        <label>{{localize "W4SQ.Role"}}</label>
+        <select name="flags.wfrp4e-squads.role">
+          {{#each roles as |role key|}}
+            <option value="{{key}}" {{#if (eq ../squad.role key)}}selected{{/if}}>{{role.label}}</option>
+          {{/each}}
+        </select>
+        <label>{{localize "W4SQ.Weapon"}}</label>
+        <select name="flags.wfrp4e-squads.weapon">
+          {{#each weapons as |weapon key|}}
+            <option value="{{key}}" {{#if (eq ../squad.weapon key)}}selected{{/if}}>{{weapon.label}}</option>
+          {{/each}}
+        </select>
+      </div>
+      <div class="traits">
+        <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.fear" {{checked squad.fear}}/> {{localize "W4SQ.TraitFear"}}</label>
+        <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.terror" {{checked squad.terror}}/> {{localize "W4SQ.TraitTerror"}}</label>
+        <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.unbreakable" {{checked squad.unbreakable}}/> {{localize "W4SQ.TraitUnbreakable"}}</label>
+      </div>
+      <div class="actions">
+        <button type="button" data-action="maneuver">{{localize "W4SQ.BtnManeuver"}}</button>
+        <button type="button" data-action="melee">{{localize "W4SQ.BtnMelee"}}</button>
+        <button type="button" data-action="ranged">{{localize "W4SQ.BtnRanged"}}</button>
+        <button type="button" data-action="command">{{localize "W4SQ.BtnCommand"}}</button>
+      </div>
+      <div class="badges">
+        {{#each cooldowns as |pair|}}
+          <span class="badge cooldown" title="{{pair.[0]}}">{{pair.[0]}}: {{pair.[1]}}</span>
+        {{/each}}
+      </div>
+    </div>
+  </header>
+
+  <nav class="sheet-tabs tabs" data-group="primary">
+    <a class="item" data-tab="main">{{localize "W4SQ.TabMain"}}</a>
+    <a class="item" data-tab="status">{{localize "W4SQ.TabStatus"}}</a>
+    <a class="item" data-tab="notes">{{localize "W4SQ.TabNotes"}}</a>
+  </nav>
+
+  <section class="sheet-body">
+    <div class="tab" data-group="primary" data-tab="main">
+      <div class="info-grid">
+        <div>
+          <h3>{{localize "W4SQ.LastTarget"}}</h3>
+          <p>{{squad.lastTargetName}}</p>
+        </div>
+        <div>
+          <h3>{{localize "W4SQ.Cooldowns"}}</h3>
+          <ul>
+            {{#each cooldowns as |pair|}}
+              <li>{{pair.[0]}}: {{pair.[1]}}</li>
+            {{else}}
+              <li>{{localize "W4SQ.None"}}</li>
+            {{/each}}
+          </ul>
+        </div>
+        <div>
+          <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
+          {{#if effects.length}}
+            <div class="effect-list">
+              {{#each effects as |eff|}}
+                <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.duration}})</span>
+              {{/each}}
+            </div>
+          {{else}}
+            <p>{{localize "W4SQ.None"}}</p>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-group="primary" data-tab="status">
+      <div class="status-grid">
+        <label>{{localize "W4SQ.PlayerControl"}}</label>
+        <select name="flags.wfrp4e-squads.playerControlled" data-nullable="true">
+          <option value="">{{localize "W4SQ.ControlAuto"}}</option>
+          <option value="true" {{#if (eq squad.playerControlled true)}}selected{{/if}}>{{localize "W4SQ.ControlPlayer"}}</option>
+          <option value="false" {{#if (eq squad.playerControlled false)}}selected{{/if}}>{{localize "W4SQ.ControlGM"}}</option>
+        </select>
+        <label>{{localize "W4SQ.IsCommander"}}</label>
+        <input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.isCommander" {{checked squad.isCommander}}/>
+        <label>{{localize "W4SQ.CP"}}</label>
+        <div class="pair">
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.cp.current" value="{{squad.cp.current}}"/>
+          <span>/</span>
+          <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.cp.cap" value="{{squad.cp.cap}}"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab" data-group="primary" data-tab="notes">
+      <textarea name="flags.wfrp4e-squads.notes" rows="10">{{squad.notes}}</textarea>
+    </div>
+  </section>
+</form>
