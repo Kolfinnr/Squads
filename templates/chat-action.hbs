@@ -5,15 +5,5 @@
   <p>{{localize "W4SQ.ChatDamage"}}: {{dmg}}</p>
   {{#if moraleLoss}}<p>{{localize "W4SQ.ChatMorale"}}: {{moraleLoss}}</p>{{/if}}
   <p>{{soakDetail}}</p>
-  {{#if hobNotes.length}}
-    <div class="hob-notes">
-      <p><strong>{{localize "W4SQ.ChatHoBHeading"}}</strong></p>
-      <ul>
-        {{#each hobNotes as |note|}}
-          <li><strong>{{note.title}}</strong>{{#if note.detail}} — {{note.detail}}{{/if}}</li>
-        {{/each}}
-      </ul>
-    </div>
-  {{/if}}
   <footer>{{footer}}</footer>
 </div>

@@ -81,21 +81,11 @@
           </td>
           <td>{{squad.lastTargetName}}</td>
           <td>
-            {{#if squad.canReceiveOrders}}
-              <div class="order-controls">
-                <label class="maneuver-toggle">
-                  <input type="checkbox" />
-                  <span>{{localize "W4SQ.OrderManeuverToggle"}}</span>
-                </label>
-                <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
-                  {{#each ../orderOptions as |opt|}}
-                    <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
-                  {{/each}}
-                </select>
-              </div>
-            {{else}}
-              <span class="orders-disabled">{{localize "W4SQ.CommanderNoOrders"}}</span>
-            {{/if}}
+            <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
+              {{#each ../orderOptions as |opt|}}
+                <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
+              {{/each}}
+            </select>
           </td>
         </tr>
       {{else}}
