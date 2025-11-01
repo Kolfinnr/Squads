@@ -107,16 +107,8 @@ export async function doSquadAction(actor, action) {
   tn = clampTN(tn);
 
   const roll = await (new Roll("1d100").roll({ async: true }));
-  let success = roll.total <= tn;
-  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action });
-  const hobNotes = hobResult?.notes ?? [];
-  if (hobResult?.tnAdjustments?.length) {
-    const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
-    if (delta) {
-      tn = clampTN(tn + delta);
-      success = roll.total <= tn;
-    }
-  }
+  const success = roll.total <= tn;
+  await maybeTriggerHoB(actor, { roll: roll.total, success });
 
   const targetActor = selectedTarget();
   if (targetActor) {
@@ -141,7 +133,6 @@ export async function doSquadAction(actor, action) {
       dmg: chip.total,
       moraleLoss: moraleResult,
       soakDetail: game.i18n.localize("W4SQ.ChatChip"),
-      hobNotes,
       footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
     });
   }
@@ -150,16 +141,12 @@ export async function doSquadAction(actor, action) {
   const atkWeapon = await rollMaybe(weapon.dmgDice);
   const atkRole = await rollMaybe(roleBonus.dmg);
   const atkEffect = await rollMaybe(aggAttack.dmgDice);
-  const hobDamageBonus = (hobResult?.damageAdjustments ?? []).reduce((sum, adj) => sum + Number(adj.total || 0), 0);
 
   let raw = atkBase.total + atkWeapon.total + atkRole.total;
   if (atkEffect.total === -0.5) {
     raw = raw / 2;
   } else {
     raw += atkEffect.total;
-  }
-  if (hobDamageBonus) {
-    raw += hobDamageBonus;
   }
 
   const scaled = raw * hpScale(hp, Number(getF(actor, "hpMax", 1)));
@@ -290,7 +277,6 @@ export async function doSquadAction(actor, action) {
     dmg: finalDamage,
     moraleLoss,
     soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
-    hobNotes,
     footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
   });
 }

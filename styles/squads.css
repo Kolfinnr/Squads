@@ -81,43 +81,6 @@
   gap: 0.25rem;
 }
 
-.w4sq .order-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.w4sq .maneuver-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.w4sq .maneuver-toggle input[type="checkbox"] {
-  margin: 0;
-}
-
-.w4sq .orders-disabled {
-  font-style: italic;
-  color: var(--color-text-light-3, #888);
-}
-
-.w4sq .hob-notes {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-}
-
-.w4sq .hob-notes ul {
-  margin: 0.25rem 0 0;
-  padding-left: 1.2rem;
-}
-
-.w4sq .hob-notes li {
-  list-style: disc;
-}
-
 .w4sq .badge.cooldown {
   background: rgba(120, 0, 0, 0.3);
 }
