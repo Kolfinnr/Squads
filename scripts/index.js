@@ -93,28 +93,6 @@ function canSeeSquad(token) {
   return token.document.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
-Hooks.on("renderDialog", (app, html) => {
-  if (!(app instanceof Dialog)) return;
-  const title = String(app.title ?? app.options?.title ?? "").toLowerCase();
-  const hob = game.i18n.localize("W4SQ.HoBGood").toLowerCase();
-  if (!title.includes("heat of battle") && (!hob || !title.includes(hob))) return;
-
-  const buttons = Object.values(app.data?.buttons ?? {});
-  if (!buttons.length) return;
-
-  const choice = buttons[Math.floor(Math.random() * buttons.length)];
-  if (!choice) return;
-
-  try {
-    if (typeof choice.callback === "function") {
-      choice.callback(html);
-    }
-  } catch (err) {
-    console.error(`${MODULE_ID} | Failed to auto-resolve HoB dialog`, err);
-  }
-  app.close();
-});
-
 Hooks.on("deleteCombat", () => {
   W4SQCommandApp.closeAll();
 });

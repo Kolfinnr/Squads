@@ -9,6 +9,7 @@ const ORDER_OPTIONS = [
   { value: "", label: "W4SQ.OrderNone" },
   { value: "move", label: "W4SQ.OrderMove" },
   { value: "attack", label: "W4SQ.OrderAttack" },
+  { value: "maneuver", label: "W4SQ.OrderManeuverOption" },
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
 
@@ -182,8 +183,6 @@ export class W4SQCommandApp extends Application {
         order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
       }
       order = order || "";
-      const isCommander = Boolean(actor.getFlag(FLAG_SCOPE, "isCommander"));
-      const maneuverReady = Boolean(actor.getFlag(FLAG_SCOPE, "orderManeuver"));
       return {
         id: token.id,
         name: token.name,
@@ -199,9 +198,6 @@ export class W4SQCommandApp extends Application {
         cooldowns: Object.entries(getCooldowns(actor)),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order,
-        maneuverReady,
-        isCommander,
-        canReceiveOrders: !isCommander,
         isSelected: this.selectedSquadId === token.id
       };
     });
@@ -280,14 +276,6 @@ export class W4SQCommandApp extends Application {
       const value = select.value;
       await this._setOrder({ tokenId, actorId, value });
     });
-
-    html.find('[data-order-maneuver]').on("change", async ev => {
-      const input = ev.currentTarget;
-      const tokenId = input.dataset.tokenId;
-      const actorId = input.dataset.actorId;
-      const checked = Boolean(input.checked);
-      await this._setManeuver({ tokenId, actorId, checked });
-    });
   }
 
   _getSelectedActor() {
@@ -360,13 +348,10 @@ export class W4SQCommandApp extends Application {
   }
 
   async _commandOrders(commander, squad) {
-    if (squad.getFlag(FLAG_SCOPE, "isCommander")) {
-      ui.notifications.warn(game.i18n.localize("W4SQ.CommanderOrdersBlocked"));
-      return;
-    }
     const options = {
       melee: game.i18n.localize("W4SQ.OrderMelee"),
       ranged: game.i18n.localize("W4SQ.OrderRanged"),
+      maneuver: game.i18n.localize("W4SQ.OrderManeuver"),
       hold: game.i18n.localize("W4SQ.OrderHold")
     };
     const content = `<div class="w4sq-orders">${Object.entries(options).map(([key, label]) => `<label><input type="radio" name="order" value="${key}"> ${label}</label>`).join("<br/>")}</div>`;
@@ -387,7 +372,6 @@ export class W4SQCommandApp extends Application {
     if (!(await this._spendCP(commander, 1))) return;
     await squad.setFlag(FLAG_SCOPE, "order", "");
     await squad.unsetFlag(FLAG_SCOPE, "standingOrder");
-    await squad.setFlag(FLAG_SCOPE, "orderManeuver", false);
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdOrders", { order: options[choice] || choice });
   }
 
@@ -488,26 +472,12 @@ export class W4SQCommandApp extends Application {
     const token = tokenId ? canvas?.tokens?.get(tokenId) : null;
     const actor = token?.actor ?? (actorId ? game.actors?.get(actorId) : null);
     if (!actor) return;
-    if (actor.getFlag(FLAG_SCOPE, "isCommander")) return;
     if (!(game.user.isGM || actor.isOwner)) {
       ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
       return;
     }
     await actor.setFlag(FLAG_SCOPE, "order", value || "");
     await actor.unsetFlag(FLAG_SCOPE, "standingOrder");
-    this.render(false);
-  }
-
-  async _setManeuver({ tokenId, actorId, checked }) {
-    const token = tokenId ? canvas?.tokens?.get(tokenId) : null;
-    const actor = token?.actor ?? (actorId ? game.actors?.get(actorId) : null);
-    if (!actor) return;
-    if (actor.getFlag(FLAG_SCOPE, "isCommander")) return;
-    if (!(game.user.isGM || actor.isOwner)) {
-      ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
-      return;
-    }
-    await actor.setFlag(FLAG_SCOPE, "orderManeuver", !!checked);
     this.render(false);
   }
 
