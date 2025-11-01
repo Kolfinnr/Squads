@@ -22,6 +22,7 @@ export const DEFAULT_FLAGS = {
   cooldowns: {},
   cp: { current: 3, cap: 6 },
   order: "",
+  orderManeuver: false,
   hob_hp30: false,
   hob_mo30: false,
   lastTargetName: ""

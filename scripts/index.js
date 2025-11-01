@@ -93,6 +93,32 @@ function canSeeSquad(token) {
   return token.document.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
 }
 
+function shouldSilenceHoB(app) {
+  if (!app) return false;
+  const rawTitle = app.title ?? app.options?.title ?? app.label ?? "";
+  const title = String(rawTitle).toLowerCase();
+  if (!title) return false;
+  const localized = game.i18n?.localize?.("W4SQ.HoBGood")?.toLowerCase?.() || "";
+  if (!title.includes("heat of battle") && (!localized || !title.includes(localized))) {
+    return false;
+  }
+  try {
+    app.close?.({ force: true });
+  } catch (err) {
+    console.error(`${MODULE_ID} | Failed to dismiss Heat of Battle dialog`, err);
+  }
+  return true;
+}
+
+Hooks.on("renderDialog", app => {
+  shouldSilenceHoB(app);
+});
+
+Hooks.on("renderApplication", app => {
+  if (app instanceof Dialog) return;
+  shouldSilenceHoB(app);
+});
+
 Hooks.on("deleteCombat", () => {
   W4SQCommandApp.closeAll();
 });

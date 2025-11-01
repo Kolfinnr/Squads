@@ -9,7 +9,6 @@ const ORDER_OPTIONS = [
   { value: "", label: "W4SQ.OrderNone" },
   { value: "move", label: "W4SQ.OrderMove" },
   { value: "attack", label: "W4SQ.OrderAttack" },
-  { value: "maneuver", label: "W4SQ.OrderManeuverOption" },
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
 
@@ -135,6 +134,7 @@ export class W4SQCommandApp extends Application {
     this.contextActor = actor || token?.actor || null;
     this.selectedSquadId = token?.id ?? null;
     this.disposition = disposition ?? (game.user.isGM ? null : CONST.TOKEN_DISPOSITIONS.FRIENDLY);
+    this._maneuverState = new Map();
     this._boundActorUpdate = this._onActorUpdate.bind(this);
     Hooks.on("updateActor", this._boundActorUpdate);
   }
@@ -183,6 +183,15 @@ export class W4SQCommandApp extends Application {
         order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
       }
       order = order || "";
+      const isCommander = Boolean(actor.getFlag(FLAG_SCOPE, "isCommander"));
+      let maneuverChecked;
+      if (this._maneuverState.has(token.id)) {
+        maneuverChecked = this._maneuverState.get(token.id);
+      } else {
+        const flagged = Boolean(actor.getFlag(FLAG_SCOPE, "orderManeuver"));
+        maneuverChecked = flagged;
+        this._maneuverState.set(token.id, maneuverChecked);
+      }
       return {
         id: token.id,
         name: token.name,
@@ -198,6 +207,9 @@ export class W4SQCommandApp extends Application {
         cooldowns: Object.entries(getCooldowns(actor)),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order,
+        maneuverChecked,
+        isCommander,
+        canReceiveOrders: !isCommander,
         isSelected: this.selectedSquadId === token.id
       };
     });
@@ -276,6 +288,14 @@ export class W4SQCommandApp extends Application {
       const value = select.value;
       await this._setOrder({ tokenId, actorId, value });
     });
+
+    html.find('[data-order-maneuver]').on("change", ev => {
+      const input = ev.currentTarget;
+      const tokenId = input.dataset.tokenId;
+      const checked = Boolean(input.checked);
+      if (!tokenId) return;
+      this._maneuverState.set(tokenId, checked);
+    });
   }
 
   _getSelectedActor() {
@@ -348,10 +368,13 @@ export class W4SQCommandApp extends Application {
   }
 
   async _commandOrders(commander, squad) {
+    if (squad.getFlag(FLAG_SCOPE, "isCommander")) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.CommanderOrdersBlocked"));
+      return;
+    }
     const options = {
       melee: game.i18n.localize("W4SQ.OrderMelee"),
       ranged: game.i18n.localize("W4SQ.OrderRanged"),
-      maneuver: game.i18n.localize("W4SQ.OrderManeuver"),
       hold: game.i18n.localize("W4SQ.OrderHold")
     };
     const content = `<div class="w4sq-orders">${Object.entries(options).map(([key, label]) => `<label><input type="radio" name="order" value="${key}"> ${label}</label>`).join("<br/>")}</div>`;
@@ -362,16 +385,22 @@ export class W4SQCommandApp extends Application {
       callback: html => {
         if (!html) return null;
         if (html.jquery) {
-          return html.find('input[name="order"]:checked').val();
+          const value = html.find('input[name="order"]:checked').val();
+          return value?.length ? value : null;
         }
         const root = html?.[0] ?? html;
-        return root?.querySelector('input[name="order"]:checked')?.value ?? null;
+        if (root?.querySelector) {
+          return root.querySelector?.('input[name="order"]:checked')?.value ?? null;
+        }
+        return null;
       }
     });
     if (!choice) return;
     if (!(await this._spendCP(commander, 1))) return;
     await squad.setFlag(FLAG_SCOPE, "order", "");
     await squad.unsetFlag(FLAG_SCOPE, "standingOrder");
+    const token = this._getSelectedToken();
+    if (token) this._maneuverState.set(token.id, false);
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdOrders", { order: options[choice] || choice });
   }
 
@@ -472,6 +501,7 @@ export class W4SQCommandApp extends Application {
     const token = tokenId ? canvas?.tokens?.get(tokenId) : null;
     const actor = token?.actor ?? (actorId ? game.actors?.get(actorId) : null);
     if (!actor) return;
+    if (actor.getFlag(FLAG_SCOPE, "isCommander")) return;
     if (!(game.user.isGM || actor.isOwner)) {
       ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
       return;

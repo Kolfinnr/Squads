@@ -41,6 +41,7 @@
         <th>{{localize "W4SQ.ActiveEffects"}}</th>
         <th>{{localize "W4SQ.Cooldowns"}}</th>
         <th>{{localize "W4SQ.LastTarget"}}</th>
+        <th>{{localize "W4SQ.ManeuverFlag"}}</th>
         <th>{{localize "W4SQ.Orders"}}</th>
       </tr>
     </thead>
@@ -80,12 +81,27 @@
             {{/each}}
           </td>
           <td>{{squad.lastTargetName}}</td>
+          <td class="maneuver-flag">
+            {{#if squad.canReceiveOrders}}
+              <label class="maneuver-toggle" title="{{localize "W4SQ.OrderManeuverToggle"}}">
+                <input type="checkbox" aria-label="{{localize "W4SQ.OrderManeuverToggle"}}" />
+              </label>
+            {{else}}
+              <span class="orders-disabled">—</span>
+            {{/if}}
+          </td>
           <td>
-            <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
-              {{#each ../orderOptions as |opt|}}
-                <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
-              {{/each}}
-            </select>
+            {{#if squad.canReceiveOrders}}
+              <div class="order-controls">
+                <select data-order-select data-token-id="{{squad.tokenId}}" data-actor-id="{{squad.actorId}}">
+                  {{#each ../orderOptions as |opt|}}
+                    <option value="{{opt.value}}" {{#if (eq opt.value squad.order)}}selected{{/if}}>{{opt.label}}</option>
+                  {{/each}}
+                </select>
+              </div>
+            {{else}}
+              <span class="orders-disabled">{{localize "W4SQ.CommanderNoOrders"}}</span>
+            {{/if}}
           </td>
         </tr>
       {{else}}
