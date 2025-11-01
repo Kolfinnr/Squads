@@ -24,16 +24,6 @@ function clampTN(value) {
   return Math.min(ROLL.maxTN, Math.max(ROLL.minTN, value));
 }
 
-function renderHoBNotes(notes) {
-  if (!notes || !notes.length) return "";
-  const header = `<p><strong>${game.i18n.localize("W4SQ.ChatHoBHeading")}</strong></p>`;
-  const items = notes.map(note => {
-    const detail = note?.detail ? ` — ${note.detail}` : "";
-    return `<li><strong>${note?.title ?? ""}</strong>${detail}</li>`;
-  }).join("");
-  return `<div class="hob-notes">${header}<ul>${items}</ul></div>`;
-}
-
 async function resolveTarget(actor, maneuver) {
   if (maneuver.target === "self") return actor;
   const targets = [...game.user.targets];
@@ -89,23 +79,14 @@ async function executeManeuver(actor, maneuver) {
   tn = clampTN(tn);
 
   const roll = await (new Roll("1d100").roll({ async: true }));
-  let success = roll.total <= tn;
-  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: "maneuver" });
-  const hobNotes = hobResult?.notes ?? [];
-  if (hobResult?.tnAdjustments?.length) {
-    const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
-    if (delta) {
-      tn = clampTN(tn + delta);
-      success = roll.total <= tn;
-    }
-  }
-  const hobHtml = renderHoBNotes(hobNotes);
+  const success = roll.total <= tn;
+  await maybeTriggerHoB(actor, { roll: roll.total, success });
 
   if (!success) {
     await onManeuverFail(actor);
     ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `<p>${game.i18n.format("W4SQ.ManeuverFail", { name: maneuver.name, roll: roll.total, tn })}</p>${hobHtml}`
+      content: `<p>${game.i18n.format("W4SQ.ManeuverFail", { name: maneuver.name, roll: roll.total, tn })}</p>`
     });
     return;
   }
@@ -116,6 +97,6 @@ async function executeManeuver(actor, maneuver) {
   }
   ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p>${game.i18n.format("W4SQ.ManeuverSuccess", { name: maneuver.name, roll: roll.total, tn })}</p>${hobHtml}`
+    content: `<p>${game.i18n.format("W4SQ.ManeuverSuccess", { name: maneuver.name, roll: roll.total, tn })}</p>`
   });
 }
