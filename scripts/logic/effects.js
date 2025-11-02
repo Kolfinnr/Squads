@@ -105,13 +105,21 @@ function appendDice(base, value) {
   return `${base}${joiner}${str}`;
 }
 
-export function aggregateForAttack(actor) {
+export function aggregateForAttack(actor, context = {}) {
   const agg = { tnDice: "0", dmgDice: "0", tags: {} };
-  for (const eff of getEffects(actor)) {
+  const effects = getEffects(actor);
+  let needsTiredPenalty = false;
+  for (const eff of effects) {
     const mods = eff.mods ?? {};
     if (mods.tnDice) agg.tnDice = appendDice(agg.tnDice, mods.tnDice);
     if (mods.dmgDice) agg.dmgDice = appendDice(agg.dmgDice, mods.dmgDice);
+    if (mods.tags?.tired && !mods.tnDice) needsTiredPenalty = true;
     Object.assign(agg.tags, mods.tags ?? {});
+  }
+  const action = context.action;
+  const weapon = context.weapon;
+  if (needsTiredPenalty && action === "ranged" && (weapon === "bow" || weapon === "crossbow")) {
+    agg.tnDice = appendDice(agg.tnDice, "-1d10");
   }
   agg.tnDice = agg.tnDice.trim() || "0";
   agg.dmgDice = agg.dmgDice.trim() || "0";

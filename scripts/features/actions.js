@@ -1,5 +1,6 @@
 import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
 import { aggregateForAttack, aggregateForDefense } from "../logic/effects.js";
+import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
 
@@ -7,6 +8,39 @@ const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const clampTN = (tn) => Math.min(ROLL.maxTN, Math.max(ROLL.minTN, tn));
 
 const getF = (actor, key, def) => actor.getFlag(FLAG_SCOPE, key) ?? foundry.utils.getProperty(DEFAULT_FLAGS, key) ?? def;
+
+const RELOAD_COOLDOWN_KEY = "reload";
+
+function baseReloadRounds(weaponKey) {
+  switch (weaponKey) {
+    case "bow":
+    case "crossbow":
+      return 1;
+    case "firearm":
+      return 2;
+    case "artillery":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+async function applyReloadingCooldown(actor, action, weaponKey, tags = {}) {
+  if (action !== "ranged") return;
+  if (tags.continuousFire) {
+    await clearCooldown(actor, RELOAD_COOLDOWN_KEY);
+    return;
+  }
+  let rounds = baseReloadRounds(weaponKey);
+  if (rounds <= 0) {
+    await clearCooldown(actor, RELOAD_COOLDOWN_KEY);
+    return;
+  }
+  if (tags.fastReload) {
+    rounds = Math.max(1, rounds - 1);
+  }
+  await setCooldown(actor, RELOAD_COOLDOWN_KEY, rounds);
+}
 
 async function rollMaybe(expr) {
   const s = (expr || "").toString().trim();
@@ -88,7 +122,7 @@ export async function doSquadAction(actor, action) {
   const weapon = WEAPONS[weaponKey] ?? WEAPONS.sword;
   const roleDef = ROLES[role] ?? ROLES.infantry;
 
-  const aggAttack = aggregateForAttack(actor, { action });
+  const aggAttack = aggregateForAttack(actor, { action, weapon: weaponKey });
   const roleBonus = roleBonuses(role, action);
 
   const weaponAcc = await rollMaybe(weapon.accuracyDice);
@@ -124,6 +158,8 @@ export async function doSquadAction(actor, action) {
   }
 
   const chip = await (new Roll("1d10").roll({ async: true }));
+
+  await applyReloadingCooldown(actor, action, weaponKey, aggAttack.tags);
 
   if (!success) {
     let moraleResult = null;

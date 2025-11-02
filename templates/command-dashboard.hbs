@@ -74,8 +74,8 @@
             {{/if}}
           </td>
           <td>
-            {{#each squad.cooldowns as |pair|}}
-              <span class="badge cooldown">{{pair.[0]}}: {{pair.[1]}}</span>
+            {{#each squad.cooldowns as |cooldown|}}
+              <span class="badge cooldown">{{cooldown.label}}: {{cooldown.rounds}}</span>
             {{else}}
               <span>{{localize "W4SQ.None"}}</span>
             {{/each}}
@@ -84,7 +84,7 @@
           <td class="maneuver-flag">
             {{#if squad.canReceiveOrders}}
               <label class="maneuver-toggle" title="{{localize "W4SQ.OrderManeuverToggle"}}">
-                <input type="checkbox" aria-label="{{localize "W4SQ.OrderManeuverToggle"}}" />
+                <input type="checkbox" data-order-maneuver data-token-id="{{squad.id}}" aria-label="{{localize "W4SQ.OrderManeuverToggle"}}" {{#if squad.maneuverChecked}}checked{{/if}} />
               </label>
             {{else}}
               <span class="orders-disabled">—</span>

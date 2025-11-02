@@ -41,3 +41,22 @@ export async function tickCooldowns(actor) {
     await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
   }
 }
+
+export function describeCooldown(key) {
+  switch (key) {
+    case "reload":
+      return game.i18n.localize("W4SQ.CooldownReloading");
+    case "cmdRangedPreempt":
+      return game.i18n.localize("W4SQ.CooldownCmdRanged");
+    default:
+      return key;
+  }
+}
+
+export function listCooldowns(actor) {
+  return Object.entries(getCooldowns(actor)).map(([key, value]) => ({
+    key,
+    label: describeCooldown(key),
+    rounds: Number(value || 0)
+  }));
+}

@@ -45,8 +45,8 @@
         <button type="button" data-action="command">{{localize "W4SQ.BtnCommand"}}</button>
       </div>
       <div class="badges">
-        {{#each cooldowns as |pair|}}
-          <span class="badge cooldown" title="{{pair.[0]}}">{{pair.[0]}}: {{pair.[1]}}</span>
+        {{#each cooldowns as |cooldown|}}
+          <span class="badge cooldown" title="{{cooldown.label}}">{{cooldown.label}}: {{cooldown.rounds}}</span>
         {{/each}}
       </div>
     </div>
@@ -68,8 +68,8 @@
         <div>
           <h3>{{localize "W4SQ.Cooldowns"}}</h3>
           <ul>
-            {{#each cooldowns as |pair|}}
-              <li>{{pair.[0]}}: {{pair.[1]}}</li>
+            {{#each cooldowns as |cooldown|}}
+              <li>{{cooldown.label}}: {{cooldown.rounds}}</li>
             {{else}}
               <li>{{localize "W4SQ.None"}}</li>
             {{/each}}

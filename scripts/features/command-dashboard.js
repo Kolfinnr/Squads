@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, clearNegative, getEffects, getEffectsDetailed } from "../logic/effects.js";
-import { getCooldown, getCooldowns, setCooldown } from "../logic/cooldowns.js";
+import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
@@ -204,7 +204,7 @@ export class W4SQCommandApp extends Application {
         moraleMax,
         moralePct: moraleMax > 0 ? Math.round((morale / moraleMax) * 100) : 0,
         effects: getEffectsDetailed(actor),
-        cooldowns: Object.entries(getCooldowns(actor)),
+        cooldowns: listCooldowns(actor),
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order,
         maneuverChecked,

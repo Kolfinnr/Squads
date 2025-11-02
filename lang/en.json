@@ -17,6 +17,8 @@
   "W4SQ.TabNotes": "Notes",
   "W4SQ.LastTarget": "Last Target",
   "W4SQ.Cooldowns": "Cooldowns",
+  "W4SQ.CooldownReloading": "Reloading",
+  "W4SQ.CooldownCmdRanged": "Ranged Command",
   "W4SQ.ActiveEffects": "Active Effects",
   "W4SQ.ManeuverFlag": "Maneuver",
   "W4SQ.PlayerControl": "Player Control",

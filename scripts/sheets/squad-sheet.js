@@ -2,7 +2,7 @@ import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS } from "../co
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
 import { getEffectsDetailed } from "../logic/effects.js";
-import { getCooldowns } from "../logic/cooldowns.js";
+import { listCooldowns } from "../logic/cooldowns.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 
 export class SquadActorSheet extends ActorSheet {
@@ -40,7 +40,7 @@ export class SquadActorSheet extends ActorSheet {
       lastTargetName: f("lastTargetName", "")
     };
     data.effects = getEffectsDetailed(this.actor);
-    data.cooldowns = getCooldowns(this.actor);
+    data.cooldowns = listCooldowns(this.actor);
     data.roles = ROLES;
     data.weapons = WEAPONS;
     return data;
