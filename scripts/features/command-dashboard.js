@@ -83,6 +83,15 @@ function collectActiveTokens() {
   return [...tokens.values()].filter(isSquadToken);
 }
 
+function getCommanderAssignment(token) {
+  if (!token) return null;
+  const tokenFlag = token.document?.getFlag(FLAG_SCOPE, "commanderUserId");
+  if (tokenFlag !== undefined) return tokenFlag ?? null;
+  const actorFlag = token.actor?.getFlag(FLAG_SCOPE, "commanderUserId");
+  if (actorFlag !== undefined) return actorFlag ?? null;
+  return null;
+}
+
 function resolveContext(target) {
   if (!target) return { token: null, actor: null };
   // Token placeable object
@@ -125,6 +134,10 @@ export class W4SQCommandApp extends Application {
       Hooks.off("updateActor", this._boundActorUpdate);
       this._boundActorUpdate = null;
     }
+    if (this._boundTokenUpdate) {
+      Hooks.off("updateToken", this._boundTokenUpdate);
+      this._boundTokenUpdate = null;
+    }
     await super.close(options);
     for (const [key, inst] of W4SQCommandApp.instances.entries()) {
       if (inst === this) {
@@ -162,7 +175,9 @@ export class W4SQCommandApp extends Application {
     this.disposition = disposition ?? (game.user.isGM ? null : CONST.TOKEN_DISPOSITIONS.FRIENDLY);
     this._maneuverState = new Map();
     this._boundActorUpdate = this._onActorUpdate.bind(this);
+    this._boundTokenUpdate = this._onTokenUpdate.bind(this);
     Hooks.on("updateActor", this._boundActorUpdate);
+    Hooks.on("updateToken", this._boundTokenUpdate);
   }
 
   get title() {
@@ -175,6 +190,17 @@ export class W4SQCommandApp extends Application {
     const commander = this._getCommander()?.actor;
     const relevant = commander?.id === actor.id || this._getSquadTokens().some(token => token.actor?.id === actor.id);
     if (relevant) {
+      this.render(false);
+    }
+  }
+
+  _onTokenUpdate(tokenDoc) {
+    if (!this.rendered) return;
+    if (!tokenDoc) return;
+    const actor = tokenDoc.actor ?? null;
+    if (!actor || actor.getFlag(FLAG_SCOPE, "hp") === undefined) return;
+    const visible = this._getSquadTokens().some(token => token.id === tokenDoc.id);
+    if (visible) {
       this.render(false);
     }
   }
@@ -223,7 +249,7 @@ export class W4SQCommandApp extends Application {
         name: token.name,
         actorId: actor.id,
         tokenId: token.id,
-        commanderUserId: actor.getFlag(MODULE_ID, "commanderUserId") ?? null,
+        commanderUserId: getCommanderAssignment(token),
         hp,
         hpMax,
         hpPct: hpMax > 0 ? Math.round((hp / hpMax) * 100) : 0,
@@ -363,12 +389,18 @@ export class W4SQCommandApp extends Application {
     if (game.user.isGM) {
       html.find(".w4sq-owner-select").on("change", async ev => {
         const select = ev.currentTarget;
+        const tokenId = select.dataset.tokenId;
         const actorId = select.dataset.actorId;
         const userId = select.value || null;
+        const token = canvas?.tokens?.get(tokenId) ?? null;
+        if (token?.document) {
+          await token.document.setFlag(FLAG_SCOPE, "commanderUserId", userId);
+          this.render();
+          return;
+        }
         const actor = game.actors.get(actorId);
         if (!actor) return;
-        // Persist the per-squad commander assignment flag on the actor.
-        await actor.setFlag(MODULE_ID, "commanderUserId", userId);
+        await actor.setFlag(FLAG_SCOPE, "commanderUserId", userId);
         this.render();
       });
     }

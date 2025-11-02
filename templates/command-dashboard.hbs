@@ -87,7 +87,7 @@
             <td>{{squad.lastTargetName}}</td>
             {{#if @root.showOwnerControls}}
               <td class="owner-cell">
-                <select class="w4sq-owner-select" data-actor-id="{{squad.actorId}}">
+                <select class="w4sq-owner-select" data-actor-id="{{squad.actorId}}" data-token-id="{{squad.tokenId}}">
                   {{#each @root.ownerOptions as |opt|}}
                     <option value="{{opt.value}}" {{#if (eq opt.value squad.commanderUserId)}}selected{{/if}}>{{opt.label}}</option>
                   {{/each}}
