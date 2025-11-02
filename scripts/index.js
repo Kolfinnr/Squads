@@ -13,38 +13,54 @@ const IMPORT_PATHS = [
   "./features/command-dashboard.js"
 ];
 
+function getRandomId() {
+  if (foundry?.utils?.randomID) return foundry.utils.randomID();
+  if (typeof randomID === "function") return randomID();
+  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
+  return Math.random().toString(36).slice(2);
+}
+
 function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
 }
 
 function collectSquadActors() {
-  const actors = new Map();
-  const pushActor = actor => {
+  const entries = new Map();
+  const register = (actor, token = null) => {
     if (!isSquadActor(actor)) return;
-    actors.set(actor.id, actor);
+    const isLinked = token?.document?.actorLink ?? token?.actorLink ?? false;
+    const actorId = actor?.id ?? actor?.uuid ?? getRandomId();
+    const tokenId = token?.id ?? token?.document?.id ?? null;
+    const key = isLinked ? `actor:${actorId}` : tokenId ? `token:${tokenId}` : `actor:${actorId}`;
+    if (!entries.has(key)) {
+      entries.set(key, { actor, token });
+    }
   };
 
   if (game.combat && game.combat.combatants.size) {
     for (const combatant of game.combat.combatants) {
       const token = combatant?.token?.object || canvas?.tokens?.get(combatant.tokenId);
-      if (token?.actor) pushActor(token.actor);
-      if (combatant?.actor) pushActor(combatant.actor);
+      if (token?.actor) {
+        register(token.actor, token);
+      } else if (combatant?.actor) {
+        register(combatant.actor, null);
+      }
     }
   }
 
-  if (!actors.size) {
+  if (!entries.size) {
     for (const token of canvas?.tokens?.placeables ?? []) {
-      if (token?.actor) pushActor(token.actor);
+      if (token?.actor) register(token.actor, token);
     }
   }
 
-  return [...actors.values()];
+  return [...entries.values()];
 }
 
 async function tickAllActors() {
-  const actors = collectSquadActors();
-  console.log(`[W4SQ] tickAllActors -> ${actors.length} actors`);
-  for (const actor of actors) {
+  const entries = collectSquadActors();
+  console.log(`[W4SQ] tickAllActors -> ${entries.length} actors`);
+  for (const { actor } of entries) {
     try {
       await tickEffects(actor);
     } catch (err) {
