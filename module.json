@@ -20,6 +20,15 @@
       "path": "lang/en.json"
     }
   ],
+  "packs": [
+    {
+      "name": "hob",
+      "label": "WFRP4e – Squads: Heat of Battle",
+      "path": "packs/hob.db",
+      "type": "RollTable",
+      "system": "wfrp4e"
+    }
+  ],
   "relationships": {
     "systems": [
       {
