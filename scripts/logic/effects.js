@@ -18,31 +18,6 @@ const NEGATIVE_DICE_KEYS = [
   "maneuverTNDice"
 ];
 
-function pushDice(parts, value) {
-  const str = (value ?? "").toString().trim();
-  if (!str || str === "0") return;
-  parts.push(str);
-}
-
-function formatDiceFormula(parts) {
-  const cleaned = parts
-    .map(part => part?.toString()?.trim?.() ?? "")
-    .filter(part => part.length);
-  if (!cleaned.length) return "0";
-  return cleaned
-    .map((part, index) => {
-      if (index === 0) {
-        if (part.startsWith("+")) return part.slice(1).trim() || "0";
-        if (part.startsWith("-")) return `-${part.slice(1).trim()}`;
-        return part;
-      }
-      if (part.startsWith("+")) return `+ ${part.slice(1).trim()}`;
-      if (part.startsWith("-")) return `- ${part.slice(1).trim()}`;
-      return `+ ${part}`;
-    })
-    .join(" ");
-}
-
 function ensureKey(effect) {
   if (!effect.key) {
     effect.key = crypto.randomUUID?.() ?? randomID();
@@ -122,55 +97,57 @@ export async function tickEffects(actor) {
   await actor.setFlag(FLAG_SCOPE, "effects", next);
 }
 
+function appendDice(base, value) {
+  const str = (value ?? "0").toString().trim();
+  if (!str || str === "0") return base;
+  if (!base) return str;
+  const joiner = str.startsWith("-") ? " " : " + ";
+  return `${base}${joiner}${str}`;
+}
+
 export function aggregateForAttack(actor, context = {}) {
-  const tnParts = [];
-  const dmgParts = [];
-  const tags = {};
+  const agg = { tnDice: "0", dmgDice: "0", tags: {} };
+  const effects = getEffects(actor);
   let needsTiredPenalty = false;
-  for (const eff of getEffects(actor)) {
+  for (const eff of effects) {
     const mods = eff.mods ?? {};
-    pushDice(tnParts, mods.tnDice);
-    pushDice(dmgParts, mods.dmgDice);
+    if (mods.tnDice) agg.tnDice = appendDice(agg.tnDice, mods.tnDice);
+    if (mods.dmgDice) agg.dmgDice = appendDice(agg.dmgDice, mods.dmgDice);
     if (mods.tags?.tired && !mods.tnDice) needsTiredPenalty = true;
-    Object.assign(tags, mods.tags ?? {});
+    Object.assign(agg.tags, mods.tags ?? {});
   }
   const action = context.action;
   const weapon = context.weapon;
   if (needsTiredPenalty && action === "ranged" && (weapon === "bow" || weapon === "crossbow")) {
-    pushDice(tnParts, "-1d10");
+    agg.tnDice = appendDice(agg.tnDice, "-1d10");
   }
-  return {
-    tnDice: formatDiceFormula(tnParts),
-    dmgDice: formatDiceFormula(dmgParts),
-    tags
-  };
+  agg.tnDice = agg.tnDice.trim() || "0";
+  agg.dmgDice = agg.dmgDice.trim() || "0";
+  return agg;
 }
 
 export function aggregateForDefense(actor) {
-  const defSoakParts = [];
-  const defPenaltyParts = [];
-  const rangedResistParts = [];
-  const tags = {};
+  const agg = { defSoakDice: "0", defPenaltyDice: "0", rangedResistDice: "0", tags: {} };
   for (const eff of getEffects(actor)) {
     const mods = eff.mods ?? {};
-    pushDice(defSoakParts, mods.defSoakDice);
-    pushDice(defPenaltyParts, mods.defPenaltyDice);
-    pushDice(rangedResistParts, mods.rangedResistDice);
-    Object.assign(tags, mods.tags ?? {});
+    if (mods.defSoakDice) agg.defSoakDice = appendDice(agg.defSoakDice, mods.defSoakDice);
+    if (mods.defPenaltyDice) agg.defPenaltyDice = appendDice(agg.defPenaltyDice, mods.defPenaltyDice);
+    if (mods.rangedResistDice) agg.rangedResistDice = appendDice(agg.rangedResistDice, mods.rangedResistDice);
+    Object.assign(agg.tags, mods.tags ?? {});
   }
-  return {
-    defSoakDice: formatDiceFormula(defSoakParts),
-    defPenaltyDice: formatDiceFormula(defPenaltyParts),
-    rangedResistDice: formatDiceFormula(rangedResistParts),
-    tags
-  };
+  agg.defSoakDice = agg.defSoakDice.trim() || "0";
+  agg.defPenaltyDice = agg.defPenaltyDice.trim() || "0";
+  agg.rangedResistDice = agg.rangedResistDice.trim() || "0";
+  return agg;
 }
 
 export function aggregateForManeuvers(actor) {
-  const parts = [];
+  let dice = "0";
   for (const eff of getEffects(actor)) {
     const mods = eff.mods ?? {};
-    pushDice(parts, mods.maneuverTNDice);
+    if (mods.maneuverTNDice) {
+      dice = appendDice(dice, mods.maneuverTNDice);
+    }
   }
-  return formatDiceFormula(parts);
+  return dice.trim() || "0";
 }
