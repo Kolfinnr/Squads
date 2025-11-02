@@ -204,7 +204,7 @@ function describeImmediate(immediate = {}) {
   return { strings, tnAdjustments, damageAdjustments };
 }
 
-async function resolveEvent(actor, poolKey, heading, context = {}) {
+async function resolveEvent(actor, poolKey, heading, context = {}, meta = {}) {
   const table = getHoBTable(poolKey);
   if (!table.length) return null;
 
@@ -213,7 +213,8 @@ async function resolveEvent(actor, poolKey, heading, context = {}) {
   const entry = table[rollValue - 1] ?? table[table.length - 1];
   if (!entry) return null;
 
-  const rawResult = await entry.apply?.(actor, { ...context, rollValue, rollResult: roll });
+  const trigger = meta.trigger ?? poolKey;
+  const rawResult = await entry.apply?.(actor, { ...context, rollValue, rollResult: roll, trigger, pool: poolKey });
   const detailSource = rawResult && typeof rawResult === "object" && Object.prototype.hasOwnProperty.call(rawResult, "detail")
     ? rawResult.detail
     : rawResult;
@@ -242,7 +243,9 @@ async function resolveEvent(actor, poolKey, heading, context = {}) {
       damage: immediateDesc.damageAdjustments
     },
     damageMultiplier: Number(rawResult?.damageMultiplier ?? 1) || 1,
-    roll: rollValue
+    roll: rollValue,
+    pool: poolKey,
+    trigger
   };
 }
 
@@ -253,10 +256,11 @@ export async function maybeTriggerHoB(actor, { roll, success, type, target } = {
   const context = { type, target };
 
   const isDouble = roll >= 11 && roll <= 99 && roll % 11 === 0;
+  const triggers = [];
   if (isDouble) {
+    const successPool = success ? "good" : "bad";
     const heading = success ? game.i18n.localize("W4SQ.HoBGood") : game.i18n.localize("W4SQ.HoBBad");
-    const event = await resolveEvent(actor, success ? "good" : "bad", heading, context);
-    if (event) results.push(event);
+    triggers.push({ pool: successPool, heading, trigger: success ? "criticalSuccess" : "criticalFailure" });
   }
 
   const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
@@ -267,14 +271,17 @@ export async function maybeTriggerHoB(actor, { roll, success, type, target } = {
   if (hpMax > 0 && hp / hpMax <= 0.3 && !actor.getFlag(FLAG_SCOPE, "hob_hp30")) {
     await actor.setFlag(FLAG_SCOPE, "hob_hp30", true);
     const heading = game.i18n.localize("W4SQ.HoBLowHP");
-    const event = await resolveEvent(actor, "hp", heading, { ...context, threshold: "hp" });
-    if (event) results.push(event);
+    triggers.push({ pool: "hp", heading, trigger: "lowHp", threshold: "hp" });
   }
 
   if (moraleMax > 0 && morale / moraleMax <= 0.3 && !actor.getFlag(FLAG_SCOPE, "hob_mo30")) {
     await actor.setFlag(FLAG_SCOPE, "hob_mo30", true);
     const heading = game.i18n.localize("W4SQ.HoBLowMorale");
-    const event = await resolveEvent(actor, "morale", heading, { ...context, threshold: "morale" });
+    triggers.push({ pool: "morale", heading, trigger: "lowMorale", threshold: "morale" });
+  }
+
+  for (const trig of triggers) {
+    const event = await resolveEvent(actor, trig.pool, trig.heading, { ...context, threshold: trig.threshold ?? null }, { trigger: trig.trigger });
     if (event) results.push(event);
   }
 

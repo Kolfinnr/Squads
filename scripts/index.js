@@ -37,15 +37,14 @@ async function tickAllActors() {
   }
 }
 
-const processedRounds = new Map();
-
 async function processRoundTick(combat) {
   if (!combat) return;
+  if (!game.user.isGM) return;
   const round = Number(combat.round ?? 0);
   if (round <= 0) return;
-  const key = combat.id || "global";
-  if (processedRounds.get(key) === round) return;
-  processedRounds.set(key, round);
+  const last = Number(combat.getFlag(MODULE_ID, "lastSquadRound") || 0);
+  if (last === round) return;
+  await combat.setFlag(MODULE_ID, "lastSquadRound", round);
   await tickAllActors();
 }
 
@@ -76,7 +75,9 @@ Hooks.once("ready", () => {
 });
 
 Hooks.on("combatStart", combat => {
-  if (combat?.id) processedRounds.delete(combat.id);
+  if (combat && game.user.isGM) {
+    combat.unsetFlag(MODULE_ID, "lastSquadRound").catch(() => {});
+  }
   safeProcessRoundTick(combat);
 });
 
@@ -145,6 +146,8 @@ Hooks.on("renderApplication", app => {
 });
 
 Hooks.on("deleteCombat", combat => {
-  if (combat?.id) processedRounds.delete(combat.id);
+  if (combat && game.user.isGM) {
+    combat.unsetFlag(MODULE_ID, "lastSquadRound").catch(() => {});
+  }
   W4SQCommandApp.closeAll();
 });
