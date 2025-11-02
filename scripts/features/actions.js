@@ -140,10 +140,9 @@ export async function doSquadAction(actor, action) {
   if (hp <= 0) tn -= 20;
   tn = clampTN(tn);
 
-  const targetActor = selectedTarget();
   const roll = await (new Roll("1d100").roll({ async: true }));
   let success = roll.total <= tn;
-  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
+  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action });
   const hobNotes = hobResult?.notes ?? [];
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
@@ -153,6 +152,7 @@ export async function doSquadAction(actor, action) {
     }
   }
 
+  const targetActor = selectedTarget();
   if (targetActor) {
     await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
   }
@@ -187,7 +187,6 @@ export async function doSquadAction(actor, action) {
   const atkRole = await rollMaybe(roleBonus.dmg);
   const atkEffect = await rollMaybe(aggAttack.dmgDice);
   const hobDamageBonus = (hobResult?.damageAdjustments ?? []).reduce((sum, adj) => sum + Number(adj.total || 0), 0);
-  const damageMultiplier = Number(hobResult?.damageMultiplier || 1) || 1;
 
   let raw = atkBase.total + atkWeapon.total + atkRole.total;
   if (atkEffect.total === -0.5) {
@@ -197,9 +196,6 @@ export async function doSquadAction(actor, action) {
   }
   if (hobDamageBonus) {
     raw += hobDamageBonus;
-  }
-  if (damageMultiplier !== 1) {
-    raw = Math.max(0, Math.round(raw * damageMultiplier));
   }
 
   const scaled = raw * hpScale(hp, Number(getF(actor, "hpMax", 1)));
@@ -211,31 +207,25 @@ export async function doSquadAction(actor, action) {
   let polearmBonus = 0;
   let counterSpear = 0;
 
-  let aggDefense = null;
-  let ignoreDefense = false;
-
   if (targetActor) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
     const targetEq = Number(getF(targetActor, "equipmentTier", 0));
     const targetWeapon = getF(targetActor, "weapon", "sword");
-    aggDefense = aggregateForDefense(targetActor, { action });
-    ignoreDefense = !!aggDefense.tags?.noDefense;
+    const aggDefense = aggregateForDefense(targetActor, { action });
 
-    if (!ignoreDefense && targetExp > 0) {
+    if (targetExp > 0) {
       const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
       defenseOnly += defRoll.total;
     }
 
-    if (!ignoreDefense) {
-      const effDef = await rollMaybe(aggDefense.defSoakDice);
-      if (effDef.total) {
-        defenseOnly += effDef.total;
-      }
+    const effDef = await rollMaybe(aggDefense.defSoakDice);
+    if (effDef.total) {
+      defenseOnly += effDef.total;
+    }
 
-      const effPen = await rollMaybe(aggDefense.defPenaltyDice);
-      if (effPen.total) {
-        defenseOnly += effPen.total;
-      }
+    const effPen = await rollMaybe(aggDefense.defPenaltyDice);
+    if (effPen.total) {
+      defenseOnly += effPen.total;
     }
 
     if (!(weapon.pierceArmor || aggAttack.tags?.pierceArmor)) {
@@ -253,7 +243,7 @@ export async function doSquadAction(actor, action) {
       armor = 0;
     }
 
-    if (!ignoreDefense && targetWeapon === "polearm") {
+    if (targetWeapon === "polearm") {
       const pole = await (new Roll("1d20").roll({ async: true }));
       defenseOnly += pole.total;
       polearmBonus = pole.total;
@@ -267,13 +257,13 @@ export async function doSquadAction(actor, action) {
       if (weaponKey === "firearm" || weaponKey === "artillery") {
         defenseOnly = 0;
       }
-      const rr = await rollMaybe(aggDefense?.rangedResistDice);
+      const rr = await rollMaybe(aggDefense.rangedResistDice);
       if (rr.total) {
         rangedResist += rr.total;
       }
     }
 
-    if (action === "melee" && role === "mounted" && aggAttack.tags?.charged && aggDefense?.tags?.braced && targetWeapon === "polearm") {
+    if (action === "melee" && role === "mounted" && aggAttack.tags?.charged && aggDefense.tags?.braced && targetWeapon === "polearm") {
       const counter = await (new Roll("2d20").roll({ async: true }));
       const aHPMax = Number(getF(actor, "hpMax", 1));
       const aHP = Number(getF(actor, "hp", 0));
@@ -284,9 +274,6 @@ export async function doSquadAction(actor, action) {
 
   let totalSoak = Math.max(0, defenseOnly) + Math.max(0, armor) + Math.max(0, rangedResist);
   let finalDamage = Math.max(chip.total, Math.floor(scaled - totalSoak));
-  if (damageMultiplier !== 1) {
-    finalDamage = Math.max(0, Math.floor(finalDamage * damageMultiplier));
-  }
   if (aggAttack.tags?.halfDamage) {
     finalDamage = Math.floor(finalDamage / 2);
   }
@@ -311,11 +298,7 @@ export async function doSquadAction(actor, action) {
     const armorTotal = Math.max(0, Math.floor(armor));
     const resistTotal = Math.max(0, Math.floor(rangedResist));
 
-    if (ignoreDefense) {
-      soakNotes.push(game.i18n.localize("W4SQ.ChatDefenseStripped"));
-    } else {
-      soakNotes.push(game.i18n.format("W4SQ.ChatDefenseTotal", { total: defenseTotal }));
-    }
+    soakNotes.push(game.i18n.format("W4SQ.ChatDefenseTotal", { total: defenseTotal }));
     if (polearmBonus) {
       soakNotes.push(game.i18n.format("W4SQ.ChatDefensePolearm", { total: polearmBonus }));
     }

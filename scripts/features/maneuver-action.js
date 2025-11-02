@@ -88,26 +88,15 @@ async function executeManeuver(actor, maneuver) {
   if (hp <= 0) tn -= 20;
   tn = clampTN(tn);
 
-  const autoPass = !!actor.getFlag(FLAG_SCOPE, "hob_autoPassManeuver");
-  if (autoPass) {
-    await actor.setFlag(FLAG_SCOPE, "hob_autoPassManeuver", false);
-  }
-
   const roll = await (new Roll("1d100").roll({ async: true }));
-  let success = roll.total <= tn || autoPass;
-  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: "maneuver", target });
-  const hobNotes = [...(hobResult?.notes ?? [])];
-  if (autoPass) {
-    hobNotes.push({
-      title: game.i18n.localize("W4SQ.ChatAutoPassTitle"),
-      detail: game.i18n.localize("W4SQ.ChatAutoPassDetail")
-    });
-  }
+  let success = roll.total <= tn;
+  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: "maneuver" });
+  const hobNotes = hobResult?.notes ?? [];
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
     if (delta) {
       tn = clampTN(tn + delta);
-      success = roll.total <= tn || autoPass;
+      success = roll.total <= tn;
     }
   }
   const hobHtml = renderHoBNotes(hobNotes);

@@ -37,22 +37,6 @@ async function tickAllActors() {
   }
 }
 
-const processedRounds = new Map();
-
-async function processRoundTick(combat) {
-  if (!combat) return;
-  const round = Number(combat.round ?? 0);
-  if (round <= 0) return;
-  const key = combat.id || "global";
-  if (processedRounds.get(key) === round) return;
-  processedRounds.set(key, round);
-  await tickAllActors();
-}
-
-function safeProcessRoundTick(combat) {
-  processRoundTick(combat).catch(err => console.error(`${MODULE_ID} | Failed to process round tick`, err));
-}
-
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | Initialising squads v1.0.2`);
   Actors.registerSheet(MODULE_ID, SquadActorSheet, { types: ACTOR_TYPES, makeDefault: false, label: "Squad" });
@@ -75,21 +59,12 @@ Hooks.once("ready", () => {
   game.w4sq.openCommand = openCommandDashboard;
 });
 
-Hooks.on("combatStart", combat => {
-  if (combat?.id) processedRounds.delete(combat.id);
-  safeProcessRoundTick(combat);
-});
-
-Hooks.on("combatRound", combat => {
-  safeProcessRoundTick(combat);
-});
-
-Hooks.on("updateCombat", (combat, changed) => {
-  if (!combat || !changed) return;
-  const hasRound = Object.prototype.hasOwnProperty.call(changed, "round");
-  const turnReset = Object.prototype.hasOwnProperty.call(changed, "turn") && changed.turn === 0;
-  if (hasRound || turnReset) {
-    safeProcessRoundTick(combat);
+Hooks.on("updateCombat", async (combat, changed) => {
+  if (!changed) return;
+  const roundChanged = typeof changed.round === "number" && changed.round > 0;
+  const turnReset = typeof changed.turn === "number" && changed.turn === 0;
+  if (roundChanged || turnReset) {
+    await tickAllActors();
   }
 });
 
@@ -144,7 +119,6 @@ Hooks.on("renderApplication", app => {
   shouldSilenceHoB(app);
 });
 
-Hooks.on("deleteCombat", combat => {
-  if (combat?.id) processedRounds.delete(combat.id);
+Hooks.on("deleteCombat", () => {
   W4SQCommandApp.closeAll();
 });
