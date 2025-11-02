@@ -273,7 +273,7 @@ export const MANEUVERS = {
     difficulty: "easy",
     target: "self",
     apply: async ({ actor }) => {
-      await addEffect(actor, E({ defSoakDice: "-1d20", tags: { tired: true } }, 1, "reload-f", "Reload"));
+      await addEffect(actor, E({ tags: { tired: true } }, 1, "reload-f", "Reload"));
     }
   },
 

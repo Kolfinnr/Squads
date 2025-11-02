@@ -11,7 +11,15 @@ export function getCooldown(actor, key) {
 
 export async function setCooldown(actor, key, rounds) {
   const cds = getCooldowns(actor);
-  cds[key] = Math.max(0, Math.ceil(Number(rounds) || 0));
+  const normalized = Math.max(0, Math.ceil(Number(rounds) || 0));
+  if (normalized <= 0) {
+    if (key in cds) {
+      delete cds[key];
+      await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+    }
+    return;
+  }
+  cds[key] = normalized;
   await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
 }
 
@@ -32,10 +40,11 @@ export async function tickCooldowns(actor) {
     const next = Math.max(0, Number(value || 0) - 1);
     if (next <= 0) {
       delete cds[key];
-    } else {
+      dirty = true;
+    } else if (next !== value) {
       cds[key] = next;
+      dirty = true;
     }
-    dirty = true;
   }
   if (dirty) {
     await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);

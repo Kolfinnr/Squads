@@ -61,7 +61,6 @@ function createTiredFollowUp(label, extraTags = {}) {
     label,
     duration: 1,
     mods: {
-      ...TIRED_BASE,
       tags: { tired: true, ...extraTags }
     }
   });
@@ -163,8 +162,7 @@ export function aggregateForAttack(actor, context = {}) {
   const tnParts = [];
   const dmgParts = [];
   const tags = {};
-  let tiredNeedsTn = false;
-  let tiredNeedsDmg = false;
+  let hasTired = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
     if (ignorePenalties && effectPolarity(eff) === "negative") {
@@ -173,14 +171,13 @@ export function aggregateForAttack(actor, context = {}) {
     }
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
-    if (mods.tags?.tired) {
-      if (!mods.tnDice) tiredNeedsTn = true;
-      if (!mods.dmgDice) tiredNeedsDmg = true;
-    }
+    if (mods.tags?.tired) hasTired = true;
     Object.assign(tags, mods.tags ?? {});
   }
-  if (tiredNeedsTn) pushDice(tnParts, TIRED_BASE.tnDice);
-  if (tiredNeedsDmg) pushDice(dmgParts, TIRED_BASE.dmgDice);
+  if (hasTired) {
+    pushDice(tnParts, TIRED_BASE.tnDice);
+    pushDice(dmgParts, TIRED_BASE.dmgDice);
+  }
   return {
     tnDice: formatDiceFormula(tnParts),
     dmgDice: formatDiceFormula(dmgParts),
@@ -195,7 +192,7 @@ export function aggregateForDefense(actor) {
   const defPenaltyParts = [];
   const rangedResistParts = [];
   const tags = {};
-  let tiredNeedsDefense = false;
+  let hasTired = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
     if (ignorePenalties && effectPolarity(eff) === "negative") {
@@ -205,12 +202,12 @@ export function aggregateForDefense(actor) {
     pushDice(defSoakParts, mods.defSoakDice);
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
-    if (mods.tags?.tired && !mods.defSoakDice && !mods.defPenaltyDice) {
-      tiredNeedsDefense = true;
-    }
+    if (mods.tags?.tired) hasTired = true;
     Object.assign(tags, mods.tags ?? {});
   }
-  if (tiredNeedsDefense) pushDice(defSoakParts, TIRED_BASE.defSoakDice);
+  if (hasTired) {
+    pushDice(defSoakParts, TIRED_BASE.defSoakDice);
+  }
   return {
     defSoakDice: formatDiceFormula(defSoakParts),
     defPenaltyDice: formatDiceFormula(defPenaltyParts),

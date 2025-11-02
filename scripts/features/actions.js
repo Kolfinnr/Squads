@@ -11,6 +11,28 @@ const getF = (actor, key, def) => actor.getFlag(FLAG_SCOPE, key) ?? foundry.util
 
 const RELOAD_COOLDOWN_KEY = "reload";
 
+const escapeHTML = (value) => {
+  if (typeof TextEditor?.escapeHTML === "function") {
+    return TextEditor.escapeHTML(String(value ?? ""));
+  }
+  const utilEscape = foundry?.utils?.escapeHTML ?? foundry?.utils?.escapeHtml;
+  if (typeof utilEscape === "function") {
+    return utilEscape(String(value ?? ""));
+  }
+  return String(value ?? "");
+};
+
+async function postStatusLine(actor, key) {
+  if (!actor) return;
+  const name = escapeHTML(actor.name || game.i18n.localize("W4SQ.UnknownSquad"));
+  const template = game.i18n.has(key) ? game.i18n.format(key, { name }) : `<strong>${name}</strong>`;
+  const content = `<p>${template}</p>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content
+  });
+}
+
 function baseReloadRounds(weaponKey) {
   switch (weaponKey) {
     case "bow":
@@ -95,6 +117,9 @@ async function moraleLossFor(defender, attacker, finalDamage) {
   const morale = Number(defender.getFlag(FLAG_SCOPE, "morale") || 0);
   const next = clamp(morale - total, 0, moraleMax);
   await defender.setFlag(FLAG_SCOPE, "morale", next);
+  if (morale > 0 && next <= 0) {
+    await postStatusLine(defender, "W4SQ.ChatMoraleZero");
+  }
   return total;
 }
 
@@ -103,6 +128,9 @@ async function applyDamage(actor, defender, finalDamage) {
   const hp = Number(defender.getFlag(FLAG_SCOPE, "hp") || 0);
   const next = clamp(hp - finalDamage, 0, hpMax);
   await defender.setFlag(FLAG_SCOPE, "hp", next);
+  if (hp > 0 && next <= 0) {
+    await postStatusLine(defender, "W4SQ.ChatHPZero");
+  }
   const moraleLoss = await moraleLossFor(defender, actor, finalDamage);
   await actor.setFlag(FLAG_SCOPE, "lastTargetName", defender.name || "");
   return { moraleLoss };

@@ -83,6 +83,8 @@
   "W4SQ.ChatRangedResist": "Ranged resist: {total}",
   "W4SQ.ChatCounterSpear": "Counter-spear deals {total}",
   "W4SQ.ChatSoakTotal": "Total soak: {total}",
+  "W4SQ.ChatMoraleZero": "<strong>{name}</strong> FLEES THE BATTLE!",
+  "W4SQ.ChatHPZero": "<strong>{name}</strong> HAS BEEN DESTROYED!",
   "W4SQ.ChatHoBHeading": "Heat of Battle",
   "W4SQ.ChatHoBSummary": "{heading} — {title}",
   "W4SQ.ChatHoBImmediate": "Immediate: {effects}",
