@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, SETTINGS, MODULE_ID } from "../config.js";
 import { addEffect } from "./effects.js";
 
-const goodDouble = [
+const GOOD_DOUBLE = [
   {
     key: "critical-push",
     title: "Critical Push",
@@ -46,7 +46,7 @@ const goodDouble = [
   }
 ];
 
-const badDouble = [
+const BAD_DOUBLE = [
   {
     key: "officer-down",
     title: "Officer Down",
@@ -74,7 +74,7 @@ const badDouble = [
   }
 ];
 
-const hpEvents = [
+const HP_EVENTS = [
   {
     key: "bloody-surge",
     title: "Bloody Surge",
@@ -110,7 +110,7 @@ const hpEvents = [
   }
 ];
 
-const moraleEvents = [
+const MORALE_EVENTS = [
   {
     key: "banner-raised",
     title: "Banner Raised",
@@ -141,6 +141,216 @@ const moraleEvents = [
     }
   }
 ];
+
+const TABLE_CONFIG = {
+  goodDouble: {
+    pack: `${MODULE_ID}.hob`,
+    name: "HoB: Critical Successes"
+  },
+  badDouble: {
+    pack: `${MODULE_ID}.hob`,
+    name: "HoB: Critical Failures"
+  },
+  hpEvents: {
+    pack: `${MODULE_ID}.hob`,
+    name: "HoB: Low HP"
+  },
+  moraleEvents: {
+    pack: `${MODULE_ID}.hob`,
+    name: "HoB: Low Morale"
+  }
+};
+
+const tableCache = new Map();
+
+function getNumberFlag(actor, key) {
+  return Number(actor.getFlag(FLAG_SCOPE, key) || 0);
+}
+
+async function loadHoBTable(poolKey) {
+  if (tableCache.has(poolKey)) return tableCache.get(poolKey);
+  const config = TABLE_CONFIG[poolKey];
+  if (!config) {
+    tableCache.set(poolKey, null);
+    return null;
+  }
+
+  const pack = game.packs?.get(config.pack);
+  if (!pack) {
+    tableCache.set(poolKey, null);
+    return null;
+  }
+
+  await pack.getIndex();
+  const indexEntry = pack.index.find(entry => {
+    if (entry.name === config.name) return true;
+    const flags = entry.flags?.[MODULE_ID];
+    return flags?.hobPool === poolKey;
+  });
+
+  if (!indexEntry) {
+    tableCache.set(poolKey, null);
+    return null;
+  }
+
+  const table = await pack.getDocument(indexEntry._id);
+  tableCache.set(poolKey, table ?? null);
+  return table ?? null;
+}
+
+async function resolveImmediateEntry(entry) {
+  if (entry === undefined || entry === null) return null;
+  if (typeof entry === "number") {
+    return { total: entry, formula: "" };
+  }
+
+  if (typeof entry === "string") {
+    const roll = await (new Roll(entry).roll({ async: true }));
+    return { total: roll.total, formula: roll.formula };
+  }
+
+  if (typeof entry === "object") {
+    const formula = entry.formula ?? entry.dice ?? entry.roll ?? entry.expression ?? entry.expr ?? null;
+    if (formula) {
+      const roll = await (new Roll(formula).roll({ async: true }));
+      return { total: roll.total, formula: roll.formula };
+    }
+
+    const total = Number(entry.total ?? entry.value ?? entry.amount ?? NaN);
+    if (Number.isFinite(total)) {
+      return { total, formula: entry.formula ?? entry.dice ?? "" };
+    }
+  }
+
+  return null;
+}
+
+async function rollImmediateAdjustments(immediate = {}) {
+  const result = { tn: [], damage: [] };
+
+  for (const tnEntry of toArray(immediate.tn)) {
+    const rolled = await resolveImmediateEntry(tnEntry);
+    if (rolled) result.tn.push(rolled);
+  }
+
+  for (const dmgEntry of toArray(immediate.damage)) {
+    const rolled = await resolveImmediateEntry(dmgEntry);
+    if (rolled) result.damage.push(rolled);
+  }
+
+  return result;
+}
+
+async function applyHoBAdjustments(actor, adjustments = []) {
+  const summaries = [];
+
+  for (const raw of toArray(adjustments)) {
+    if (!raw) continue;
+    const type = raw.type;
+    if (type !== "morale" && type !== "hp") continue;
+
+    const direction = (raw.mode ?? raw.direction ?? "increase").toLowerCase();
+    const multiplier = direction === "decrease" || direction === "down" || direction === "reduce" ? -1 : 1;
+
+    const formula = raw.formula ?? raw.dice ?? raw.roll ?? null;
+    const hasFormula = typeof formula === "string" && formula.trim().length > 0;
+    const roll = hasFormula ? await (new Roll(formula).roll({ async: true })) : null;
+    const amount = hasFormula ? roll.total : Number(raw.value ?? raw.amount ?? 0);
+    if (!Number.isFinite(amount)) continue;
+
+    const flagKey = type === "morale" ? "morale" : "hp";
+    const before = getNumberFlag(actor, flagKey);
+    let next = before + (amount * multiplier);
+
+    const minValue = raw.min ?? 0;
+    if (minValue !== undefined && minValue !== null) {
+      next = Math.max(Number(minValue), next);
+    }
+
+    if (raw.max !== undefined && raw.max !== null) {
+      next = Math.min(Number(raw.max), next);
+    }
+
+    const defaultMaxFlag = type === "morale" ? "moraleMax" : "hpMax";
+    const maxFlag = raw.maxFlag === null ? null : (raw.maxFlag ?? defaultMaxFlag);
+    if (maxFlag) {
+      const cap = getNumberFlag(actor, maxFlag);
+      if (Number.isFinite(cap) && cap > 0) {
+        next = Math.min(cap, next);
+      }
+    }
+
+    if (raw.minFlag) {
+      const floor = getNumberFlag(actor, raw.minFlag);
+      if (Number.isFinite(floor)) {
+        next = Math.max(floor, next);
+      }
+    }
+
+    await actor.setFlag(FLAG_SCOPE, flagKey, Math.max(0, next));
+
+    const actualChange = Math.max(0, next) - before;
+    if (actualChange === 0) continue;
+
+    const label = raw.label ?? (type === "morale" ? "Morale" : "HP");
+    const sign = actualChange >= 0 ? "+" : "-";
+    const magnitude = Math.abs(actualChange);
+    const pieces = [`${sign}${magnitude} ${label}`];
+    if (roll) pieces.push(`(${roll.formula})`);
+    summaries.push(pieces.join(" "));
+  }
+
+  return summaries;
+}
+
+async function createEntryFromResult(result) {
+  const data = result.getFlag(MODULE_ID, "hob") ?? result.flags?.[MODULE_ID]?.hob ?? {};
+  const title = data.title ?? result.text ?? game.i18n.localize("W4SQ.ChatHoBHeading");
+  const text = data.description ?? data.text ?? result.text ?? title;
+  const summary = data.summary ?? null;
+  const effects = toArray(data.effects ?? data.effect).filter(Boolean);
+  const adjustments = data.adjustments ?? [];
+  const immediateConfig = data.immediate ?? {};
+
+  return {
+    key: data.key ?? result.getFlag(MODULE_ID, "key"),
+    title,
+    text,
+    apply: async actor => {
+      const summaryParts = [];
+
+      for (const effectData of effects) {
+        if (!effectData) continue;
+        await addEffect(actor, effectData);
+        if (effectData.summary) summaryParts.push(effectData.summary);
+      }
+
+      const adjustmentSummaries = await applyHoBAdjustments(actor, adjustments);
+      if (summary) summaryParts.push(summary);
+      if (adjustmentSummaries.length) summaryParts.push(adjustmentSummaries.join(", "));
+
+      const immediate = await rollImmediateAdjustments(immediateConfig);
+      return {
+        summary: summaryParts.length ? summaryParts.join("; ") : null,
+        immediate
+      };
+    }
+  };
+}
+
+async function drawHoBEntry(poolKey, fallbackPool) {
+  const table = await loadHoBTable(poolKey);
+  if (table) {
+    const draw = await table.roll({ async: true });
+    const [result] = draw?.results ?? [];
+    if (result) {
+      const entry = await createEntryFromResult(result);
+      if (entry) return entry;
+    }
+  }
+
+  return randomEntry(fallbackPool);
+}
 
 function randomEntry(pool) {
   if (!Array.isArray(pool) || !pool.length) return null;
@@ -207,8 +417,8 @@ function describeImmediate(immediate) {
   return { strings, tnAdjustments, damageAdjustments };
 }
 
-async function resolveEvent(actor, pool, heading, context = {}) {
-  const entry = randomEntry(pool);
+async function resolveEvent(actor, poolKey, fallbackPool, heading, context = {}) {
+  const entry = await drawHoBEntry(poolKey, fallbackPool);
   if (!entry) return null;
   const detail = normalizeDetail(await entry.apply?.(actor, context));
   const immediateDesc = describeImmediate(detail.immediate);
@@ -243,7 +453,7 @@ export async function maybeTriggerHoB(actor, { roll, success, type } = {}) {
   const isDouble = roll >= 11 && roll <= 99 && roll % 11 === 0;
   if (isDouble) {
     const heading = success ? game.i18n.localize("W4SQ.HoBGood") : game.i18n.localize("W4SQ.HoBBad");
-    const event = await resolveEvent(actor, success ? goodDouble : badDouble, heading, context);
+    const event = await resolveEvent(actor, success ? "goodDouble" : "badDouble", success ? GOOD_DOUBLE : BAD_DOUBLE, heading, context);
     if (event) results.push(event);
   }
 
@@ -255,14 +465,14 @@ export async function maybeTriggerHoB(actor, { roll, success, type } = {}) {
   if (hpMax > 0 && hp / hpMax <= 0.3 && !actor.getFlag(FLAG_SCOPE, "hob_hp30")) {
     await actor.setFlag(FLAG_SCOPE, "hob_hp30", true);
     const heading = game.i18n.localize("W4SQ.HoBLowHP");
-    const event = await resolveEvent(actor, hpEvents, heading, { ...context, threshold: "hp" });
+    const event = await resolveEvent(actor, "hpEvents", HP_EVENTS, heading, { ...context, threshold: "hp" });
     if (event) results.push(event);
   }
 
   if (moraleMax > 0 && morale / moraleMax <= 0.3 && !actor.getFlag(FLAG_SCOPE, "hob_mo30")) {
     await actor.setFlag(FLAG_SCOPE, "hob_mo30", true);
     const heading = game.i18n.localize("W4SQ.HoBLowMorale");
-    const event = await resolveEvent(actor, moraleEvents, heading, { ...context, threshold: "morale" });
+    const event = await resolveEvent(actor, "moraleEvents", MORALE_EVENTS, heading, { ...context, threshold: "morale" });
     if (event) results.push(event);
   }
 
