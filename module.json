@@ -1,8 +1,8 @@
 {
   "id": "wfrp4e-squads",
   "title": "WFRP4e – Squads",
-  "description": "v0.8.0: Weapon-based maneuvers, cooldowns, failure penalty, volley & armor-ignore handling.",
-  "version": "0.8.0",
+  "description": "Squad-scale combat helpers for WFRP4e.",
+  "version": "1.0.2",
   "compatibility": {
     "minimum": "13",
     "verified": "13"
@@ -18,6 +18,15 @@
       "lang": "en",
       "name": "English",
       "path": "lang/en.json"
+    }
+  ],
+  "packs": [
+    {
+      "name": "hob",
+      "label": "WFRP4e – Squads: Heat of Battle",
+      "path": "packs/hob.db",
+      "type": "RollTable",
+      "system": "wfrp4e"
     }
   ],
   "relationships": {
