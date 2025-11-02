@@ -4,6 +4,14 @@ import { tickEffects } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 
+const IMPORT_PATHS = [
+  "./config.js",
+  "./sheets/squad-sheet.js",
+  "./logic/effects.js",
+  "./logic/cooldowns.js",
+  "./features/command-dashboard.js"
+];
+
 function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
 }
@@ -34,9 +42,18 @@ function collectSquadActors() {
 
 async function tickAllActors() {
   const actors = collectSquadActors();
+  console.log(`${MODULE_ID} | tickAllActors count`, actors.length);
   for (const actor of actors) {
-    await tickEffects(actor);
-    await tickCooldowns(actor);
+    try {
+      await tickEffects(actor);
+    } catch (err) {
+      console.error(`${MODULE_ID} | tickEffects failed for ${actor?.name || actor?.id}`, err);
+    }
+    try {
+      await tickCooldowns(actor);
+    } catch (err) {
+      console.error(`${MODULE_ID} | tickCooldowns failed for ${actor?.name || actor?.id}`, err);
+    }
   }
 }
 
@@ -61,9 +78,21 @@ function shouldProcessRound(combat) {
 }
 
 async function processRoundTick(combat) {
-  if (!combat) return;
-  if (!game.user.isGM) return;
-  if (!shouldProcessRound(combat)) return;
+  if (!combat) {
+    console.warn(`${MODULE_ID} | processRoundTick called without combat`);
+    return;
+  }
+  if (!game.user.isGM) {
+    console.log(`${MODULE_ID} | processRoundTick skipped (not GM)`);
+    return;
+  }
+  const should = shouldProcessRound(combat);
+  console.log(`${MODULE_ID} | processRoundTick guard`, {
+    id: combat?.id,
+    round: combat?.round,
+    should
+  });
+  if (!should) return;
   await tickAllActors();
 }
 
@@ -88,17 +117,43 @@ Hooks.once("init", () => {
   });
 });
 
-Hooks.once("ready", () => {
+Hooks.once("ready", async () => {
+  console.log(`${MODULE_ID} | Ready hook executed`);
+  const module = game.modules.get(MODULE_ID);
+  const basePath = module ? `modules/${module.id}/` : null;
+  const fileExists = globalThis.foundry?.utils?.fileExists
+    ? globalThis.foundry.utils.fileExists.bind(globalThis.foundry.utils)
+    : null;
+  for (const path of IMPORT_PATHS) {
+    const resource = path.replace(/^\.\//, "");
+    let exists = "unknown";
+    if (basePath && fileExists) {
+      try {
+        exists = await fileExists(`${basePath}${resource}`, { strict: true });
+      } catch (err) {
+        console.error(`${MODULE_ID} | Import check failed for ${path}`, err);
+        exists = false;
+      }
+    }
+    console.log(`${MODULE_ID} | Import ${path} →`, {
+      exists,
+      resource,
+      type: typeof resource
+    });
+  }
+  console.log(`${MODULE_ID} | combatRound handlers`, Hooks.events.combatRound);
   game.w4sq = game.w4sq || {};
   game.w4sq.openCommand = openCommandDashboard;
 });
 
 Hooks.on("combatStart", combat => {
+  console.log(`${MODULE_ID} | combatStart id=${combat?.id} round=${combat?.round}`);
   resetProcessedRound(combat);
   safeProcessRoundTick(combat);
 });
 
 Hooks.on("combatRound", combat => {
+  console.log(`${MODULE_ID} | combatRound id=${combat?.id} round=${combat?.round}`);
   safeProcessRoundTick(combat);
 });
 
@@ -107,6 +162,7 @@ Hooks.on("updateCombat", (combat, changed) => {
   const hasRound = Object.prototype.hasOwnProperty.call(changed, "round");
   const turnReset = Object.prototype.hasOwnProperty.call(changed, "turn") && changed.turn === 0;
   if (hasRound || turnReset) {
+    console.log(`${MODULE_ID} | updateCombat id=${combat?.id} round=${combat?.round} changed=`, changed);
     safeProcessRoundTick(combat);
   }
 });
