@@ -363,7 +363,7 @@ export class W4SQCommandApp extends Application {
     }
     if (!(await this._spendCP(commander, 2))) return;
     await doSquadAction(squad, "ranged");
-    await setCooldown(squad, "cmdRangedPreempt", 3);
+    await setCooldown(squad, "cmdRangedPreempt", 1);
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdRanged");
   }
 

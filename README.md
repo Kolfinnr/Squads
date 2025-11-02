@@ -5,7 +5,7 @@
 ## Installation
 1. Copy or clone this repository into `Data/modules/wfrp4e-squads/` inside your Foundry user data folder.
 2. Start Foundry VTT and enable **WFRP4e – Squads** from *Configuration → Manage Modules*.
-3. Reload the world so Foundry picks up the module files.
+3. (Optional) Import the **Heat of Battle** rollable tables from the included compendium (`Compendium Packs → WFRP4e – Squads: Heat of Battle`).
 
 ## Quick Start (Players & GMs)
 1. Create a new **Actor → Type: Squad** for each unit that will take the field.
@@ -21,9 +21,9 @@
 - Only on-scene squads that match the viewer’s disposition are listed, keeping the roster focused on relevant units.
 
 ## Heat of Battle Tables
-- Four Heat of Battle pools (critical successes, critical failures, low HP, and low morale) are included directly in the module with **ten** events apiece.
-- Events apply immediately during the triggering roll—boosts and penalties are rolled on the spot and summarised in chat.
-- To customise the pool contents, edit `scripts/logic/hob.js` and adjust the `GOOD_DOUBLE`, `BAD_DOUBLE`, `HP_EVENTS`, or `MORALE_EVENTS` arrays.
+- The module ships with four default Heat of Battle pools: critical successes, critical failures, low HP events, and low morale events. Each pool contains **two** entries by default—matching the reference rules—and can be expanded.
+- All four pools are also provided as rollable tables in the bundled compendium (`wfrp4e-squads.hob`). Import or duplicate them into your world to add, remove, or tweak events without touching the code.
+- If the compendium tables are missing, the original built-in events continue to function as a fallback.
 
 ## Tips for Table Play
 - **Chip damage matters:** even a failed attack deals 1d10 damage to keep pressure on defenders.
@@ -35,7 +35,7 @@
 - Entry point: `scripts/index.js` wires up hooks, sheet registration, and world settings.
 - Combat logic lives under `scripts/features/` and `scripts/logic/`.
 - UI templates are in `templates/`, styles in `styles/`, and localisation strings in `lang/en.json`.
-- Heat of Battle tables are defined in `scripts/logic/hob.js`.
+- Heat of Battle tables are defined in `scripts/logic/hob.js` with optional overrides from `packs/hob.db`.
 
 ## Compatibility Notes
 - Targeted Foundry version: **v13**.

@@ -77,7 +77,6 @@
   "W4SQ.ChatMorale": "Morale Loss",
   "W4SQ.ChatNoSoak": "No soak applied.",
   "W4SQ.ChatDefenseTotal": "Defense: {total}",
-  "W4SQ.ChatDefenseStripped": "Defense stripped!",
   "W4SQ.ChatDefensePolearm": "Polearm bonus: {total}",
   "W4SQ.ChatArmorTotal": "Armor: {total}",
   "W4SQ.ChatRangedResist": "Ranged resist: {total}",
@@ -104,7 +103,5 @@
   "W4SQ.ChatCmdRally": "{commander} rallies {squad}, bolstering Morale by {value}.",
   "W4SQ.ChatCmdWithdraw": "{commander} orders {squad} to withdraw and regroup.",
   "W4SQ.ChatCmdSpecial": "{commander} authorises a special action for {squad}.",
-  "W4SQ.ChatCmdFormation": "{commander} orders {squad} into formation.",
-  "W4SQ.ChatAutoPassTitle": "Inspired Valor",
-  "W4SQ.ChatAutoPassDetail": "Next maneuver auto-succeeds."
+  "W4SQ.ChatCmdFormation": "{commander} orders {squad} into formation."
 }
