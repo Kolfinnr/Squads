@@ -9,24 +9,27 @@ function isSquadActor(actor) {
 }
 
 function collectSquadActors() {
-  const tokens = new Map();
+  const actors = new Map();
+  const pushActor = actor => {
+    if (!isSquadActor(actor)) return;
+    actors.set(actor.id, actor);
+  };
+
   if (game.combat && game.combat.combatants.size) {
     for (const combatant of game.combat.combatants) {
       const token = combatant?.token?.object || canvas?.tokens?.get(combatant.tokenId);
-      if (token && !tokens.has(token.id)) tokens.set(token.id, token);
+      if (token?.actor) pushActor(token.actor);
+      if (combatant?.actor) pushActor(combatant.actor);
     }
   }
-  if (!tokens.size) {
+
+  if (!actors.size) {
     for (const token of canvas?.tokens?.placeables ?? []) {
-      if (!tokens.has(token.id)) tokens.set(token.id, token);
+      if (token?.actor) pushActor(token.actor);
     }
   }
-  const actors = new Set();
-  for (const token of tokens.values()) {
-    const actor = token?.actor;
-    if (isSquadActor(actor)) actors.add(actor);
-  }
-  return [...actors];
+
+  return [...actors.values()];
 }
 
 async function tickAllActors() {
@@ -37,14 +40,30 @@ async function tickAllActors() {
   }
 }
 
+const processedRounds = new Map();
+
+function resetProcessedRound(combat) {
+  const key = combat?.id ?? combat?._id;
+  if (!key) return;
+  processedRounds.delete(key);
+}
+
+function shouldProcessRound(combat) {
+  if (!combat) return false;
+  const round = Number(combat.round ?? 0);
+  if (round <= 0) return false;
+  const key = combat.id ?? combat._id;
+  if (!key) return false;
+  const last = processedRounds.get(key) ?? 0;
+  if (last === round) return false;
+  processedRounds.set(key, round);
+  return true;
+}
+
 async function processRoundTick(combat) {
   if (!combat) return;
   if (!game.user.isGM) return;
-  const round = Number(combat.round ?? 0);
-  if (round <= 0) return;
-  const last = Number(combat.getFlag(MODULE_ID, "lastSquadRound") || 0);
-  if (last === round) return;
-  await combat.setFlag(MODULE_ID, "lastSquadRound", round);
+  if (!shouldProcessRound(combat)) return;
   await tickAllActors();
 }
 
@@ -75,9 +94,7 @@ Hooks.once("ready", () => {
 });
 
 Hooks.on("combatStart", combat => {
-  if (combat && game.user.isGM) {
-    combat.unsetFlag(MODULE_ID, "lastSquadRound").catch(() => {});
-  }
+  resetProcessedRound(combat);
   safeProcessRoundTick(combat);
 });
 
@@ -146,8 +163,10 @@ Hooks.on("renderApplication", app => {
 });
 
 Hooks.on("deleteCombat", combat => {
-  if (combat && game.user.isGM) {
-    combat.unsetFlag(MODULE_ID, "lastSquadRound").catch(() => {});
-  }
+  resetProcessedRound(combat);
   W4SQCommandApp.closeAll();
+});
+
+Hooks.on("combatEnd", combat => {
+  resetProcessedRound(combat);
 });
