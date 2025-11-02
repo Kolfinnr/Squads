@@ -18,6 +18,12 @@ const NEGATIVE_DICE_KEYS = [
   "maneuverTNDice"
 ];
 
+const TIRED_BASE = {
+  tnDice: "-1d10",
+  dmgDice: "-1d10",
+  defSoakDice: "-1d20"
+};
+
 function pushDice(parts, value) {
   const str = (value ?? "").toString().trim();
   if (!str || str === "0") return;
@@ -48,6 +54,32 @@ function ensureKey(effect) {
     effect.key = crypto.randomUUID?.() ?? randomID();
   }
   return effect;
+}
+
+function createTiredFollowUp(label, extraTags = {}) {
+  return ensureKey({
+    label,
+    duration: 1,
+    mods: {
+      ...TIRED_BASE,
+      tags: { tired: true, ...extraTags }
+    }
+  });
+}
+
+function followUpsForExpired(effect) {
+  const key = effect?.key;
+  switch (key) {
+    case "bow-volley":
+    case "xbow-volley":
+      return [createTiredFollowUp("Tired")];
+    case "mordhau":
+      return [createTiredFollowUp("Mordhau Fatigue")];
+    case "rage":
+      return [createTiredFollowUp("Spent", { disorganized: true })];
+    default:
+      return [];
+  }
 }
 
 export function getEffects(actor) {
@@ -115,6 +147,9 @@ export async function tickEffects(actor) {
         };
         next.push(follow);
       }
+      for (const follow of followUpsForExpired(eff)) {
+        next.push(follow);
+      }
       continue;
     }
     next.push({ ...eff, duration: duration - 1 });
@@ -128,7 +163,8 @@ export function aggregateForAttack(actor, context = {}) {
   const tnParts = [];
   const dmgParts = [];
   const tags = {};
-  let needsTiredPenalty = false;
+  let tiredNeedsTn = false;
+  let tiredNeedsDmg = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
     if (ignorePenalties && effectPolarity(eff) === "negative") {
@@ -137,14 +173,14 @@ export function aggregateForAttack(actor, context = {}) {
     }
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
-    if (mods.tags?.tired && !mods.tnDice) needsTiredPenalty = true;
+    if (mods.tags?.tired) {
+      if (!mods.tnDice) tiredNeedsTn = true;
+      if (!mods.dmgDice) tiredNeedsDmg = true;
+    }
     Object.assign(tags, mods.tags ?? {});
   }
-  const action = context.action;
-  const weapon = context.weapon;
-  if (needsTiredPenalty && action === "ranged" && (weapon === "bow" || weapon === "crossbow")) {
-    pushDice(tnParts, "-1d10");
-  }
+  if (tiredNeedsTn) pushDice(tnParts, TIRED_BASE.tnDice);
+  if (tiredNeedsDmg) pushDice(dmgParts, TIRED_BASE.dmgDice);
   return {
     tnDice: formatDiceFormula(tnParts),
     dmgDice: formatDiceFormula(dmgParts),
@@ -159,6 +195,7 @@ export function aggregateForDefense(actor) {
   const defPenaltyParts = [];
   const rangedResistParts = [];
   const tags = {};
+  let tiredNeedsDefense = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
     if (ignorePenalties && effectPolarity(eff) === "negative") {
@@ -168,8 +205,12 @@ export function aggregateForDefense(actor) {
     pushDice(defSoakParts, mods.defSoakDice);
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
+    if (mods.tags?.tired && !mods.defSoakDice && !mods.defPenaltyDice) {
+      tiredNeedsDefense = true;
+    }
     Object.assign(tags, mods.tags ?? {});
   }
+  if (tiredNeedsDefense) pushDice(defSoakParts, TIRED_BASE.defSoakDice);
   return {
     defSoakDice: formatDiceFormula(defSoakParts),
     defPenaltyDice: formatDiceFormula(defPenaltyParts),

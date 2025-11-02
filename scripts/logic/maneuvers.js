@@ -121,7 +121,6 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ dmgDice: "+3d20" }, 1, "rage", "Bestial Rage"));
-      await addEffect(actor, E({ tnDice: "-1d20", defSoakDice: "-1d20", tags: { tired: true, disorganized: true } }, 1, "rage-pen", "Spent"));
     }
   },
   nimbleAxes: {
@@ -195,7 +194,7 @@ export const MANEUVERS = {
     difficulty: "average",
     target: "self",
     apply: async ({ actor }) => {
-      await addEffect(actor, E({ tags: { multiShot: 2, multiShotHalf: true, tired: true } }, 1, "bow-volley", "Volley Fire"));
+      await addEffect(actor, E({ tags: { multiShot: 2, multiShotHalf: true } }, 1, "bow-volley", "Volley Fire"));
     }
   },
   bowFire: {

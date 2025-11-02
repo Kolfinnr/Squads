@@ -1,3 +1,4 @@
+// DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
 import { tickEffects } from "./logic/effects.js";
@@ -42,7 +43,7 @@ function collectSquadActors() {
 
 async function tickAllActors() {
   const actors = collectSquadActors();
-  console.log(`${MODULE_ID} | tickAllActors count`, actors.length);
+  console.log(`[W4SQ] tickAllActors -> ${actors.length} actors`);
   for (const actor of actors) {
     try {
       await tickEffects(actor);
@@ -66,13 +67,25 @@ function resetProcessedRound(combat) {
 }
 
 function shouldProcessRound(combat) {
-  if (!combat) return false;
+  if (!combat) {
+    console.log("[W4SQ] processRoundTick skipped: no combat");
+    return false;
+  }
   const round = Number(combat.round ?? 0);
-  if (round <= 0) return false;
+  if (round < 0) {
+    console.log("[W4SQ] processRoundTick skipped: round < 0", { round });
+    return false;
+  }
   const key = combat.id ?? combat._id;
-  if (!key) return false;
+  if (!key) {
+    console.log("[W4SQ] processRoundTick skipped: missing combat key");
+    return false;
+  }
   const last = processedRounds.get(key) ?? 0;
-  if (last === round) return false;
+  if (last === round) {
+    console.log("[W4SQ] processRoundTick skipped: same round as last time", { round });
+    return false;
+  }
   processedRounds.set(key, round);
   return true;
 }
@@ -83,7 +96,7 @@ async function processRoundTick(combat) {
     return;
   }
   if (!game.user.isGM) {
-    console.log(`${MODULE_ID} | processRoundTick skipped (not GM)`);
+    console.log("[W4SQ] processRoundTick skipped: not GM");
     return;
   }
   const should = shouldProcessRound(combat);
@@ -147,13 +160,13 @@ Hooks.once("ready", async () => {
 });
 
 Hooks.on("combatStart", combat => {
-  console.log(`${MODULE_ID} | combatStart id=${combat?.id} round=${combat?.round}`);
+  console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
   resetProcessedRound(combat);
   safeProcessRoundTick(combat);
 });
 
 Hooks.on("combatRound", combat => {
-  console.log(`${MODULE_ID} | combatRound id=${combat?.id} round=${combat?.round}`);
+  console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
   safeProcessRoundTick(combat);
 });
 
@@ -162,7 +175,7 @@ Hooks.on("updateCombat", (combat, changed) => {
   const hasRound = Object.prototype.hasOwnProperty.call(changed, "round");
   const turnReset = Object.prototype.hasOwnProperty.call(changed, "turn") && changed.turn === 0;
   if (hasRound || turnReset) {
-    console.log(`${MODULE_ID} | updateCombat id=${combat?.id} round=${combat?.round} changed=`, changed);
+    console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
     safeProcessRoundTick(combat);
   }
 });
