@@ -1,4 +1,4 @@
-import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS } from "../config.js";
+import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, clearNegative, getEffects, getEffectsDetailed } from "../logic/effects.js";
 import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
@@ -11,6 +11,32 @@ const ORDER_OPTIONS = [
   { value: "attack", label: "W4SQ.OrderAttack" },
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
+
+export function getConnectedUsers() {
+  return (game.users ?? []).filter(user => user.active);
+}
+
+export function groupSquadsByUser(squads) {
+  const users = getConnectedUsers();
+  const buckets = new Map();
+
+  for (const user of users) {
+    buckets.set(user.id, { user, squads: [] });
+  }
+
+  buckets.set("unassigned", { user: null, squads: [] });
+
+  for (const squad of squads) {
+    const ownerId = squad.commanderUserId;
+    if (ownerId && buckets.has(ownerId)) {
+      buckets.get(ownerId).squads.push(squad);
+    } else {
+      buckets.get("unassigned").squads.push(squad);
+    }
+  }
+
+  return { buckets, users };
+}
 
 function getDisposition(token) {
   return token?.document?.disposition ?? null;
@@ -197,6 +223,7 @@ export class W4SQCommandApp extends Application {
         name: token.name,
         actorId: actor.id,
         tokenId: token.id,
+        commanderUserId: actor.getFlag(MODULE_ID, "commanderUserId") ?? null,
         hp,
         hpMax,
         hpPct: hpMax > 0 ? Math.round((hp / hpMax) * 100) : 0,
@@ -236,10 +263,46 @@ export class W4SQCommandApp extends Application {
       this.selectedSquadId = null;
     }
 
+    const { buckets: bucketMap, users } = groupSquadsByUser(squads);
+    const useBuckets = users.length > 0;
+    const isGM = game.user.isGM;
+    const showUnassignedToPlayers = game.settings.get(MODULE_ID, SETTINGS.showUnassignedToPlayers);
+
+    const bucketList = [];
+    if (useBuckets) {
+      for (const [bucketId, entry] of bucketMap.entries()) {
+        if (!isGM) {
+          const isCurrentUserBucket = bucketId === game.user.id;
+          const isUnassignedBucket = bucketId === "unassigned";
+          if (!isCurrentUserBucket && !(isUnassignedBucket && showUnassignedToPlayers)) continue;
+        }
+
+        const label = entry.user
+          ? game.i18n.format("W4SQ.BucketPlayer", { name: entry.user.name })
+          : game.i18n.localize("W4SQ.BucketUnassigned");
+
+        bucketList.push({
+          id: bucketId,
+          label,
+          user: entry.user ? { id: entry.user.id, name: entry.user.name } : null,
+          squads: entry.squads
+        });
+      }
+    }
+
+    const ownerOptions = [
+      { value: "", label: game.i18n.localize("W4SQ.OwnerUnassigned") },
+      ...users.map(user => ({ value: user.id, label: user.name }))
+    ];
+
     return {
       commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
       squads,
+       buckets: bucketList,
+       useBuckets,
+       showOwnerControls: isGM,
+       ownerOptions,
       orderOptions: ORDER_OPTIONS.map(opt => ({
         value: opt.value,
         label: game.i18n.localize(opt.label)
@@ -296,6 +359,19 @@ export class W4SQCommandApp extends Application {
       if (!tokenId) return;
       this._maneuverState.set(tokenId, checked);
     });
+
+    if (game.user.isGM) {
+      html.find(".w4sq-owner-select").on("change", async ev => {
+        const select = ev.currentTarget;
+        const actorId = select.dataset.actorId;
+        const userId = select.value || null;
+        const actor = game.actors.get(actorId);
+        if (!actor) return;
+        // Persist the per-squad commander assignment flag on the actor.
+        await actor.setFlag(MODULE_ID, "commanderUserId", userId);
+        this.render();
+      });
+    }
   }
 
   _getSelectedActor() {

@@ -23,6 +23,7 @@ export const DEFAULT_FLAGS = {
   cp: { current: 3, cap: 6 },
   order: "",
   orderManeuver: false,
+  commanderUserId: null,
   hob_hp30: false,
   hob_mo30: false,
   lastTargetName: ""
@@ -50,5 +51,6 @@ export const ROLES = {
 };
 
 export const SETTINGS = {
-  enableHoB: "enableHoB"
+  enableHoB: "enableHoB",
+  showUnassignedToPlayers: "showUnassignedToPlayers"
 };

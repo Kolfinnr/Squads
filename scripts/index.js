@@ -128,6 +128,15 @@ Hooks.once("init", () => {
     type: Boolean,
     default: true
   });
+
+  game.settings.register(MODULE_ID, SETTINGS.showUnassignedToPlayers, {
+    name: "Show unassigned squads to players",
+    hint: "If disabled, players only see their own bucket on the command dashboard.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
 });
 
 Hooks.once("ready", async () => {
