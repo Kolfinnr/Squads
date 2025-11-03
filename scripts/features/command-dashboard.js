@@ -345,23 +345,6 @@ export class W4SQCommandApp extends Application {
       ...users.map(user => ({ value: user.id, label: user.name }))
     ];
 
-    const trackerActor = this._getSelectedActor();
-    let maneuverTracker = null;
-    if (trackerActor) {
-      const active = trackerActor.getFlag(FLAG_SCOPE, "activeManeuver") || null;
-      const cooldowns = listCooldowns(trackerActor).map(cd => ({
-        ...cd,
-        turnsLabel: formatTurns(cd.rounds ?? 0)
-      }));
-      maneuverTracker = {
-        name: trackerActor.name,
-        activeName: active?.name ?? null,
-        remainingLabel: active ? formatTurns(Math.max(0, Number(active.remaining ?? 0))) : game.i18n.localize("W4SQ.TrackerNone"),
-        cooldowns,
-        cpSpent: Math.max(0, Math.max(0, (cp.cap ?? 0) - cp.current))
-      };
-    }
-
     return {
       commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
@@ -374,8 +357,7 @@ export class W4SQCommandApp extends Application {
         value: opt.value,
         label: game.i18n.localize(opt.label)
       })),
-      dispositionLabel: dispositionLabel(this.disposition),
-      maneuverTracker
+      dispositionLabel: dispositionLabel(this.disposition)
     };
   }
 

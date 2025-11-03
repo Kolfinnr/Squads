@@ -119,13 +119,6 @@
   "W4SQ.ChatCmdFormation": "{commander} orders {squad} into formation.",
   "W4SQ.ChatAutoPassTitle": "Inspired Valor",
   "W4SQ.ChatAutoPassDetail": "Next maneuver auto-succeeds.",
-  "W4SQ.ManeuverTracker": "Maneuver Tracker",
-  "W4SQ.TrackerSquad": "Squad",
-  "W4SQ.TrackerActive": "Active Maneuver",
-  "W4SQ.TrackerCooldowns": "Cooldowns",
-  "W4SQ.TrackerCPSpent": "CP Spent",
-  "W4SQ.TrackerRemaining": "Remaining",
-  "W4SQ.TrackerNone": "No active maneuver",
   "W4SQ.Disorganized": "Disorganized",
   "W4SQ.DisorganizedAuto": "Disorganized"
 }

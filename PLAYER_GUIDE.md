@@ -13,15 +13,13 @@
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
 - **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
 
-### Orders, Maneuver Toggle & Tracker
+### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
 - A **Maneuver** checkbox beside the orders column is a reminder for players planning to perform a maneuver that round.
-- The command dashboard includes a **Maneuver Tracker** panel that highlights the selected squad’s active maneuver, remaining turns, cooldowns, and estimated CP spent this battle.
 - Squad sheets now offer a **Backline Attack** toggle; when enabled the unit performs rear assaults (see Melee Actions below).
 
 ### Command Points (CP)
 - Commanders start with a default pool (3 of 6). Spending CP triggers command abilities. Adjustments appear on the dashboard, and the pool refills only through in-game rewards or GM fiat.
-- The tracker panel lists how many CP have been spent relative to the commander’s current reserve.
 
 ## Command Actions
 | Command | Cost | Effect |

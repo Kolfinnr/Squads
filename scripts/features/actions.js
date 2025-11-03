@@ -248,11 +248,6 @@ export async function doSquadAction(actor, action) {
 
   let backlineHpBonus = 0;
   let backlineMoraleBonus = 0;
-  if (success && targetActor && action === "melee" && backlineAttack) {
-    backlineHpBonus = (await (new Roll("2d10").roll({ async: true }))).total;
-    backlineMoraleBonus = (await (new Roll("3d10").roll({ async: true }))).total;
-    finalDamage += backlineHpBonus;
-  }
 
   if (targetActor) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
@@ -330,6 +325,14 @@ export async function doSquadAction(actor, action) {
   }
   if (aggAttack.tags?.halfDamage) {
     finalDamage = Math.floor(finalDamage / 2);
+  }
+
+  if (success && targetActor && action === "melee" && backlineAttack) {
+    const hpBonusRoll = await (new Roll("2d10").roll({ async: true }));
+    const moraleBonusRoll = await (new Roll("3d10").roll({ async: true }));
+    backlineHpBonus = hpBonusRoll.total;
+    backlineMoraleBonus = moraleBonusRoll.total;
+    finalDamage += backlineHpBonus;
   }
 
   let moraleLoss = null;

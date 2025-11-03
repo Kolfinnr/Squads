@@ -31,29 +31,6 @@
     <button data-command="cmd-formation">{{localize "W4SQ.CmdFormation"}}</button>
   </div>
 
-  {{#if maneuverTracker}}
-    <aside class="maneuver-tracker">
-      <h3>{{localize "W4SQ.ManeuverTracker"}}</h3>
-      <p><strong>{{localize "W4SQ.TrackerSquad"}}</strong>: {{maneuverTracker.name}}</p>
-      <p><strong>{{localize "W4SQ.TrackerActive"}}</strong>:
-        {{#if maneuverTracker.activeName}}
-          {{maneuverTracker.activeName}} — {{localize "W4SQ.TrackerRemaining"}} {{maneuverTracker.remainingLabel}}
-        {{else}}
-          {{localize "W4SQ.TrackerNone"}}
-        {{/if}}
-      </p>
-      <p><strong>{{localize "W4SQ.TrackerCPSpent"}}</strong>: {{maneuverTracker.cpSpent}}</p>
-      <h4>{{localize "W4SQ.TrackerCooldowns"}}</h4>
-      <ul class="tracker-cooldowns">
-        {{#each maneuverTracker.cooldowns as |cd|}}
-          <li>{{cd.label}} — {{cd.turnsLabel}}</li>
-        {{else}}
-          <li>{{localize "W4SQ.None"}}</li>
-        {{/each}}
-      </ul>
-    </aside>
-  {{/if}}
-
   {{#*inline "w4sq-squad-table"}}
     <table class="squad-table">
       <thead>

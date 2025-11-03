@@ -18,7 +18,6 @@
 ## Command Dashboard Highlights
 - **Orders column** tracks each squad’s standing order. Hitting *New Orders!* clears the selection so commanders can set a fresh stance.
 - A **Maneuver** reminder checkbox sits to the left of the Orders drop-down for groups that want to note their intended maneuvers without touching squad data.
-- The new **Maneuver Tracker** panel summarizes the selected squad’s active maneuver, remaining turns, and cooldowns while counting how many CP the commander has spent.
 - Cooldown badges list command locks and reloading timers (bows/crossbows 1 round, firearms 2 rounds, artillery 3 rounds) so you always know which units are ready to act.
 - Only on-scene squads that match the viewer’s disposition are listed, keeping the roster focused on relevant units.
 

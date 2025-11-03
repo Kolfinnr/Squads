@@ -9,18 +9,27 @@ export function getCooldown(actor, key) {
   return Number(cds[key] ?? 0);
 }
 
+async function commitCooldowns(actor, cds) {
+  const keys = Object.keys(cds);
+  if (!keys.length) {
+    await actor.unsetFlag(FLAG_SCOPE, "cooldowns");
+  } else {
+    await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+  }
+}
+
 export async function setCooldown(actor, key, rounds) {
   const cds = getCooldowns(actor);
   const normalized = Math.max(0, Math.ceil(Number(rounds) || 0));
   if (normalized <= 0) {
     if (key in cds) {
       delete cds[key];
-      await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+      await commitCooldowns(actor, cds);
     }
     return;
   }
   cds[key] = normalized;
-  await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+  await commitCooldowns(actor, cds);
 }
 
 export async function clearCooldown(actor, key) {
@@ -30,7 +39,7 @@ export async function clearCooldown(actor, key) {
   } else {
     for (const k of Object.keys(cds)) delete cds[k];
   }
-  await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+  await commitCooldowns(actor, cds);
 }
 
 export async function tickCooldowns(actor) {
@@ -47,7 +56,7 @@ export async function tickCooldowns(actor) {
     }
   }
   if (dirty) {
-    await actor.setFlag(FLAG_SCOPE, "cooldowns", cds);
+    await commitCooldowns(actor, cds);
   }
 }
 
