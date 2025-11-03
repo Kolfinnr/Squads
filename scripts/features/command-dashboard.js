@@ -1,6 +1,7 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
-import { addEffect, clearNegative, getEffects, getEffectsDetailed } from "../logic/effects.js";
+import { addEffect, getEffects, getEffectsDetailed, removeDisorganized } from "../logic/effects.js";
+import { MANEUVERS } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
@@ -11,6 +12,12 @@ const ORDER_OPTIONS = [
   { value: "attack", label: "W4SQ.OrderAttack" },
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
+
+function formatTurns(value) {
+  const turns = Math.max(0, Number(value || 0));
+  if (turns === 1) return game.i18n.localize("W4SQ.TurnSingle");
+  return game.i18n.format("W4SQ.TurnPlural", { value: turns });
+}
 
 export function getConnectedUsers() {
   return (game.users ?? []).filter(user => user.active);
@@ -230,6 +237,22 @@ export class W4SQCommandApp extends Application {
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+      const activeManeuver = actor.getFlag(FLAG_SCOPE, "activeManeuver") || null;
+      const activeInfo = activeManeuver
+        ? {
+            name: activeManeuver.name || null,
+            remaining: Math.max(0, Number(activeManeuver.remaining ?? 0)),
+            remainingLabel: formatTurns(Math.max(0, Number(activeManeuver.remaining ?? 0)))
+          }
+        : null;
+      const effects = getEffectsDetailed(actor).map(effect => ({
+        ...effect,
+        durationLabel: formatTurns(effect.duration ?? 0)
+      }));
+      const cooldowns = listCooldowns(actor).map(cd => ({
+        ...cd,
+        turnsLabel: formatTurns(cd.rounds ?? 0)
+      }));
       let order = actor.getFlag(FLAG_SCOPE, "order");
       if (order === undefined || order === null) {
         order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
@@ -256,8 +279,9 @@ export class W4SQCommandApp extends Application {
         morale,
         moraleMax,
         moralePct: moraleMax > 0 ? Math.round((morale / moraleMax) * 100) : 0,
-        effects: getEffectsDetailed(actor),
-        cooldowns: listCooldowns(actor),
+        effects,
+        cooldowns,
+        activeManeuver: activeInfo,
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order,
         maneuverChecked,
@@ -321,6 +345,23 @@ export class W4SQCommandApp extends Application {
       ...users.map(user => ({ value: user.id, label: user.name }))
     ];
 
+    const trackerActor = this._getSelectedActor();
+    let maneuverTracker = null;
+    if (trackerActor) {
+      const active = trackerActor.getFlag(FLAG_SCOPE, "activeManeuver") || null;
+      const cooldowns = listCooldowns(trackerActor).map(cd => ({
+        ...cd,
+        turnsLabel: formatTurns(cd.rounds ?? 0)
+      }));
+      maneuverTracker = {
+        name: trackerActor.name,
+        activeName: active?.name ?? null,
+        remainingLabel: active ? formatTurns(Math.max(0, Number(active.remaining ?? 0))) : game.i18n.localize("W4SQ.TrackerNone"),
+        cooldowns,
+        cpSpent: Math.max(0, Math.max(0, (cp.cap ?? 0) - cp.current))
+      };
+    }
+
     return {
       commander: commanderName ? { name: commanderName, canAdjustCP } : null,
       cp,
@@ -333,7 +374,8 @@ export class W4SQCommandApp extends Application {
         value: opt.value,
         label: game.i18n.localize(opt.label)
       })),
-      dispositionLabel: dispositionLabel(this.disposition)
+      dispositionLabel: dispositionLabel(this.disposition),
+      maneuverTracker
     };
   }
 
@@ -514,17 +556,17 @@ export class W4SQCommandApp extends Application {
 
   async _commandReorg(commander, squad) {
     if (!(await this._spendCP(commander, 1))) return;
-    await clearNegative(squad);
-    const roll = await (new Roll("2d20").roll({ async: true }));
-    const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
-    const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-    await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));
-    await this._announceCommand(commander, squad, "W4SQ.ChatCmdReorg", { value: roll.total });
+    const before = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
+    await MANEUVERS.reorg.apply({ actor: squad, target: squad });
+    await removeDisorganized(squad);
+    const after = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
+    const delta = Math.max(0, after - before);
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdReorg", { value: delta });
   }
 
   async _commandRally(commander, squad) {
     if (!(await this._spendCP(commander, 1))) return;
-    const roll = await (new Roll("1d20").roll({ async: true }));
+    const roll = await (new Roll("3d20").roll({ async: true }));
     const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));

@@ -3,6 +3,7 @@
   <p>{{localize "W4SQ.ChatTN"}}: {{tn}} | {{localize "W4SQ.ChatRoll"}}: {{roll}}</p>
   <p>{{#if success}}{{localize "W4SQ.ChatSuccess"}} ({{margin}}){{else}}{{localize "W4SQ.ChatFailure"}} ({{margin}}){{/if}}</p>
   <p>{{localize "W4SQ.ChatDamage"}}: {{dmg}}</p>
+  {{#if backline}}<p>{{localize "W4SQ.ChatBackline"}}</p>{{/if}}
   {{#if moraleLoss}}<p>{{localize "W4SQ.ChatMorale"}}: {{moraleLoss}}</p>{{/if}}
   <p>{{soakDetail}}</p>
   {{#if hobNotes.length}}

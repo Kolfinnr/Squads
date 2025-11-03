@@ -24,6 +24,33 @@ const TIRED_BASE = {
   defSoakDice: "-1d20"
 };
 
+const DISORG_BASE = {
+  tnDice: "-1d20",
+  dmgDice: "-1d20",
+  defSoakDice: "-1d20"
+};
+
+function ensureArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function effectHasTag(effect, tag) {
+  return Boolean(effect?.mods?.tags?.[tag]);
+}
+
+function actorHasTag(actor, tag) {
+  return getEffects(actor).some(effect => effectHasTag(effect, tag));
+}
+
+function hasAnyTag(effect, tags) {
+  if (!tags || !effect?.mods?.tags) return false;
+  for (const key of Object.keys(effect.mods.tags)) {
+    if (tags.has(key)) return true;
+  }
+  return false;
+}
+
 function pushDice(parts, value) {
   const str = (value ?? "").toString().trim();
   if (!str || str === "0") return;
@@ -109,10 +136,32 @@ export function getEffectsDetailed(actor) {
   }));
 }
 
+function shouldBlockEffect(actor, effect) {
+  const tags = effect?.mods?.tags ?? {};
+  if (tags.flanked && (actorHasTag(actor, "immuneFlank") || actorHasTag(actor, "fortified"))) return true;
+  if (tags.encircled && actorHasTag(actor, "immuneEncircle")) return true;
+  return false;
+}
+
 export async function addEffect(actor, effect) {
+  if (!actor || !effect) return;
+  if (shouldBlockEffect(actor, effect)) return;
   const list = getEffects(actor);
   list.push(ensureKey(foundry.utils.duplicate(effect)));
   await actor.setFlag(FLAG_SCOPE, "effects", list);
+}
+
+export function actorHasEffect(actor, predicate) {
+  if (!actor) return false;
+  const effects = getEffects(actor);
+  return effects.some(predicate);
+}
+
+export async function ensureEffect(actor, effect, predicate) {
+  if (!actor) return;
+  const exists = actorHasEffect(actor, predicate);
+  if (exists) return;
+  await addEffect(actor, effect);
 }
 
 export async function removeEffectByKey(actor, key) {
@@ -156,15 +205,25 @@ export async function tickEffects(actor) {
   await actor.setFlag(FLAG_SCOPE, "effects", next);
 }
 
+function buildIgnoreSet(ignore) {
+  if (!ignore) return new Set();
+  if (ignore instanceof Set) return new Set(ignore);
+  return new Set(ensureArray(ignore));
+}
+
 export function aggregateForAttack(actor, context = {}) {
+  const { ignoreTags } = context;
+  const ignore = buildIgnoreSet(ignoreTags);
   const effects = getEffects(actor);
   const ignorePenalties = effects.some(effect => effect?.mods?.tags?.ignorePenalties);
   const tnParts = [];
   const dmgParts = [];
   const tags = {};
   let hasTired = false;
+  let hasDisorganized = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
+    if (ignore.size && hasAnyTag(eff, ignore)) continue;
     if (ignorePenalties && effectPolarity(eff) === "negative") {
       Object.assign(tags, mods.tags ?? {});
       continue;
@@ -172,11 +231,16 @@ export function aggregateForAttack(actor, context = {}) {
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
     if (mods.tags?.tired) hasTired = true;
+    if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
   }
   if (hasTired) {
     pushDice(tnParts, TIRED_BASE.tnDice);
     pushDice(dmgParts, TIRED_BASE.dmgDice);
+  }
+  if (hasDisorganized) {
+    pushDice(tnParts, DISORG_BASE.tnDice);
+    pushDice(dmgParts, DISORG_BASE.dmgDice);
   }
   return {
     tnDice: formatDiceFormula(tnParts),
@@ -185,7 +249,9 @@ export function aggregateForAttack(actor, context = {}) {
   };
 }
 
-export function aggregateForDefense(actor) {
+export function aggregateForDefense(actor, options = {}) {
+  const { action = "melee", ignoreTags, attackerTags } = options;
+  const ignore = buildIgnoreSet(ignoreTags);
   const effects = getEffects(actor);
   const ignorePenalties = effects.some(effect => effect?.mods?.tags?.ignorePenalties);
   const defSoakParts = [];
@@ -193,8 +259,10 @@ export function aggregateForDefense(actor) {
   const rangedResistParts = [];
   const tags = {};
   let hasTired = false;
+  let hasDisorganized = false;
   for (const eff of effects) {
     const mods = eff.mods ?? {};
+    if (ignore.size && hasAnyTag(eff, ignore)) continue;
     if (ignorePenalties && effectPolarity(eff) === "negative") {
       Object.assign(tags, mods.tags ?? {});
       continue;
@@ -203,10 +271,21 @@ export function aggregateForDefense(actor) {
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
     if (mods.tags?.tired) hasTired = true;
+    if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
+    if (mods.tags?.fortified && action === "ranged") {
+      pushDice(rangedResistParts, "+3d10");
+    }
   }
   if (hasTired) {
     pushDice(defSoakParts, TIRED_BASE.defSoakDice);
+  }
+  if (hasDisorganized) {
+    pushDice(defSoakParts, DISORG_BASE.defSoakDice);
+  }
+  if (attackerTags?.backlineAttack) {
+    delete tags.flanked;
+    delete tags.encircled;
   }
   return {
     defSoakDice: formatDiceFormula(defSoakParts),
@@ -220,10 +299,40 @@ export function aggregateForManeuvers(actor) {
   const effects = getEffects(actor);
   const ignorePenalties = effects.some(effect => effect?.mods?.tags?.ignorePenalties);
   const parts = [];
+  let hasDisorganized = false;
   for (const eff of effects) {
     if (ignorePenalties && effectPolarity(eff) === "negative") continue;
     const mods = eff.mods ?? {};
     pushDice(parts, mods.maneuverTNDice);
+    if (mods.tags?.disorganized) hasDisorganized = true;
+  }
+  if (hasDisorganized) {
+    pushDice(parts, DISORG_BASE.tnDice);
   }
   return formatDiceFormula(parts);
+}
+
+export async function ensureDisorganized(actor, { source = "auto" } = {}) {
+  if (!actor) return;
+  const has = actorHasEffect(actor, eff => effectHasTag(eff, "disorganized"));
+  if (has) return;
+  const label = source === "auto"
+    ? game.i18n.localize("W4SQ.DisorganizedAuto")
+    : game.i18n.localize("W4SQ.Disorganized") || "Disorganized";
+  await addEffect(actor, {
+    key: `disorg-${source}`,
+    label,
+    duration: 1,
+    mods: { tags: { disorganized: true } }
+  });
+}
+
+export async function removeDisorganized(actor) {
+  if (!actor) return;
+  const remaining = getEffects(actor).filter(effect => !effectHasTag(effect, "disorganized"));
+  await actor.setFlag(FLAG_SCOPE, "effects", remaining);
+}
+
+export function hasFortified(actor) {
+  return actorHasTag(actor, "fortified");
 }

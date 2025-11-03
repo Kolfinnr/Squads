@@ -1,5 +1,5 @@
 import { FLAG_SCOPE } from "../config.js";
-import { addEffect, clearNegative } from "./effects.js";
+import { addEffect, clearNegative, getEffects, removeDisorganized } from "./effects.js";
 
 const E = (mods, duration = 1, key = null, label = null) => ({
   key: key || crypto.randomUUID?.() || randomID(),
@@ -39,6 +39,7 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await clearNegative(actor);
+      await removeDisorganized(actor);
       await addMorale(actor, "2d20");
       await addEffect(actor, E({ tnDice: "-1d10", defSoakDice: "-1d10" }, 1, "reorg-pen", "Reorganization Penalty"));
     }
@@ -314,9 +315,13 @@ export const MANEUVERS = {
     name: "Smoke Bomb",
     category: "hybrid",
     difficulty: "average",
-    target: "self",
-    apply: async ({ actor }) => {
-      await addEffect(actor, E({ tags: { coverAura: true } }, 1, "smoke", "Smoke Bomb"));
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      const effect = E({ tags: { coverAura: true } }, 1, "smoke", "Smoke Bomb");
+      await addEffect(actor, effect);
+      if (target) {
+        await addEffect(target, { ...effect, key: `${effect.key}-ally` });
+      }
     }
   },
   cripple: {
@@ -326,7 +331,7 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ target }) => {
       await subMorale(target, "3d10");
-      await addEffect(target, E({ defPenaltyDice: "-1d20", tags: { disorganized: true } }, 1, "cripple", "Crippled"));
+      await addEffect(target, E({ tags: { disorganized: true } }, 1, "cripple", "Crippled"));
     }
   },
   ambushSetup: {
@@ -367,6 +372,7 @@ export function maneuversFor(actor) {
       if (m.category === "universal") return true;
       if (m.category === "weapon") return m.weaponType === weapon;
       if (m.category === "hybrid") return role === "hybrid";
+      if (m.category === "mounted") return role === "mounted";
       return false;
     })
     .map(([key, data]) => ({ key, ...data }));
@@ -377,9 +383,91 @@ export async function onManeuverFail(actor) {
     key: "fail-disorg",
     label: "Disorganized (Failed Maneuver)",
     duration: 1,
-    mods: { defPenaltyDice: "-1d20", tags: { disorganized: true } }
+    mods: { tags: { disorganized: true } }
   };
   const list = actor.getFlag(FLAG_SCOPE, "effects") ?? [];
   list.push(effect);
   await actor.setFlag(FLAG_SCOPE, "effects", list);
 }
+
+function friendlyTokensNear(actor, distance = 5) {
+  const tokens = actor?.getActiveTokens(true) ?? [];
+  if (!tokens.length) return [];
+  const origin = tokens[0];
+  if (!origin) return [];
+  const placeables = canvas?.tokens?.placeables ?? [];
+  const originCenter = { x: origin.x + origin.width / 2, y: origin.y + origin.height / 2 };
+  return placeables.filter(token => {
+    if (token === origin) return false;
+    if (token.document?.disposition !== origin.document?.disposition) return false;
+    const tokenCenter = { x: token.x + token.width / 2, y: token.y + token.height / 2 };
+    const dist = canvas?.grid?.measureDistance
+      ? canvas.grid.measureDistance(originCenter, tokenCenter)
+      : Math.hypot(tokenCenter.x - originCenter.x, tokenCenter.y - originCenter.y);
+    return dist <= distance;
+  });
+}
+
+function removeTagEffects(actor, tag) {
+  const effects = getEffects(actor).filter(effect => !effect?.mods?.tags?.[tag]);
+  return actor.setFlag(FLAG_SCOPE, "effects", effects);
+}
+
+MANEUVERS.trample = {
+  name: "Trample",
+  category: "mounted",
+  difficulty: "average",
+  duration: 1,
+  target: "enemy",
+  apply: async ({ actor, target }) => {
+    if (!target) return;
+    const hpRoll = await (new Roll("1d10").roll({ async: true }));
+    const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+    const hp = Number(target.getFlag(FLAG_SCOPE, "hp") || 0);
+    const hpMax = Number(target.getFlag(FLAG_SCOPE, "hpMax") || 0);
+    const morale = Number(target.getFlag(FLAG_SCOPE, "morale") || 0);
+    const moraleMax = Number(target.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+    await target.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - hpRoll.total));
+    await target.setFlag(FLAG_SCOPE, "morale", Math.max(0, morale - moraleRoll.total));
+    await addEffect(target, E({ defPenaltyDice: "-1d20", tags: { looseFormation: true } }, 1, "trample-loose", "Loose Formation"));
+    await addEffect(actor, E({ tags: { disorganized: true } }, 1, "trample-self", "Trample Exhaustion"));
+  }
+};
+
+MANEUVERS.wheelAbout = {
+  name: "Wheel About",
+  category: "mounted",
+  difficulty: "average",
+  duration: 1,
+  target: "self",
+  apply: async ({ actor }) => {
+    await removeTagEffects(actor, "flanked");
+    await addEffect(actor, E({ defSoakDice: "+1d20" }, 1, "wheel", "Wheel About"));
+  }
+};
+
+MANEUVERS.breakthrough = {
+  name: "Breakthrough",
+  category: "mounted",
+  difficulty: "hard",
+  target: "self",
+  apply: async ({ actor }) => {
+    await clearNegative(actor);
+    await removeDisorganized(actor);
+    for (const token of friendlyTokensNear(actor)) {
+      const ally = token.actor;
+      if (!ally) continue;
+      await clearNegative(ally);
+      await removeDisorganized(ally);
+    }
+    const moraleRoll = await (new Roll("2d20").roll({ async: true }));
+    const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
+    const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+    await actor.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + moraleRoll.total));
+    const content = game.i18n.format("W4SQ.ChatManeuverBreakthrough", { value: moraleRoll.total, name: actor.name ?? "" });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<p>${content}</p>`
+    });
+  }
+};

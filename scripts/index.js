@@ -1,7 +1,7 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 
@@ -17,100 +17,97 @@ function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
 }
 
-function collectSquadActors() {
-  const actors = new Map();
-  const pushActor = actor => {
-    if (!isSquadActor(actor)) return;
-    actors.set(actor.id, actor);
-  };
-
-  if (game.combat && game.combat.combatants.size) {
-    for (const combatant of game.combat.combatants) {
-      const token = combatant?.token?.object || canvas?.tokens?.get(combatant.tokenId);
-      if (token?.actor) pushActor(token.actor);
-      if (combatant?.actor) pushActor(combatant.actor);
-    }
-  }
-
-  if (!actors.size) {
-    for (const token of canvas?.tokens?.placeables ?? []) {
-      if (token?.actor) pushActor(token.actor);
-    }
-  }
-
-  return [...actors.values()];
-}
-
-async function tickAllActors() {
-  const actors = collectSquadActors();
-  console.log(`[W4SQ] tickAllActors -> ${actors.length} actors`);
-  for (const actor of actors) {
-    try {
-      await tickEffects(actor);
-    } catch (err) {
-      console.error(`${MODULE_ID} | tickEffects failed for ${actor?.name || actor?.id}`, err);
-    }
-    try {
-      await tickCooldowns(actor);
-    } catch (err) {
-      console.error(`${MODULE_ID} | tickCooldowns failed for ${actor?.name || actor?.id}`, err);
-    }
+async function enforceMoraleState(actor) {
+  const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+  if (!moraleMax) return;
+  const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
+  if (moraleMax > 0 && morale / moraleMax < 0.5) {
+    await ensureDisorganized(actor, { source: "morale" });
   }
 }
 
-const processedRounds = new Map();
+async function reduceActiveManeuver(actor) {
+  const active = foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "activeManeuver"));
+  if (!active) return;
+  const remaining = Math.max(0, Number(active.remaining ?? 0) - 1);
+  if (remaining <= 0) {
+    await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
+  } else {
+    active.remaining = remaining;
+    await actor.setFlag(FLAG_SCOPE, "activeManeuver", active);
+  }
+}
 
-function resetProcessedRound(combat) {
+async function tickActorEntry(actor) {
+  if (!actor) return;
+  console.log(`[W4SQ] tick actor ${actor.name ?? actor.id}`);
+  try {
+    await tickEffects(actor);
+  } catch (err) {
+    console.error(`${MODULE_ID} | tickEffects failed for ${actor?.name || actor?.id}`, err);
+  }
+  try {
+    await tickCooldowns(actor);
+  } catch (err) {
+    console.error(`${MODULE_ID} | tickCooldowns failed for ${actor?.name || actor?.id}`, err);
+  }
+  await reduceActiveManeuver(actor);
+  await enforceMoraleState(actor);
+}
+
+const processedTurns = new Map();
+
+function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
   if (!key) return;
-  processedRounds.delete(key);
+  processedTurns.delete(key);
 }
 
-function shouldProcessRound(combat) {
-  if (!combat) {
-    console.log("[W4SQ] processRoundTick skipped: no combat");
-    return false;
+function markTurn(combat, round, turn) {
+  const key = combat?.id ?? combat?._id;
+  if (!key) return { key: null, processed: false };
+  const signature = `${round}:${turn}`;
+  const last = processedTurns.get(key);
+  if (last === signature) {
+    console.log("[W4SQ] processTurnTick skipped: same turn as last time", { round, turn });
+    return { key, processed: false };
   }
-  const round = Number(combat.round ?? 0);
-  if (round < 0) {
-    console.log("[W4SQ] processRoundTick skipped: round < 0", { round });
-    return false;
-  }
-  const key = combat.id ?? combat._id;
-  if (!key) {
-    console.log("[W4SQ] processRoundTick skipped: missing combat key");
-    return false;
-  }
-  const last = processedRounds.get(key) ?? 0;
-  if (last === round) {
-    console.log("[W4SQ] processRoundTick skipped: same round as last time", { round });
-    return false;
-  }
-  processedRounds.set(key, round);
-  return true;
+  processedTurns.set(key, signature);
+  return { key, processed: true };
 }
 
-async function processRoundTick(combat) {
+async function processTurnTick(combat) {
   if (!combat) {
-    console.warn(`${MODULE_ID} | processRoundTick called without combat`);
+    console.log("[W4SQ] processTurnTick skipped: no combat");
     return;
   }
   if (!game.user.isGM) {
-    console.log("[W4SQ] processRoundTick skipped: not GM");
+    console.log("[W4SQ] processTurnTick skipped: not GM");
     return;
   }
-  const should = shouldProcessRound(combat);
-  console.log(`${MODULE_ID} | processRoundTick guard`, {
-    id: combat?.id,
-    round: combat?.round,
-    should
-  });
-  if (!should) return;
-  await tickAllActors();
+  const round = Number(combat.round ?? 0);
+  const turn = Number(combat.turn ?? 0);
+  if (round < 0 || turn < 0) {
+    console.log("[W4SQ] processTurnTick skipped: invalid round/turn", { round, turn });
+    return;
+  }
+  const { processed } = markTurn(combat, round, turn);
+  if (!processed) return;
+  const combatant = combat.combatant;
+  if (!combatant) {
+    console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
+    return;
+  }
+  const actor = combatant.actor;
+  if (!isSquadActor(actor)) {
+    console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
+    return;
+  }
+  await tickActorEntry(actor);
 }
 
-function safeProcessRoundTick(combat) {
-  processRoundTick(combat).catch(err => console.error(`${MODULE_ID} | Failed to process round tick`, err));
+function safeProcessTurnTick(combat) {
+  processTurnTick(combat).catch(err => console.error(`${MODULE_ID} | Failed to process turn tick`, err));
 }
 
 Hooks.once("init", () => {
@@ -170,22 +167,23 @@ Hooks.once("ready", async () => {
 
 Hooks.on("combatStart", combat => {
   console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
-  resetProcessedRound(combat);
-  safeProcessRoundTick(combat);
+  resetProcessedTurn(combat);
+  safeProcessTurnTick(combat);
 });
 
 Hooks.on("combatRound", combat => {
   console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
-  safeProcessRoundTick(combat);
+  safeProcessTurnTick(combat);
 });
 
 Hooks.on("updateCombat", (combat, changed) => {
   if (!combat || !changed) return;
   const hasRound = Object.prototype.hasOwnProperty.call(changed, "round");
   const turnReset = Object.prototype.hasOwnProperty.call(changed, "turn") && changed.turn === 0;
-  if (hasRound || turnReset) {
+  const turnChanged = Object.prototype.hasOwnProperty.call(changed, "turn");
+  if (hasRound || turnReset || turnChanged) {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
-    safeProcessRoundTick(combat);
+    safeProcessTurnTick(combat);
   }
 });
 
@@ -241,10 +239,10 @@ Hooks.on("renderApplication", app => {
 });
 
 Hooks.on("deleteCombat", combat => {
-  resetProcessedRound(combat);
+  resetProcessedTurn(combat);
   W4SQCommandApp.closeAll();
 });
 
 Hooks.on("combatEnd", combat => {
-  resetProcessedRound(combat);
+  resetProcessedTurn(combat);
 });

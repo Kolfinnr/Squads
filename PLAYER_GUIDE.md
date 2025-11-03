@@ -10,13 +10,18 @@
 - **Traits**: Flags such as Fear, Terror, and Unbreakable influence morale loss and special rules.
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
+- **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
+- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
 
-### Orders & Maneuver Toggle
+### Orders, Maneuver Toggle & Tracker
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
 - A **Maneuver** checkbox beside the orders column is a reminder for players planning to perform a maneuver that round.
+- The command dashboard includes a **Maneuver Tracker** panel that highlights the selected squad’s active maneuver, remaining turns, cooldowns, and estimated CP spent this battle.
+- Squad sheets now offer a **Backline Attack** toggle; when enabled the unit performs rear assaults (see Melee Actions below).
 
 ### Command Points (CP)
 - Commanders start with a default pool (3 of 6). Spending CP triggers command abilities. Adjustments appear on the dashboard, and the pool refills only through in-game rewards or GM fiat.
+- The tracker panel lists how many CP have been spent relative to the commander’s current reserve.
 
 ## Command Actions
 | Command | Cost | Effect |
@@ -24,12 +29,17 @@
 | **Ranged! Fire at the Target!** | 2 CP | Selected squad immediately performs a ranged attack and gains the `Ranged Command` cooldown for 3 rounds. |
 | **New Orders!** | 1 CP | Clears current orders and maneuver reminder, then prompts for Melee, Ranged, or Hold. Posts the new order to chat. Commanders cannot receive orders. |
 | **Keep it Together, Men!** | 1 CP | Removes Tired and Disorganized effects, then restores 2d20 Morale. |
-| **Rally!** | 1 CP | Restores 1d20 Morale. |
+| **Rally!** | 1 CP | Restores 3d20 Morale instantly. |
 | **Unit! Withdraw!** | 1 CP | Removes Flanked/Encircled tags and grants Withdraw for 1 round (+1d10 Defense soak, Disengaged). |
 | **Player Special Action** | 1 CP | Prompts custom text and posts it to chat for narration. |
 | **Get in Formation!** | 2 CP | Grants +8d10 maneuver TN bonus for 1 round. |
 
 All command actions announce their use in chat and respect cooldown timers and permissions.
+
+### Backline Attacks
+- Enable the **Backline Attack** toggle on the squad sheet to represent cavalry or skirmishers striking from the rear.
+- Backline assaults ignore Brace and Phalanx bonuses, add +2d10 HP damage, and inflict an extra 3d10 Morale loss.
+- If the target’s Morale falls below 50% after the hit, it becomes Disorganized automatically. These strikes never apply the Flanked tag.
 
 ## Maneuvers
 Each maneuver requires a maneuver roll using the squad’s TN plus difficulty modifiers. Failure applies **Disorganized (1)**. Effects last one round unless noted.
@@ -78,11 +88,16 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 - **Reload!** (Easy, self): Applies fast reload and *Tired* for 1 round.
 
 ### Hybrid Maneuvers
-- **Smoke Bomb** (Average, self): Grants a cover aura for 1 round.
+- **Smoke Bomb** (Average, self + ally): Grants a cover aura for the acting squad and one selected allied unit for 1 round.
 - **Cripple** (Hard, enemy): Enemy loses 3d10 Morale, gains Disorganized with −1d20 Defense.
 - **Ambush Setup** (Average, enemy/self): Enemy becomes Flanked (−1d20 Defense); acting squad gains +3d10 Damage.
 - **Feint & Retreat** (Average, self): Damage halved but grants *Disengaged* tag for 1 round.
 - **Shadowplay** (Hard, self): +3d10 Defense soak and *Free Move* tag.
+
+### Mounted Maneuvers
+- **Trample** (Average, enemy): Deal 1d10 HP and 1d20 Morale damage, force Loose Formation, but the squad becomes Disorganized.
+- **Wheel About** (Average, self): Remove Flanked and gain +1d20 Defense soak next turn.
+- **Breakthrough** (Hard, self): Clear debuffs on self and adjacent allies, then restore 2d20 Morale and announce the surge in chat.
 
 ## Heat of Battle Tables (Roll 1d10)
 Heat of Battle (HoB) events trigger automatically on doubles, or the first time HP or Morale drop below 30%. Roll on the corresponding table and apply the listed effects immediately.

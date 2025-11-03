@@ -43,6 +43,17 @@
   margin-bottom: 0.5rem;
 }
 
+.w4sq.sheet .actions .backline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.w4sq.sheet .actions .backline-toggle input {
+  margin: 0;
+}
+
 .w4sq.sheet .badges {
   display: flex;
   flex-wrap: wrap;
@@ -194,6 +205,41 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.5rem;
+}
+
+.w4sq-command .maneuver-tracker {
+  align-self: flex-end;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.2));
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.05);
+  max-width: 320px;
+}
+
+.w4sq-command .maneuver-tracker h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.w4sq-command .maneuver-tracker h4 {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.w4sq-command .maneuver-tracker p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+}
+
+.w4sq-command .tracker-cooldowns {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+}
+
+.w4sq-command .tracker-cooldowns li {
+  list-style: circle;
+  margin: 0.15rem 0;
 }
 
 .w4sq-command .w4sq-bucket {

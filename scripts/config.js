@@ -23,6 +23,8 @@ export const DEFAULT_FLAGS = {
   cp: { current: 3, cap: 6 },
   order: "",
   orderManeuver: false,
+  backlineAttack: false,
+  activeManeuver: null,
   commanderUserId: null,
   hob_hp30: false,
   hob_mo30: false,

@@ -11,12 +11,14 @@
 1. Create a new **Actor → Type: Squad** for each unit that will take the field.
 2. On the **Main** tab fill in HP, Morale, Experience tier, Equipment tier, Role, and Weapon. Traits such as Fear or Unbreakable can be toggled directly on the header.
 3. Use the **Maneuver**, **Melee**, or **Ranged** buttons on the sheet to resolve actions. Results, soak, and morale loss are posted to chat automatically.
-4. Open the **Command** button to launch the command dashboard. From here commanders spend CP on Ranged! Fire!, New Orders!, Rally!, Withdraw!, and other directive buttons. CP defaults to 3/6 and can be adjusted in the dashboard.
-5. Heat of Battle triggers (doubles on tests or low HP/Morale) resolve in the background. Chat cards summarise what effect was applied along with any immediate TN or damage adjustments.
+4. Toggle **Backline Attack** on the squad sheet when a unit is striking from the rear to ignore Brace/Phalanx bonuses and apply the special damage and morale pressure.
+5. Open the **Command** button to launch the command dashboard. From here commanders spend CP on Ranged! Fire!, New Orders!, Rally!, Withdraw!, and other directive buttons. CP defaults to 3/6 and can be adjusted in the dashboard.
+6. Heat of Battle triggers (doubles on tests or low HP/Morale) resolve in the background. Chat cards summarise what effect was applied along with any immediate TN or damage adjustments.
 
 ## Command Dashboard Highlights
 - **Orders column** tracks each squad’s standing order. Hitting *New Orders!* clears the selection so commanders can set a fresh stance.
 - A **Maneuver** reminder checkbox sits to the left of the Orders drop-down for groups that want to note their intended maneuvers without touching squad data.
+- The new **Maneuver Tracker** panel summarizes the selected squad’s active maneuver, remaining turns, and cooldowns while counting how many CP the commander has spent.
 - Cooldown badges list command locks and reloading timers (bows/crossbows 1 round, firearms 2 rounds, artillery 3 rounds) so you always know which units are ready to act.
 - Only on-scene squads that match the viewer’s disposition are listed, keeping the roster focused on relevant units.
 

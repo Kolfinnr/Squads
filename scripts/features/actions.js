@@ -1,5 +1,5 @@
 import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
-import { aggregateForAttack, aggregateForDefense } from "../logic/effects.js";
+import { aggregateForAttack, aggregateForDefense, ensureDisorganized } from "../logic/effects.js";
 import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
@@ -120,6 +120,9 @@ async function moraleLossFor(defender, attacker, finalDamage) {
   if (morale > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatMoraleZero");
   }
+  if (moraleMax > 0 && next / moraleMax < 0.5) {
+    await ensureDisorganized(defender, { source: "morale" });
+  }
   return total;
 }
 
@@ -150,6 +153,7 @@ export async function doSquadAction(actor, action) {
   const weapon = WEAPONS[weaponKey] ?? WEAPONS.sword;
   const roleDef = ROLES[role] ?? ROLES.infantry;
 
+  const backlineAttack = Boolean(getF(actor, "backlineAttack", false));
   const aggAttack = aggregateForAttack(actor, { action, weapon: weaponKey });
   const roleBonus = roleBonuses(role, action);
 
@@ -242,11 +246,20 @@ export async function doSquadAction(actor, action) {
   let aggDefense = null;
   let ignoreDefense = false;
 
+  let backlineHpBonus = 0;
+  let backlineMoraleBonus = 0;
+  if (success && targetActor && action === "melee" && backlineAttack) {
+    backlineHpBonus = (await (new Roll("2d10").roll({ async: true }))).total;
+    backlineMoraleBonus = (await (new Roll("3d10").roll({ async: true }))).total;
+    finalDamage += backlineHpBonus;
+  }
+
   if (targetActor) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
     const targetEq = Number(getF(targetActor, "equipmentTier", 0));
     const targetWeapon = getF(targetActor, "weapon", "sword");
-    aggDefense = aggregateForDefense(targetActor, { action });
+    const ignoreTags = backlineAttack ? ["braced", "antiCharge"] : [];
+    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags: { backlineAttack } });
     ignoreDefense = !!aggDefense.tags?.noDefense;
 
     if (!ignoreDefense && targetExp > 0) {
@@ -281,7 +294,7 @@ export async function doSquadAction(actor, action) {
       armor = 0;
     }
 
-    if (!ignoreDefense && targetWeapon === "polearm") {
+    if (!ignoreDefense && targetWeapon === "polearm" && !backlineAttack) {
       const pole = await (new Roll("1d20").roll({ async: true }));
       defenseOnly += pole.total;
       polearmBonus = pole.total;
@@ -334,6 +347,17 @@ export async function doSquadAction(actor, action) {
     }
   }
 
+  if (success && targetActor && action === "melee" && backlineAttack && backlineMoraleBonus && !targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
+    const morale = Number(getF(targetActor, "morale", 0));
+    const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+    const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
+    await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+    moraleLoss = (moraleLoss || 0) + backlineMoraleBonus;
+    if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+      await ensureDisorganized(targetActor, { source: "backline" });
+    }
+  }
+
   if (targetActor) {
     const defenseTotal = Math.max(0, Math.floor(defenseOnly));
     const armorTotal = Math.max(0, Math.floor(armor));
@@ -371,6 +395,7 @@ export async function doSquadAction(actor, action) {
     dmg: finalDamage,
     moraleLoss,
     soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
+    backline: backlineAttack && action === "melee" && success,
     hobNotes,
     footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
   });

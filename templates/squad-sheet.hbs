@@ -43,6 +43,7 @@
         <button type="button" data-action="melee">{{localize "W4SQ.BtnMelee"}}</button>
         <button type="button" data-action="ranged">{{localize "W4SQ.BtnRanged"}}</button>
         <button type="button" data-action="command">{{localize "W4SQ.BtnCommand"}}</button>
+        <label class="backline-toggle"><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.backlineAttack" {{checked squad.backlineAttack}}/> {{localize "W4SQ.BacklineAttack"}}</label>
       </div>
       <div class="badges">
         {{#each cooldowns as |cooldown|}}
@@ -69,7 +70,7 @@
           <h3>{{localize "W4SQ.Cooldowns"}}</h3>
           <ul>
             {{#each cooldowns as |cooldown|}}
-              <li>{{cooldown.label}}: {{cooldown.rounds}}</li>
+              <li>{{cooldown.label}}: {{cooldown.turnsLabel}}</li>
             {{else}}
               <li>{{localize "W4SQ.None"}}</li>
             {{/each}}
@@ -80,7 +81,7 @@
           {{#if effects.length}}
             <div class="effect-list">
               {{#each effects as |eff|}}
-                <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.duration}})</span>
+                <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.durationLabel}})</span>
               {{/each}}
             </div>
           {{else}}

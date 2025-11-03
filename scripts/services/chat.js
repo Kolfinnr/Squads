@@ -1,6 +1,6 @@
 import { MODULE_ID } from "../config.js";
 
-export async function sendActionMessage({ actor, label, tn, rollTotal, success, margin, dmg, moraleLoss, soakDetail, hobNotes = [], footer }) {
+export async function sendActionMessage({ actor, label, tn, rollTotal, success, margin, dmg, moraleLoss, soakDetail, hobNotes = [], backline = false, footer }) {
   const content = await renderTemplate(`modules/${MODULE_ID}/templates/chat-action.hbs`, {
     label,
     actorName: actor.name,
@@ -11,6 +11,7 @@ export async function sendActionMessage({ actor, label, tn, rollTotal, success, 
     dmg,
     moraleLoss,
     soakDetail,
+    backline,
     hobNotes,
     footer
   });

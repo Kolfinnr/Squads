@@ -34,6 +34,14 @@ function renderHoBNotes(notes) {
   return `<div class="hob-notes">${header}<ul>${items}</ul></div>`;
 }
 
+function isFriendly(actor, targetToken) {
+  if (!actor || !targetToken) return false;
+  const originTokens = actor.getActiveTokens(true) ?? [];
+  const origin = originTokens[0];
+  if (!origin) return false;
+  return origin.document?.disposition === targetToken.document?.disposition;
+}
+
 async function resolveTarget(actor, maneuver) {
   if (maneuver.target === "self") return actor;
   const targets = [...game.user.targets];
@@ -41,7 +49,14 @@ async function resolveTarget(actor, maneuver) {
     ui.notifications.warn(game.i18n.localize("W4SQ.WarnSelectTarget"));
     return null;
   }
-  return targets[0].actor;
+  const token = targets[0];
+  const targetActor = token?.actor;
+  if (!targetActor) return null;
+  if (maneuver.target === "ally" && !isFriendly(actor, token)) {
+    ui.notifications.warn(game.i18n.localize("W4SQ.WarnSelectAlly"));
+    return null;
+  }
+  return targetActor;
 }
 
 export async function openManeuverDialog(actor) {
@@ -122,6 +137,18 @@ async function executeManeuver(actor, maneuver) {
   }
 
   await maneuver.apply({ actor, target });
+  const remaining = Number(maneuver.duration ?? 1);
+  if (remaining > 0) {
+    await actor.setFlag(FLAG_SCOPE, "activeManeuver", {
+      key: maneuver.key,
+      name: maneuver.name,
+      remaining,
+      appliedRound: game.combat?.round ?? null,
+      appliedTurn: game.combat?.turn ?? null
+    });
+  } else {
+    await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
+  }
   if (maneuver.cooldown) {
     await setCooldown(actor, maneuver.key, maneuver.cooldown);
   }

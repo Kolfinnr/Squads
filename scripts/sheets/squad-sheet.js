@@ -5,6 +5,12 @@ import { getEffectsDetailed } from "../logic/effects.js";
 import { listCooldowns } from "../logic/cooldowns.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 
+function formatTurns(value) {
+  const turns = Math.max(0, Number(value || 0));
+  if (turns === 1) return game.i18n.localize("W4SQ.TurnSingle");
+  return game.i18n.format("W4SQ.TurnPlural", { value: turns });
+}
+
 export class SquadActorSheet extends ActorSheet {
   static get defaultOptions() {
     const opts = super.defaultOptions;
@@ -34,13 +40,20 @@ export class SquadActorSheet extends ActorSheet {
       fear: f("fear", false),
       terror: f("terror", false),
       unbreakable: f("unbreakable", false),
+      backlineAttack: f("backlineAttack", false),
       playerControlled: f("playerControlled", null),
       isCommander: f("isCommander", false),
       cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
       lastTargetName: f("lastTargetName", "")
     };
-    data.effects = getEffectsDetailed(this.actor);
-    data.cooldowns = listCooldowns(this.actor);
+    data.effects = getEffectsDetailed(this.actor).map(effect => ({
+      ...effect,
+      durationLabel: formatTurns(effect.duration ?? 0)
+    }));
+    data.cooldowns = listCooldowns(this.actor).map(cd => ({
+      ...cd,
+      turnsLabel: formatTurns(cd.rounds ?? 0)
+    }));
     data.roles = ROLES;
     data.weapons = WEAPONS;
     return data;
