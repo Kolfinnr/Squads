@@ -24,6 +24,7 @@ export const DEFAULT_FLAGS = {
   order: "",
   orderManeuver: false,
   backlineAttack: false,
+  specialistType: null,
   activeManeuver: null,
   commanderUserId: null,
   hob_hp30: false,
@@ -49,7 +50,21 @@ export const ROLES = {
   infantry: { label: "Infantry", hybridPenalty: false },
   ranged:   { label: "Ranged",   hybridPenalty: false },
   mounted:  { label: "Mounted",  hybridPenalty: false },
-  hybrid:   { label: "Hybrid",   hybridPenalty: true }
+  hybrid:   { label: "Hybrid",   hybridPenalty: true },
+  specialist: { label: "Specialist", hybridPenalty: false, specialist: true }
+};
+
+export const SPECIALIST_TYPES = {
+  mage: {
+    key: "mage",
+    label: "Mage",
+    cooldown: 4
+  },
+  engineer: {
+    key: "engineer",
+    label: "Engineer",
+    cooldown: 2
+  }
 };
 
 export const SETTINGS = {

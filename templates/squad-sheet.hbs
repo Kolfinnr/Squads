@@ -26,6 +26,18 @@
             <option value="{{key}}" {{#if (eq ../squad.role key)}}selected{{/if}}>{{role.label}}</option>
           {{/each}}
         </select>
+        {{#if (eq squad.role "specialist")}}
+          <label>{{localize "W4SQ.SpecialistType"}}</label>
+          <select name="flags.wfrp4e-squads.specialistType">
+            <option value="">{{localize "W4SQ.SpecialistNone"}}</option>
+            {{#each specialistTypes as |spec key|}}
+              <option value="{{key}}" {{#if (eq ../squad.specialistType key)}}selected{{/if}}>{{spec.label}}</option>
+            {{/each}}
+          </select>
+        {{else}}
+          <div class="placeholder"></div>
+          <div class="placeholder"></div>
+        {{/if}}
         <label>{{localize "W4SQ.Weapon"}}</label>
         <select name="flags.wfrp4e-squads.weapon">
           {{#each weapons as |weapon key|}}

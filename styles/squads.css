@@ -23,6 +23,11 @@
   margin-bottom: 0.5rem;
 }
 
+.w4sq.sheet .stats-grid .placeholder {
+  min-height: 1.8rem;
+  visibility: hidden;
+}
+
 .w4sq.sheet .pair {
   display: flex;
   align-items: center;

@@ -3,6 +3,7 @@ import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardO
 import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
+import { isSpecialist, isEngineer } from "../logic/specialists.js";
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const clampTN = (tn) => Math.min(ROLL.maxTN, Math.max(ROLL.minTN, tn));
@@ -77,6 +78,15 @@ function hpScale(cur, max) {
   return SCALING.hpFloor + (1 - SCALING.hpFloor) * ratio;
 }
 
+function applySpecialistTN(actor, tn, hp, hpMax) {
+  if (!isSpecialist(actor)) return clampTN(tn);
+  const safeMax = Math.max(0, Number(hpMax) || 0);
+  const ratio = safeMax > 0 ? Math.max(0, Math.min(1, Number(hp) / safeMax)) : 0;
+  const capped = Math.min(90, tn);
+  const scaled = capped * ratio;
+  return clampTN(Math.max(ROLL.minTN, Math.floor(scaled)));
+}
+
 function roleBonuses(role, action) {
   switch (role) {
     case "infantry":
@@ -85,6 +95,8 @@ function roleBonuses(role, action) {
     case "ranged":
       if (action === "ranged") return { acc: "+1d10", dmg: "+1d10" };
       if (action === "melee") return { acc: "-1d20", dmg: "-1d20" };
+      return { acc: "0", dmg: "0" };
+    case "specialist":
       return { acc: "0", dmg: "0" };
     default:
       return { acc: "0", dmg: "0" };
@@ -168,9 +180,9 @@ export async function doSquadAction(actor, action) {
   const morale = Number(getF(actor, "morale", 0));
   const moraleMax = Number(getF(actor, "moraleMax", 1));
   const hp = Number(getF(actor, "hp", 0));
+  const hpMax = Number(getF(actor, "hpMax", 1));
   if (moraleMax > 0 && morale / moraleMax < 0.3) tn -= 10;
   if (hp <= 0) tn -= 20;
-  tn = clampTN(tn);
 
   let targetActor = selectedTarget();
   let guardContext = null;
@@ -188,16 +200,17 @@ export async function doSquadAction(actor, action) {
     }
   }
   const roll = await (new Roll("1d100").roll({ async: true }));
-  let success = roll.total <= tn;
+  let success = roll.total <= applySpecialistTN(actor, tn, hp, hpMax);
   const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
   const hobNotes = hobResult?.notes ?? [];
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
     if (delta) {
-      tn = clampTN(tn + delta);
-      success = roll.total <= tn;
+      tn += delta;
     }
   }
+  tn = applySpecialistTN(actor, tn, hp, hpMax);
+  success = roll.total <= tn;
 
   if (targetActor) {
     await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
@@ -293,6 +306,7 @@ export async function doSquadAction(actor, action) {
   const soakNotes = [];
   let polearmBonus = 0;
   let counterSpear = 0;
+  let deepDefenseBonus = 0;
 
   let aggDefense = null;
   let ignoreDefense = false;
@@ -313,6 +327,12 @@ export async function doSquadAction(actor, action) {
     if (!ignoreDefense && targetExp > 0) {
       const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
       defenseOnly += defRoll.total;
+    }
+
+    if (!ignoreDefense && isEngineer(targetActor)) {
+      const deepRoll = await (new Roll("3d10").roll({ async: true }));
+      defenseOnly += deepRoll.total;
+      deepDefenseBonus = deepRoll.total;
     }
 
     if (!ignoreDefense) {
@@ -462,6 +482,9 @@ export async function doSquadAction(actor, action) {
     }
     if (resistTotal) {
       soakNotes.push(game.i18n.format("W4SQ.ChatRangedResist", { total: resistTotal }));
+    }
+    if (deepDefenseBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatDeepDefense", { total: deepDefenseBonus }));
     }
   }
   if (counterSpear) {

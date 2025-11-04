@@ -3,6 +3,7 @@ import { maneuversFor, onManeuverFail, friendlyTokensNear } from "../logic/maneu
 import { aggregateForManeuvers, actorHasTag } from "../logic/effects.js";
 import { getCooldown, setCooldown } from "../logic/cooldowns.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
+import { canChannel, hasChannelledMagic, isSpecialist, consumeSpecialistEcho, consumeEngineerGenius, triggerMajorPeril } from "../logic/specialists.js";
 
 function diffMod(difficulty) {
   switch (difficulty) {
@@ -22,6 +23,14 @@ async function rollMaybe(expr) {
 
 function clampTN(value) {
   return Math.min(ROLL.maxTN, Math.max(ROLL.minTN, value));
+}
+
+function applySpecialistTN(actor, tn, hp, hpMax) {
+  if (!isSpecialist(actor)) return clampTN(tn);
+  const max = Math.max(0, Number(hpMax) || 0);
+  const ratio = max > 0 ? Math.max(0, Math.min(1, Number(hp) / max)) : 0;
+  const capped = Math.min(90, tn);
+  return clampTN(Math.max(ROLL.minTN, Math.floor(capped * ratio)));
 }
 
 function renderHoBNotes(notes) {
@@ -61,6 +70,25 @@ function validateManeuverPrereqs(actor, maneuver, target) {
   if (actorHasTag(actor, "spentManeuver")) {
     ui.notifications.warn(game.i18n.localize("W4SQ.ManeuverSpent"));
     return false;
+  }
+  if (maneuver.category === "specialist") {
+    if (maneuver.specialistType === "mage") {
+      if (maneuver.key === "channelMagic") {
+        if (!canChannel(actor)) {
+          ui.notifications.warn(game.i18n.localize("W4SQ.ChannelBlocked"));
+          return false;
+        }
+      } else if (!hasChannelledMagic(actor)) {
+        ui.notifications.warn(game.i18n.localize("W4SQ.ChannelRequired"));
+        return false;
+      }
+    }
+    if (maneuver.specialistType === "engineer") {
+      if (actorHasTag(actor, "immobile")) {
+        ui.notifications.warn(game.i18n.localize("W4SQ.EngineerImmobile"));
+        return false;
+      }
+    }
   }
   if (maneuver.key === "guard") {
     const role = actor.getFlag(FLAG_SCOPE, "role") || "infantry";
@@ -142,17 +170,27 @@ async function executeManeuver(actor, maneuver) {
   const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
   const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 1);
   const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+  const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 1);
 
   let tn = ROLL.baseTN + exp * 7 + eq * 5 + diffMod(maneuver.difficulty);
   tn += await rollMaybe(aggregateForManeuvers(actor));
   if (moraleMax > 0 && morale / moraleMax < 0.3) tn -= 10;
   if (hp <= 0) tn -= 20;
-  tn = clampTN(tn);
+  tn = applySpecialistTN(actor, tn, hp, hpMax);
 
-  const autoPass = !!actor.getFlag(FLAG_SCOPE, "hob_autoPassManeuver");
-  if (autoPass) {
+  let autoPassFlag = !!actor.getFlag(FLAG_SCOPE, "hob_autoPassManeuver");
+  if (autoPassFlag) {
     await actor.setFlag(FLAG_SCOPE, "hob_autoPassManeuver", false);
   }
+  let echoAuto = false;
+  if (maneuver.category === "specialist" && maneuver.specialistType === "mage" && maneuver.key !== "channelMagic") {
+    echoAuto = await consumeSpecialistEcho(actor);
+  }
+  let engineerAuto = false;
+  if (maneuver.category === "specialist" && maneuver.specialistType === "engineer") {
+    engineerAuto = await consumeEngineerGenius(actor);
+  }
+  const autoPass = autoPassFlag || echoAuto || engineerAuto;
 
   const roll = await (new Roll("1d100").roll({ async: true }));
   let success = roll.total <= tn || autoPass;
@@ -167,14 +205,14 @@ async function executeManeuver(actor, maneuver) {
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
     if (delta) {
-      tn = clampTN(tn + delta);
+      tn = applySpecialistTN(actor, tn + delta, hp, hpMax);
       success = roll.total <= tn || autoPass;
     }
   }
   const hobHtml = renderHoBNotes(hobNotes);
 
   if (!success) {
-    await onManeuverFail(actor);
+    await onManeuverFail(actor, maneuver);
     ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<p>${game.i18n.format("W4SQ.ManeuverFail", { name: maneuver.name, roll: roll.total, tn })}</p>${hobHtml}`
@@ -182,7 +220,7 @@ async function executeManeuver(actor, maneuver) {
     return;
   }
 
-  await maneuver.apply({ actor, target });
+  await maneuver.apply({ actor, target, echoAuto });
   const remaining = Number(maneuver.duration ?? 1);
   if (remaining > 0) {
     await actor.setFlag(FLAG_SCOPE, "activeManeuver", {
@@ -197,6 +235,9 @@ async function executeManeuver(actor, maneuver) {
   }
   if (maneuver.cooldown) {
     await setCooldown(actor, maneuver.key, maneuver.cooldown);
+  }
+  if (echoAuto) {
+    await triggerMajorPeril(actor);
   }
   ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),

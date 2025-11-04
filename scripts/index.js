@@ -4,13 +4,15 @@ import { SquadActorSheet } from "./sheets/squad-sheet.js";
 import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
+import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 
 const IMPORT_PATHS = [
   "./config.js",
   "./sheets/squad-sheet.js",
   "./logic/effects.js",
   "./logic/cooldowns.js",
-  "./features/command-dashboard.js"
+  "./features/command-dashboard.js",
+  "./logic/specialists.js"
 ];
 
 function isSquadActor(actor) {
@@ -53,6 +55,7 @@ async function tickActorEntry(actor) {
   }
   await reduceActiveManeuver(actor);
   await enforceMoraleState(actor);
+  await clearSpecialistRoundFlags(actor);
 }
 
 const processedTurns = new Map();
