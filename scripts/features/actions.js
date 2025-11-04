@@ -1,0 +1,499 @@
+import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
+import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardOnTarget, consumeGuardLink, addEffect } from "../logic/effects.js";
+import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
+import { sendActionMessage } from "../services/chat.js";
+import { maybeTriggerHoB } from "../logic/hob.js";
+
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+const clampTN = (tn) => Math.min(ROLL.maxTN, Math.max(ROLL.minTN, tn));
+
+const getF = (actor, key, def) => actor.getFlag(FLAG_SCOPE, key) ?? foundry.utils.getProperty(DEFAULT_FLAGS, key) ?? def;
+
+const RELOAD_COOLDOWN_KEY = "reload";
+
+const escapeHTML = (value) => {
+  if (typeof TextEditor?.escapeHTML === "function") {
+    return TextEditor.escapeHTML(String(value ?? ""));
+  }
+  const utilEscape = foundry?.utils?.escapeHTML ?? foundry?.utils?.escapeHtml;
+  if (typeof utilEscape === "function") {
+    return utilEscape(String(value ?? ""));
+  }
+  return String(value ?? "");
+};
+
+async function postStatusLine(actor, key) {
+  if (!actor) return;
+  const name = escapeHTML(actor.name || game.i18n.localize("W4SQ.UnknownSquad"));
+  const template = game.i18n.has(key) ? game.i18n.format(key, { name }) : `<strong>${name}</strong>`;
+  const content = `<p>${template}</p>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content
+  });
+}
+
+function baseReloadRounds(weaponKey) {
+  switch (weaponKey) {
+    case "bow":
+    case "crossbow":
+      return 1;
+    case "firearm":
+      return 2;
+    case "artillery":
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+async function applyReloadingCooldown(actor, action, weaponKey, tags = {}) {
+  if (action !== "ranged") return;
+  if (tags.continuousFire) {
+    await clearCooldown(actor, RELOAD_COOLDOWN_KEY);
+    return;
+  }
+  let rounds = baseReloadRounds(weaponKey);
+  if (rounds <= 0) {
+    await clearCooldown(actor, RELOAD_COOLDOWN_KEY);
+    return;
+  }
+  if (tags.fastReload) {
+    rounds = Math.max(1, rounds - 1);
+  }
+  await setCooldown(actor, RELOAD_COOLDOWN_KEY, rounds);
+}
+
+async function rollMaybe(expr) {
+  const s = (expr || "").toString().trim();
+  if (!s || s === "0") return { total: 0, formula: "0" };
+  if (s === "-1/2") return { total: -0.5, formula: "-1/2" };
+  const r = await (new Roll(s).roll({ async: true }));
+  return { total: r.total, formula: r.formula };
+}
+
+function hpScale(cur, max) {
+  const ratio = Math.max(0, Math.min(1, Number(max) ? Number(cur) / Number(max) : 0));
+  return SCALING.hpFloor + (1 - SCALING.hpFloor) * ratio;
+}
+
+function roleBonuses(role, action) {
+  switch (role) {
+    case "infantry":
+    case "mounted":
+      return action === "melee" ? { acc: "+1d10", dmg: "+1d10" } : { acc: "0", dmg: "0" };
+    case "ranged":
+      if (action === "ranged") return { acc: "+1d10", dmg: "+1d10" };
+      if (action === "melee") return { acc: "-1d20", dmg: "-1d20" };
+      return { acc: "0", dmg: "0" };
+    default:
+      return { acc: "0", dmg: "0" };
+  }
+}
+
+async function moraleLossFor(defender, attacker, finalDamage) {
+  if (defender.getFlag(FLAG_SCOPE, "unbreakable")) return null;
+  const base = finalDamage;
+  const extraRoll = await (new Roll("1d20").roll({ async: true }));
+  let total = base + extraRoll.total;
+  const extras = [];
+  if (attacker.getFlag(FLAG_SCOPE, "fear")) {
+    const fearRoll = await (new Roll("1d10").roll({ async: true }));
+    total += fearRoll.total;
+    extras.push(fearRoll.total);
+  }
+  if (attacker.getFlag(FLAG_SCOPE, "terror")) {
+    const terrorRoll = await (new Roll("3d10").roll({ async: true }));
+    total += terrorRoll.total;
+    extras.push(terrorRoll.total);
+  }
+  const defenderTerror = defender.getFlag(FLAG_SCOPE, "terror");
+  if (defenderTerror && attacker.getFlag(FLAG_SCOPE, "fear") && !attacker.getFlag(FLAG_SCOPE, "terror")) {
+    const counter = await (new Roll("1d10").roll({ async: true }));
+    total += counter.total;
+    extras.push(counter.total);
+  }
+  const moraleMax = Number(defender.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+  const morale = Number(defender.getFlag(FLAG_SCOPE, "morale") || 0);
+  const next = clamp(morale - total, 0, moraleMax);
+  await defender.setFlag(FLAG_SCOPE, "morale", next);
+  if (morale > 0 && next <= 0) {
+    await postStatusLine(defender, "W4SQ.ChatMoraleZero");
+  }
+  if (moraleMax > 0 && next / moraleMax < 0.5) {
+    await ensureDisorganized(defender, { source: "morale" });
+  }
+  return total;
+}
+
+async function applyDamage(actor, defender, finalDamage) {
+  const hpMax = Number(defender.getFlag(FLAG_SCOPE, "hpMax") || 0);
+  const hp = Number(defender.getFlag(FLAG_SCOPE, "hp") || 0);
+  const next = clamp(hp - finalDamage, 0, hpMax);
+  await defender.setFlag(FLAG_SCOPE, "hp", next);
+  if (hp > 0 && next <= 0) {
+    await postStatusLine(defender, "W4SQ.ChatHPZero");
+  }
+  const moraleLoss = await moraleLossFor(defender, actor, finalDamage);
+  await actor.setFlag(FLAG_SCOPE, "lastTargetName", defender.name || "");
+  return { moraleLoss };
+}
+
+function selectedTarget() {
+  const targets = [...game.user.targets];
+  if (targets.length !== 1) return null;
+  return targets[0].actor;
+}
+
+export async function doSquadAction(actor, action) {
+  const exp = Number(getF(actor, "experienceTier", 0));
+  const eq = Number(getF(actor, "equipmentTier", 0));
+  const role = getF(actor, "role", "infantry");
+  const weaponKey = getF(actor, "weapon", "sword");
+  const weapon = WEAPONS[weaponKey] ?? WEAPONS.sword;
+  const roleDef = ROLES[role] ?? ROLES.infantry;
+
+  const backlineAttack = Boolean(getF(actor, "backlineAttack", false));
+  const aggAttack = aggregateForAttack(actor, { action, weapon: weaponKey });
+  const roleBonus = roleBonuses(role, action);
+
+  const weaponAcc = await rollMaybe(weapon.accuracyDice);
+  const roleAcc = await rollMaybe(roleBonus.acc);
+  const effAcc = await rollMaybe(aggAttack.tnDice);
+  const hybridPenalty = roleDef.hybridPenalty && (action === "melee" || action === "ranged")
+    ? (await rollMaybe("-1d10")).total
+    : 0;
+
+  let tn = ROLL.baseTN + exp * 7 + eq * 5 + weaponAcc.total + roleAcc.total + effAcc.total + hybridPenalty;
+  const morale = Number(getF(actor, "morale", 0));
+  const moraleMax = Number(getF(actor, "moraleMax", 1));
+  const hp = Number(getF(actor, "hp", 0));
+  if (moraleMax > 0 && morale / moraleMax < 0.3) tn -= 10;
+  if (hp <= 0) tn -= 20;
+  tn = clampTN(tn);
+
+  let targetActor = selectedTarget();
+  let guardContext = null;
+  if (targetActor && action === "melee") {
+    const guardInfo = findGuardOnTarget(targetActor);
+    if (guardInfo?.guardActor && guardInfo.guardActor !== targetActor) {
+      guardContext = { ...guardInfo, protectedActor: targetActor };
+      await consumeGuardLink({
+        guardActor: guardInfo.guardActor,
+        targetActor,
+        guardEffect: guardInfo.guardEffect,
+        targetEffect: guardInfo.targetEffect
+      });
+      targetActor = guardInfo.guardActor;
+    }
+  }
+  const roll = await (new Roll("1d100").roll({ async: true }));
+  let success = roll.total <= tn;
+  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
+  const hobNotes = hobResult?.notes ?? [];
+  if (hobResult?.tnAdjustments?.length) {
+    const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
+    if (delta) {
+      tn = clampTN(tn + delta);
+      success = roll.total <= tn;
+    }
+  }
+
+  if (targetActor) {
+    await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
+  }
+
+  const chip = await (new Roll("1d10").roll({ async: true }));
+
+  await applyReloadingCooldown(actor, action, weaponKey, aggAttack.tags);
+
+  if (!success) {
+    let moraleResult = null;
+    let damage = chip.total;
+    if (guardContext) {
+      const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+      guardHpBonus = guardHpRoll.total;
+      damage += guardHpBonus;
+    }
+    if (targetActor) {
+      const res = await applyDamage(actor, targetActor, damage);
+      moraleResult = res.moraleLoss;
+      if (guardContext) {
+        const protectedActor = guardContext.protectedActor;
+        if (protectedActor) {
+          await addEffect(protectedActor, {
+            key: crypto.randomUUID?.() ?? randomID(),
+            label: game.i18n.localize("W4SQ.EffectGuardWithdraw"),
+            duration: 1,
+            mods: { tags: { disengaged: true } }
+          });
+        }
+        if (!targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
+          const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+          guardMoraleBonus = moraleRoll.total;
+          const morale = Number(getF(targetActor, "morale", 0));
+          const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+          const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
+          await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+          moraleResult = (moraleResult || 0) + guardMoraleBonus;
+          if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+            await ensureDisorganized(targetActor, { source: "guard" });
+          }
+        }
+      }
+    }
+    const chipDetail = [game.i18n.localize("W4SQ.ChatChip")];
+    if (guardContext) {
+      const guardName = targetActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+      const allyName = guardContext.protectedActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+      chipDetail.push(game.i18n.format("W4SQ.ChatGuardRedirect", { guard: guardName, ally: allyName }));
+      if (guardHpBonus) chipDetail.push(game.i18n.format("W4SQ.ChatGuardStrainHP", { total: guardHpBonus }));
+      if (guardMoraleBonus) chipDetail.push(game.i18n.format("W4SQ.ChatGuardStrainMorale", { total: guardMoraleBonus }));
+    }
+    return sendActionMessage({
+      actor,
+      label: action === "melee" ? "Melee" : "Ranged",
+      tn,
+      rollTotal: roll.total,
+      success: false,
+      margin: tn - roll.total,
+      dmg: damage,
+      moraleLoss: moraleResult,
+      soakDetail: chipDetail.join("<br/>") || game.i18n.localize("W4SQ.ChatChip"),
+      hobNotes,
+      footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
+    });
+  }
+
+  const atkBase = await (new Roll(`1d20 + ${exp}d10`).roll({ async: true }));
+  const atkWeapon = await rollMaybe(weapon.dmgDice);
+  const atkRole = await rollMaybe(roleBonus.dmg);
+  const atkEffect = await rollMaybe(aggAttack.dmgDice);
+  const hobDamageBonus = (hobResult?.damageAdjustments ?? []).reduce((sum, adj) => sum + Number(adj.total || 0), 0);
+  const damageMultiplier = Number(hobResult?.damageMultiplier || 1) || 1;
+
+  let raw = atkBase.total + atkWeapon.total + atkRole.total;
+  if (atkEffect.total === -0.5) {
+    raw = raw / 2;
+  } else {
+    raw += atkEffect.total;
+  }
+  if (hobDamageBonus) {
+    raw += hobDamageBonus;
+  }
+  if (damageMultiplier !== 1) {
+    raw = Math.max(0, Math.round(raw * damageMultiplier));
+  }
+
+  const scaled = raw * hpScale(hp, Number(getF(actor, "hpMax", 1)));
+
+  let defenseOnly = 0;
+  let armor = 0;
+  let rangedResist = 0;
+  const soakNotes = [];
+  let polearmBonus = 0;
+  let counterSpear = 0;
+
+  let aggDefense = null;
+  let ignoreDefense = false;
+
+  let backlineHpBonus = 0;
+  let backlineMoraleBonus = 0;
+  let guardHpBonus = 0;
+  let guardMoraleBonus = 0;
+
+  if (targetActor) {
+    const targetExp = Number(getF(targetActor, "experienceTier", 0));
+    const targetEq = Number(getF(targetActor, "equipmentTier", 0));
+    const targetWeapon = getF(targetActor, "weapon", "sword");
+    const ignoreTags = backlineAttack ? ["braced", "antiCharge"] : [];
+    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags: { backlineAttack } });
+    ignoreDefense = !!aggDefense.tags?.noDefense;
+
+    if (!ignoreDefense && targetExp > 0) {
+      const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
+      defenseOnly += defRoll.total;
+    }
+
+    if (!ignoreDefense) {
+      const effDef = await rollMaybe(aggDefense.defSoakDice);
+      if (effDef.total) {
+        defenseOnly += effDef.total;
+      }
+
+      const effPen = await rollMaybe(aggDefense.defPenaltyDice);
+      if (effPen.total) {
+        defenseOnly += effPen.total;
+      }
+    }
+
+    if (!(weapon.pierceArmor || aggAttack.tags?.pierceArmor)) {
+      const armorDice = Math.min(targetEq, 10);
+      if (armorDice > 0) {
+        const armorRoll = await (new Roll(`${armorDice}d3`).roll({ async: true }));
+        armor = armorRoll.total;
+        const ignorePct = Number(aggAttack.tags?.armorIgnorePct || 0);
+        if (ignorePct > 0) {
+          const cut = Math.floor(armor * ignorePct);
+          armor = Math.max(0, armor - cut);
+        }
+      }
+    } else {
+      armor = 0;
+    }
+
+    if (!ignoreDefense && targetWeapon === "polearm" && !backlineAttack) {
+      const pole = await (new Roll("1d20").roll({ async: true }));
+      defenseOnly += pole.total;
+      polearmBonus = pole.total;
+    }
+
+    if (action === "ranged") {
+      if (weaponKey === "bow" || weaponKey === "crossbow") {
+        const reduce = Math.floor(defenseOnly / 2);
+        defenseOnly = Math.max(0, defenseOnly - reduce);
+      }
+      if (weaponKey === "firearm" || weaponKey === "artillery") {
+        defenseOnly = 0;
+      }
+      const rr = await rollMaybe(aggDefense?.rangedResistDice);
+      if (rr.total) {
+        rangedResist += rr.total;
+      }
+    }
+
+    if (action === "melee" && role === "mounted" && aggAttack.tags?.charged && aggDefense?.tags?.braced && targetWeapon === "polearm") {
+      const counter = await (new Roll("2d20").roll({ async: true }));
+      const aHPMax = Number(getF(actor, "hpMax", 1));
+      const aHP = Number(getF(actor, "hp", 0));
+      await actor.setFlag(FLAG_SCOPE, "hp", clamp(aHP - counter.total, 0, aHPMax));
+      counterSpear = counter.total;
+    }
+  }
+
+  let totalSoak = Math.max(0, defenseOnly) + Math.max(0, armor) + Math.max(0, rangedResist);
+  let finalDamage = Math.max(chip.total, Math.floor(scaled - totalSoak));
+  if (damageMultiplier !== 1) {
+    finalDamage = Math.max(0, Math.floor(finalDamage * damageMultiplier));
+  }
+  if (aggAttack.tags?.halfDamage) {
+    finalDamage = Math.floor(finalDamage / 2);
+  }
+
+  if (success && targetActor && action === "melee" && backlineAttack) {
+    const hpBonusRoll = await (new Roll("2d10").roll({ async: true }));
+    const moraleBonusRoll = await (new Roll("3d10").roll({ async: true }));
+    backlineHpBonus = hpBonusRoll.total;
+    backlineMoraleBonus = moraleBonusRoll.total;
+    finalDamage += backlineHpBonus;
+  }
+
+  if (success && guardContext) {
+    const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+    guardHpBonus = guardHpRoll.total;
+    finalDamage += guardHpBonus;
+  }
+
+  let moraleLoss = null;
+  if (targetActor) {
+    if (aggAttack.tags?.multiShot) {
+      const shots = Number(aggAttack.tags.multiShot) || 1;
+      const per = aggAttack.tags.multiShotHalf ? Math.max(1, Math.floor(finalDamage / 2)) : finalDamage;
+      for (let i = 0; i < shots; i++) {
+        const res = await applyDamage(actor, targetActor, per);
+        moraleLoss = res.moraleLoss;
+      }
+    } else {
+      const res = await applyDamage(actor, targetActor, finalDamage);
+      moraleLoss = res.moraleLoss;
+    }
+  }
+
+  if (guardContext) {
+    const protectedActor = guardContext.protectedActor;
+    if (protectedActor) {
+      await addEffect(protectedActor, {
+        key: crypto.randomUUID?.() ?? randomID(),
+        label: game.i18n.localize("W4SQ.EffectGuardWithdraw"),
+        duration: 1,
+        mods: { tags: { disengaged: true } }
+      });
+    }
+    if (!targetActor?.getFlag(FLAG_SCOPE, "unbreakable")) {
+      const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+      guardMoraleBonus = moraleRoll.total;
+      const morale = Number(getF(targetActor, "morale", 0));
+      const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+      const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
+      await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+      moraleLoss = (moraleLoss || 0) + guardMoraleBonus;
+      if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+        await ensureDisorganized(targetActor, { source: "guard" });
+      }
+    }
+  }
+
+  if (success && targetActor && action === "melee" && backlineAttack && backlineMoraleBonus && !targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
+    const morale = Number(getF(targetActor, "morale", 0));
+    const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+    const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
+    await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+    moraleLoss = (moraleLoss || 0) + backlineMoraleBonus;
+    if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+      await ensureDisorganized(targetActor, { source: "backline" });
+    }
+  }
+
+  if (targetActor) {
+    const defenseTotal = Math.max(0, Math.floor(defenseOnly));
+    const armorTotal = Math.max(0, Math.floor(armor));
+    const resistTotal = Math.max(0, Math.floor(rangedResist));
+
+    if (ignoreDefense) {
+      soakNotes.push(game.i18n.localize("W4SQ.ChatDefenseStripped"));
+    } else {
+      soakNotes.push(game.i18n.format("W4SQ.ChatDefenseTotal", { total: defenseTotal }));
+    }
+    if (polearmBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatDefensePolearm", { total: polearmBonus }));
+    }
+    if (armorTotal) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatArmorTotal", { total: armorTotal }));
+    }
+    if (resistTotal) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatRangedResist", { total: resistTotal }));
+    }
+  }
+  if (counterSpear) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatCounterSpear", { total: counterSpear }));
+  }
+  if (guardContext) {
+    const guardName = targetActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+    const allyName = guardContext.protectedActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+    soakNotes.push(game.i18n.format("W4SQ.ChatGuardRedirect", { guard: guardName, ally: allyName }));
+    if (guardHpBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatGuardStrainHP", { total: guardHpBonus }));
+    }
+    if (guardMoraleBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatGuardStrainMorale", { total: guardMoraleBonus }));
+    }
+  }
+  if (soakNotes.length) {
+    soakNotes.push(game.i18n.format("W4SQ.ChatSoakTotal", { total: totalSoak }));
+  }
+
+  await sendActionMessage({
+    actor,
+    label: action === "melee" ? "Melee" : "Ranged",
+    tn,
+    rollTotal: roll.total,
+    success: true,
+    margin: tn - roll.total,
+    dmg: finalDamage,
+    moraleLoss,
+    soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
+    backline: backlineAttack && action === "melee" && success,
+    hobNotes,
+    footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
+  });
+}
