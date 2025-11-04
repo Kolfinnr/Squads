@@ -1,4 +1,4 @@
-import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS } from "../config.js";
+import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS, SPECIALIST_TYPES } from "../config.js";
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
 import { getEffectsDetailed } from "../logic/effects.js";
@@ -36,6 +36,7 @@ export class SquadActorSheet extends ActorSheet {
       equipmentTier: f("equipmentTier", 0),
       role: f("role", "infantry"),
       weapon: f("weapon", "sword"),
+      specialistType: f("specialistType", null),
       notes: f("notes", ""),
       fear: f("fear", false),
       terror: f("terror", false),
@@ -56,6 +57,7 @@ export class SquadActorSheet extends ActorSheet {
     }));
     data.roles = ROLES;
     data.weapons = WEAPONS;
+    data.specialistTypes = SPECIALIST_TYPES;
     return data;
   }
 

@@ -21,6 +21,30 @@
 ### Command Points (CP)
 - Commanders start with a default pool (3 of 6). Spending CP triggers command abilities. Adjustments appear on the dashboard, and the pool refills only through in-game rewards or GM fiat.
 
+## Specialist Roles
+- Set a squad’s role to **Specialist** and choose a subtype (Mage or Engineer) on the sheet.
+- Specialists use the standard TN formula, but their effective chance is capped at 90 and then scaled by current HP%. As formations weaken their spellcraft or engineering becomes harder to execute.
+- Specialist maneuvers track individual cooldowns (4 rounds for spells, 2 rounds for engineering actions). Cooldowns appear in the squad sheet and dashboard like other abilities.
+- Mage spells require **Channel Magic** first; failing the channel invokes **Minor Perils** while failed spells trigger **Major Perils**. Engineers risk **Engineering Mishaps** on failed maneuvers.
+
+### Mage Maneuvers (Hard, CD 4 unless noted)
+- **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
+- **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage and leaves a lingering blaze effect.
+- **Fireball** (enemy): 3d20 HP and 4d20 Morale damage with a dramatic chat recap.
+- **Doom & Gloom** (enemy): Drains 4d20 Morale and inflicts −2d10 TN for 2 rounds.
+- **Transmutation of Lead** (enemy): Strips Equipment Tier ×1d10 soak for 2 rounds.
+- **Magical Revification** (ally): Restores 4d10 HP and 4d10 Morale.
+- **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 1 round.
+
+### Engineer Maneuvers (Average/Hard, CD 2)
+- **Line Defense** (self): Erects barricades, adding +2d10 soak and Fortified/Braced tags for 3 turns.
+- **Minefield** (enemy): Deals 3d20 HP and 4d20 Morale, leaving the foe Disorganized.
+- **Wolf Pits** (enemy): 2d10 HP and 2d10 Morale damage plus a skip-turn snare.
+- **Flashbombs** (enemy): Blinds the target with −10d10 TN and Disorganized for 2 rounds.
+- **Fortify Position** (self): Grants +3d10 soak, Fortified, and Immobile for 3 rounds.
+- **Ballistic Calibration** (ally): +5d10 TN to a ranged ally for 6 rounds.
+- Failed engineering maneuvers roll on the Mishap table; one result grants a “Spark of Genius” auto-pass on the next attempt.
+
 ## Command Actions
 | Command | Cost | Effect |
 | --- | --- | --- |
@@ -29,6 +53,7 @@
 | **Keep it Together, Men!** | 1 CP | Removes Tired and Disorganized effects, then restores 2d20 Morale. |
 | **Rally!** | 1 CP | Restores 3d20 Morale instantly. |
 | **Unit! Withdraw!** | 1 CP | Removes Flanked/Encircled tags and grants Withdraw for 1 round (+1d10 Defense soak, Disengaged). |
+| **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. |
 | **Player Special Action** | 1 CP | Prompts custom text and posts it to chat for narration. |
 | **Get in Formation!** | 2 CP | Grants +8d10 maneuver TN bonus for 1 round. |
 
@@ -49,6 +74,7 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 - **Brace** (Easy, self): +1d10 Defense soak and *Braced* tag.
 - **Loose Formation** (Easy, self): +1d20 Ranged Resistance, −1d20 Defense soak, grants *Loose Formation* tag.
 - **Disengage** (Easy, self): +1d10 Defense soak and *Disengaged* tag.
+- **Guard** (Easy, ally, CD 1, infantry only): Assign the squad to protect an adjacent ally. The next melee attack against that ally is redirected to the guard, dealing the normal result plus +1d20 HP and +1d20 Morale strain to the guarding unit while allowing the ally to disengage safely.
 
 ### Sword Maneuvers
 - **Mordhau Swordsmanship** (Hard, self, CD 3): +5d10 TN, +4d10 Damage.

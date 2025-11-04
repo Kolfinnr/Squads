@@ -1,5 +1,18 @@
 import { FLAG_SCOPE } from "../config.js";
-import { addEffect, clearNegative, getEffects, removeDisorganized } from "./effects.js";
+import { addEffect, attachGuard, clearNegative, getEffects, removeDisorganized } from "./effects.js";
+import {
+  isMage,
+  isEngineer,
+  applyChannelledMagic,
+  clearChannelledMagic,
+  hasChannelledMagic,
+  triggerMinorPeril,
+  triggerMajorPeril,
+  triggerEngineerMishap,
+  canChannel,
+  consumeEngineerGenius,
+  consumeSpecialistEcho
+} from "./specialists.js";
 
 const E = (mods, duration = 1, key = null, label = null) => ({
   key: key || crypto.randomUUID?.() || randomID(),
@@ -7,6 +20,59 @@ const E = (mods, duration = 1, key = null, label = null) => ({
   duration,
   mods
 });
+
+async function rollFormula(formula) {
+  if (!formula || formula === "0") return { total: 0, formula: "0" };
+  const roll = await (new Roll(formula).roll({ async: true }));
+  return { total: roll.total, formula: roll.formula };
+}
+
+async function adjustFlag(actor, key, amount, { min = 0, maxFlag = null } = {}) {
+  if (!actor) return 0;
+  const current = Number(actor.getFlag(FLAG_SCOPE, key) || 0);
+  let max = null;
+  if (maxFlag) {
+    max = Number(actor.getFlag(FLAG_SCOPE, maxFlag) || 0) || null;
+  }
+  let value = current + amount;
+  if (max !== null) value = Math.min(max, value);
+  value = Math.max(min, value);
+  await actor.setFlag(FLAG_SCOPE, key, value);
+  return value - current;
+}
+
+async function damageHP(actor, dice) {
+  const roll = await rollFormula(dice);
+  await adjustFlag(actor, "hp", -roll.total, { min: 0, maxFlag: "hpMax" });
+  return roll.total;
+}
+
+async function healHP(actor, dice) {
+  const roll = await rollFormula(dice);
+  await adjustFlag(actor, "hp", roll.total, { min: 0, maxFlag: "hpMax" });
+  return roll.total;
+}
+
+async function damageMorale(actor, dice) {
+  const roll = await rollFormula(dice);
+  await adjustFlag(actor, "morale", -roll.total, { min: 0, maxFlag: "moraleMax" });
+  return roll.total;
+}
+
+async function healMorale(actor, dice) {
+  const roll = await rollFormula(dice);
+  await adjustFlag(actor, "morale", roll.total, { min: 0, maxFlag: "moraleMax" });
+  return roll.total;
+}
+
+async function postChat(actor, key, data = {}) {
+  if (!actor) return;
+  const content = `<p>${game.i18n?.format?.(key, data) ?? key}</p>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content
+  });
+}
 
 async function addMorale(actor, dice) {
   const roll = await (new Roll(dice).roll({ async: true }));
@@ -22,6 +88,19 @@ async function subMorale(actor, dice) {
 }
 
 export const MANEUVERS = {
+  guard: {
+    name: "Guard",
+    category: "universal",
+    difficulty: "easy",
+    target: "ally",
+    cooldown: 1,
+    duration: 1,
+    roles: ["infantry"],
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await attachGuard(actor, target, { source: "maneuver" });
+    }
+  },
   flank: {
     name: "Flank",
     category: "universal",
@@ -78,6 +157,7 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ defSoakDice: "+1d10", tags: { disengaged: true } }, 1, "disengage", "Disengage"));
+      await actor.setFlag(FLAG_SCOPE, "lastTargetName", "");
     }
   },
 
@@ -361,6 +441,190 @@ export const MANEUVERS = {
     apply: async ({ actor }) => {
       await addEffect(actor, E({ defSoakDice: "+3d10", tags: { freeMove: true } }, 1, "shadow", "Shadowplay"));
     }
+  },
+
+  channelMagic: {
+    name: "Channel Magic",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "average",
+    target: "self",
+    apply: async ({ actor }) => {
+      await applyChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatChannelMagic", { name: actor.name ?? "" });
+    }
+  },
+  firestorm: {
+    name: "Firestorm",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const hp = await damageHP(target, "4d20");
+      const morale = await damageMorale(target, "6d20");
+      await addEffect(target, E({ tags: { zoneFirestorm: true } }, 3, `firestorm-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFirestorm")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatFirestorm", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+    }
+  },
+  fireball: {
+    name: "Fireball",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const hp = await damageHP(target, "3d20");
+      const morale = await damageMorale(target, "4d20");
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+    }
+  },
+  doomGloom: {
+    name: "Doom & Gloom",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const morale = await damageMorale(target, "4d20");
+      await addEffect(target, E({ tnDice: "-2d10" }, 2, `doom-${randomID()}`, game.i18n.localize("W4SQ.ManeuverDoom")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatDoom", { name: actor.name ?? "", target: target.name ?? "", morale });
+    }
+  },
+  transmuteLead: {
+    name: "Transmutation of Lead",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const eq = Math.max(1, Number(target.getFlag(FLAG_SCOPE, "equipmentTier") || 0));
+      const dice = `${eq}d10`;
+      await addEffect(target, E({ defSoakDice: `-${dice}` }, 2, `lead-${randomID()}`, game.i18n.localize("W4SQ.ManeuverLead")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatLead", { name: actor.name ?? "", target: target.name ?? "", dice });
+    }
+  },
+  revification: {
+    name: "Magical Revification",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const hp = await healHP(target, "4d10");
+      const morale = await healMorale(target, "4d10");
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatRevify", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+    }
+  },
+  fireAspect: {
+    name: "Fire Aspect",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "hard",
+    cooldown: 4,
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true } }, 1, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatFireAspect", { name: actor.name ?? "", target: target.name ?? "" });
+    }
+  },
+
+  lineDefense: {
+    name: "Line Defense",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "average",
+    cooldown: 2,
+    target: "self",
+    apply: async ({ actor }) => {
+      await addEffect(actor, E({ defSoakDice: "+2d10", tags: { braced: true, fortified: true } }, 3, `line-defense-${randomID()}`, game.i18n.localize("W4SQ.ManeuverLineDefense")));
+      await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });
+    }
+  },
+  minefield: {
+    name: "Minefield",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "hard",
+    cooldown: 2,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const hp = await damageHP(target, "3d20");
+      const morale = await damageMorale(target, "4d20");
+      await addEffect(target, E({ tags: { disorganized: true } }, 1, `minefield-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMinefield")));
+      await postChat(actor, "W4SQ.ChatMinefield", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+    }
+  },
+  wolfPits: {
+    name: "Wolf Pits",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "average",
+    cooldown: 2,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      const hp = await damageHP(target, "2d10");
+      const morale = await damageMorale(target, "2d10");
+      await addEffect(target, E({ tags: { skipTurn: true } }, 1, `wolf-pits-${randomID()}`, game.i18n.localize("W4SQ.ManeuverWolfPits")));
+      await postChat(actor, "W4SQ.ChatWolfPits", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+    }
+  },
+  flashbombs: {
+    name: "Flashbombs",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "hard",
+    cooldown: 2,
+    target: "enemy",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await addEffect(target, E({ tnDice: "-10d10", tags: { disorganized: true } }, 2, `flashbomb-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFlashbombs")));
+      await postChat(actor, "W4SQ.ChatFlashbombs", { name: actor.name ?? "", target: target.name ?? "" });
+    }
+  },
+  fortifyPosition: {
+    name: "Fortify Position",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "hard",
+    cooldown: 2,
+    target: "self",
+    apply: async ({ actor }) => {
+      await addEffect(actor, E({ defSoakDice: "+3d10", tags: { fortified: true, braced: true, immobile: true } }, 3, `fortify-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFortify")));
+      await postChat(actor, "W4SQ.ChatFortify", { name: actor.name ?? "" });
+    }
+  },
+  ballisticCalibration: {
+    name: "Ballistic Calibration",
+    category: "specialist",
+    specialistType: "engineer",
+    difficulty: "average",
+    cooldown: 2,
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await addEffect(target, E({ tnDice: "+5d10" }, 6, `calibration-${randomID()}`, game.i18n.localize("W4SQ.ManeuverCalibration")));
+      await postChat(actor, "W4SQ.ChatCalibration", { name: actor.name ?? "", target: target.name ?? "" });
+    }
   }
 };
 
@@ -369,16 +633,22 @@ export function maneuversFor(actor) {
   const weapon = actor.getFlag(FLAG_SCOPE, "weapon") || "sword";
   return Object.entries(MANEUVERS)
     .filter(([_, m]) => {
-      if (m.category === "universal") return true;
+      if (m.category === "universal") return !m.roles || m.roles.includes(role);
       if (m.category === "weapon") return m.weaponType === weapon;
       if (m.category === "hybrid") return role === "hybrid";
       if (m.category === "mounted") return role === "mounted";
+      if (m.category === "specialist") {
+        if (role !== "specialist") return false;
+        if (m.specialistType === "mage") return isMage(actor);
+        if (m.specialistType === "engineer") return isEngineer(actor);
+        return true;
+      }
       return false;
     })
     .map(([key, data]) => ({ key, ...data }));
 }
 
-export async function onManeuverFail(actor) {
+export async function onManeuverFail(actor, maneuver = null) {
   const effect = {
     key: "fail-disorg",
     label: "Disorganized (Failed Maneuver)",
@@ -388,9 +658,22 @@ export async function onManeuverFail(actor) {
   const list = actor.getFlag(FLAG_SCOPE, "effects") ?? [];
   list.push(effect);
   await actor.setFlag(FLAG_SCOPE, "effects", list);
+  if (maneuver?.category === "specialist") {
+    if (maneuver.specialistType === "mage") {
+      if (maneuver.key === "channelMagic") {
+        await triggerMinorPeril(actor);
+        await clearChannelledMagic(actor);
+      } else {
+        await triggerMajorPeril(actor);
+        await clearChannelledMagic(actor);
+      }
+    } else if (maneuver.specialistType === "engineer") {
+      await triggerEngineerMishap(actor);
+    }
+  }
 }
 
-function friendlyTokensNear(actor, distance = 5) {
+export function friendlyTokensNear(actor, distance = 5) {
   const tokens = actor?.getActiveTokens(true) ?? [];
   if (!tokens.length) return [];
   const origin = tokens[0];

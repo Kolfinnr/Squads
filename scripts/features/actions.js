@@ -1,8 +1,9 @@
 import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
-import { aggregateForAttack, aggregateForDefense, ensureDisorganized } from "../logic/effects.js";
+import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardOnTarget, consumeGuardLink, addEffect } from "../logic/effects.js";
 import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
+import { isSpecialist, isEngineer } from "../logic/specialists.js";
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const clampTN = (tn) => Math.min(ROLL.maxTN, Math.max(ROLL.minTN, tn));
@@ -77,6 +78,15 @@ function hpScale(cur, max) {
   return SCALING.hpFloor + (1 - SCALING.hpFloor) * ratio;
 }
 
+function applySpecialistTN(actor, tn, hp, hpMax) {
+  if (!isSpecialist(actor)) return clampTN(tn);
+  const safeMax = Math.max(0, Number(hpMax) || 0);
+  const ratio = safeMax > 0 ? Math.max(0, Math.min(1, Number(hp) / safeMax)) : 0;
+  const capped = Math.min(90, tn);
+  const scaled = capped * ratio;
+  return clampTN(Math.max(ROLL.minTN, Math.floor(scaled)));
+}
+
 function roleBonuses(role, action) {
   switch (role) {
     case "infantry":
@@ -85,6 +95,8 @@ function roleBonuses(role, action) {
     case "ranged":
       if (action === "ranged") return { acc: "+1d10", dmg: "+1d10" };
       if (action === "melee") return { acc: "-1d20", dmg: "-1d20" };
+      return { acc: "0", dmg: "0" };
+    case "specialist":
       return { acc: "0", dmg: "0" };
     default:
       return { acc: "0", dmg: "0" };
@@ -168,22 +180,37 @@ export async function doSquadAction(actor, action) {
   const morale = Number(getF(actor, "morale", 0));
   const moraleMax = Number(getF(actor, "moraleMax", 1));
   const hp = Number(getF(actor, "hp", 0));
+  const hpMax = Number(getF(actor, "hpMax", 1));
   if (moraleMax > 0 && morale / moraleMax < 0.3) tn -= 10;
   if (hp <= 0) tn -= 20;
-  tn = clampTN(tn);
 
-  const targetActor = selectedTarget();
+  let targetActor = selectedTarget();
+  let guardContext = null;
+  if (targetActor && action === "melee") {
+    const guardInfo = findGuardOnTarget(targetActor);
+    if (guardInfo?.guardActor && guardInfo.guardActor !== targetActor) {
+      guardContext = { ...guardInfo, protectedActor: targetActor };
+      await consumeGuardLink({
+        guardActor: guardInfo.guardActor,
+        targetActor,
+        guardEffect: guardInfo.guardEffect,
+        targetEffect: guardInfo.targetEffect
+      });
+      targetActor = guardInfo.guardActor;
+    }
+  }
   const roll = await (new Roll("1d100").roll({ async: true }));
-  let success = roll.total <= tn;
+  let success = roll.total <= applySpecialistTN(actor, tn, hp, hpMax);
   const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
   const hobNotes = hobResult?.notes ?? [];
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
     if (delta) {
-      tn = clampTN(tn + delta);
-      success = roll.total <= tn;
+      tn += delta;
     }
   }
+  tn = applySpecialistTN(actor, tn, hp, hpMax);
+  success = roll.total <= tn;
 
   if (targetActor) {
     await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
@@ -195,9 +222,46 @@ export async function doSquadAction(actor, action) {
 
   if (!success) {
     let moraleResult = null;
+    let damage = chip.total;
+    if (guardContext) {
+      const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+      guardHpBonus = guardHpRoll.total;
+      damage += guardHpBonus;
+    }
     if (targetActor) {
-      const res = await applyDamage(actor, targetActor, chip.total);
+      const res = await applyDamage(actor, targetActor, damage);
       moraleResult = res.moraleLoss;
+      if (guardContext) {
+        const protectedActor = guardContext.protectedActor;
+        if (protectedActor) {
+          await addEffect(protectedActor, {
+            key: crypto.randomUUID?.() ?? randomID(),
+            label: game.i18n.localize("W4SQ.EffectGuardWithdraw"),
+            duration: 1,
+            mods: { tags: { disengaged: true } }
+          });
+        }
+        if (!targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
+          const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+          guardMoraleBonus = moraleRoll.total;
+          const morale = Number(getF(targetActor, "morale", 0));
+          const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+          const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
+          await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+          moraleResult = (moraleResult || 0) + guardMoraleBonus;
+          if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+            await ensureDisorganized(targetActor, { source: "guard" });
+          }
+        }
+      }
+    }
+    const chipDetail = [game.i18n.localize("W4SQ.ChatChip")];
+    if (guardContext) {
+      const guardName = targetActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+      const allyName = guardContext.protectedActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+      chipDetail.push(game.i18n.format("W4SQ.ChatGuardRedirect", { guard: guardName, ally: allyName }));
+      if (guardHpBonus) chipDetail.push(game.i18n.format("W4SQ.ChatGuardStrainHP", { total: guardHpBonus }));
+      if (guardMoraleBonus) chipDetail.push(game.i18n.format("W4SQ.ChatGuardStrainMorale", { total: guardMoraleBonus }));
     }
     return sendActionMessage({
       actor,
@@ -206,9 +270,9 @@ export async function doSquadAction(actor, action) {
       rollTotal: roll.total,
       success: false,
       margin: tn - roll.total,
-      dmg: chip.total,
+      dmg: damage,
       moraleLoss: moraleResult,
-      soakDetail: game.i18n.localize("W4SQ.ChatChip"),
+      soakDetail: chipDetail.join("<br/>") || game.i18n.localize("W4SQ.ChatChip"),
       hobNotes,
       footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
     });
@@ -242,12 +306,15 @@ export async function doSquadAction(actor, action) {
   const soakNotes = [];
   let polearmBonus = 0;
   let counterSpear = 0;
+  let deepDefenseBonus = 0;
 
   let aggDefense = null;
   let ignoreDefense = false;
 
   let backlineHpBonus = 0;
   let backlineMoraleBonus = 0;
+  let guardHpBonus = 0;
+  let guardMoraleBonus = 0;
 
   if (targetActor) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
@@ -260,6 +327,12 @@ export async function doSquadAction(actor, action) {
     if (!ignoreDefense && targetExp > 0) {
       const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
       defenseOnly += defRoll.total;
+    }
+
+    if (!ignoreDefense && isEngineer(targetActor)) {
+      const deepRoll = await (new Roll("3d10").roll({ async: true }));
+      defenseOnly += deepRoll.total;
+      deepDefenseBonus = deepRoll.total;
     }
 
     if (!ignoreDefense) {
@@ -335,6 +408,12 @@ export async function doSquadAction(actor, action) {
     finalDamage += backlineHpBonus;
   }
 
+  if (success && guardContext) {
+    const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+    guardHpBonus = guardHpRoll.total;
+    finalDamage += guardHpBonus;
+  }
+
   let moraleLoss = null;
   if (targetActor) {
     if (aggAttack.tags?.multiShot) {
@@ -347,6 +426,30 @@ export async function doSquadAction(actor, action) {
     } else {
       const res = await applyDamage(actor, targetActor, finalDamage);
       moraleLoss = res.moraleLoss;
+    }
+  }
+
+  if (guardContext) {
+    const protectedActor = guardContext.protectedActor;
+    if (protectedActor) {
+      await addEffect(protectedActor, {
+        key: crypto.randomUUID?.() ?? randomID(),
+        label: game.i18n.localize("W4SQ.EffectGuardWithdraw"),
+        duration: 1,
+        mods: { tags: { disengaged: true } }
+      });
+    }
+    if (!targetActor?.getFlag(FLAG_SCOPE, "unbreakable")) {
+      const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+      guardMoraleBonus = moraleRoll.total;
+      const morale = Number(getF(targetActor, "morale", 0));
+      const moraleMax = Number(getF(targetActor, "moraleMax", 0));
+      const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
+      await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
+      moraleLoss = (moraleLoss || 0) + guardMoraleBonus;
+      if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+        await ensureDisorganized(targetActor, { source: "guard" });
+      }
     }
   }
 
@@ -380,9 +483,23 @@ export async function doSquadAction(actor, action) {
     if (resistTotal) {
       soakNotes.push(game.i18n.format("W4SQ.ChatRangedResist", { total: resistTotal }));
     }
+    if (deepDefenseBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatDeepDefense", { total: deepDefenseBonus }));
+    }
   }
   if (counterSpear) {
     soakNotes.push(game.i18n.format("W4SQ.ChatCounterSpear", { total: counterSpear }));
+  }
+  if (guardContext) {
+    const guardName = targetActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+    const allyName = guardContext.protectedActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+    soakNotes.push(game.i18n.format("W4SQ.ChatGuardRedirect", { guard: guardName, ally: allyName }));
+    if (guardHpBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatGuardStrainHP", { total: guardHpBonus }));
+    }
+    if (guardMoraleBonus) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatGuardStrainMorale", { total: guardMoraleBonus }));
+    }
   }
   if (soakNotes.length) {
     soakNotes.push(game.i18n.format("W4SQ.ChatSoakTotal", { total: totalSoak }));

@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
-import { addEffect, getEffects, getEffectsDetailed, removeDisorganized } from "../logic/effects.js";
-import { MANEUVERS } from "../logic/maneuvers.js";
+import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
+import { MANEUVERS, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
@@ -13,10 +13,17 @@ const ORDER_OPTIONS = [
   { value: "idle", label: "W4SQ.OrderIdle" }
 ];
 
+const INTERCEPT_TILE_RANGE = 3;
+
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
   if (turns === 1) return game.i18n.localize("W4SQ.TurnSingle");
   return game.i18n.format("W4SQ.TurnPlural", { value: turns });
+}
+
+function interceptRangeDistance() {
+  const perTile = canvas?.dimensions?.distance ?? canvas?.grid?.distance ?? 5;
+  return perTile * INTERCEPT_TILE_RANGE;
 }
 
 export function getConnectedUsers() {
@@ -466,6 +473,9 @@ export class W4SQCommandApp extends Application {
       case "cmd-withdraw":
         await this._commandWithdraw(commander, squad);
         break;
+      case "cmd-intercept":
+        await this._commandIntercept(commander, squad);
+        break;
       case "cmd-special":
         await this._commandSpecial(commander, squad);
         break;
@@ -571,6 +581,71 @@ export class W4SQCommandApp extends Application {
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdWithdraw");
   }
 
+  _getInterceptTargetActor(squad) {
+    const targets = [...game.user.targets];
+    if (targets.length !== 1) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptSelect"));
+      return null;
+    }
+    const token = targets[0];
+    const actor = token?.actor;
+    if (!actor) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptSelect"));
+      return null;
+    }
+    if (actor === squad) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptSelf"));
+      return null;
+    }
+    const squadTokens = squad.getActiveTokens?.(true) ?? [];
+    const origin = squadTokens[0];
+    if (!origin) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptNoToken"));
+      return null;
+    }
+    if (token.document?.disposition !== origin.document?.disposition) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.WarnSelectAlly"));
+      return null;
+    }
+    const distance = interceptRangeDistance();
+    const nearby = friendlyTokensNear(squad, distance);
+    const withinRange = nearby.some(t => t.id === token.id);
+    if (!withinRange) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptRange"));
+      return null;
+    }
+    return { actor, token };
+  }
+
+  async _commandIntercept(commander, squad) {
+    const role = squad.getFlag(FLAG_SCOPE, "role") || "infantry";
+    if (role !== "infantry") {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptRole"));
+      return;
+    }
+    const forbidden = ["disorganized", "engaged", "prone"];
+    if (forbidden.some(tag => actorHasTag(squad, tag))) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptStatus"));
+      return;
+    }
+    if (getCooldown(squad, "guard") > 0) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.InterceptCooldown"));
+      return;
+    }
+    const targetInfo = this._getInterceptTargetActor(squad);
+    if (!targetInfo) return;
+    if (!(await this._spendCP(commander, 1))) return;
+    await attachGuard(squad, targetInfo.actor, { source: "intercept" });
+    await setCooldown(squad, "guard", 1);
+    await addEffect(squad, {
+      key: crypto.randomUUID?.() ?? randomID(),
+      label: game.i18n.localize("W4SQ.EffectSpentManeuver"),
+      duration: 1,
+      mods: { tags: { spentManeuver: true } }
+    });
+    await this._announceCommand(commander, squad, "W4SQ.ChatCmdIntercept", { ally: targetInfo.actor.name || "" });
+  }
+
   async _commandSpecial(commander, squad) {
     const text = await Dialog.prompt({
       title: game.i18n.localize("W4SQ.SpecialAction"),
@@ -651,7 +726,8 @@ export class W4SQCommandApp extends Application {
       .replace("{commander}", commanderName)
       .replace("{squad}", squadName)
       .replace("{order}", data.order ?? "")
-      .replace("{value}", data.value ?? "");
+      .replace("{value}", data.value ?? "")
+      .replace("{ally}", data.ally ?? "");
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: commander ?? squad }),
       content: `<p>${message}</p>`
