@@ -33,6 +33,30 @@ function sceneBounds() {
   return { x: 0, y: 0, width, height };
 }
 
+function duplicateConfig(source = {}) {
+  const data = source || {};
+  if (globalThis?.foundry?.utils?.duplicate) {
+    try {
+      return foundry.utils.duplicate(data);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Failed to duplicate template config`, err, data);
+    }
+  }
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(data);
+    } catch (err) {
+      console.error(`${MODULE_ID} | structuredClone failed for template config`, err, data);
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(data));
+  } catch (err) {
+    console.error(`${MODULE_ID} | JSON clone failed for template config`, err, data);
+  }
+  return { ...data };
+}
+
 function buildTemplateData(templateConfig = {}, originToken = null) {
   const defaults = { type: "rect" };
   const config = foundry.utils.mergeObject(defaults, templateConfig ?? {}, { inplace: false });
@@ -361,19 +385,6 @@ function getZoneData(document) {
   return document?.getFlag(MODULE_ID, FLAG_KEY) ?? null;
 }
 
-function getTemplateObject(document) {
-  if (!document) return null;
-  return canvas?.templates?.placeables?.find(t => t.document?.id === document.id) ?? null;
-}
-
-function worldToLocal(template, point) {
-  const pt = new PIXI.Point(point.x, point.y);
-  if (template?.worldTransform?.applyInverse) {
-    return template.worldTransform.applyInverse(pt, pt);
-  }
-  return new PIXI.Point(pt.x - template.x, pt.y - template.y);
-}
-
 function tokenCenter(token) {
   if (!token) return { x: 0, y: 0 };
   if (token.center) return token.center;
@@ -391,19 +402,79 @@ function tokenMatchesTarget(zone, handler, token) {
   return true;
 }
 
+function templateConfigFor(zone, handler, document) {
+  const base = handler?.template ? duplicateConfig(handler.template) : {};
+  if (zone?.template) {
+    return foundry.utils.mergeObject(base, zone.template, { inplace: false });
+  }
+  if (document?.t && !base.type) {
+    base.type = document.t;
+  }
+  return base;
+}
+
+function unitsToPixels(units) {
+  const size = gridSize() || 100;
+  const distance = gridDistance() || 1;
+  if (!distance) return units;
+  return units * (size / distance);
+}
+
+function normalizeAngle(degrees = 0) {
+  return (Number(degrees) || 0) * (Math.PI / 180);
+}
+
+function rotatePoint(dx, dy, radians) {
+  if (!radians) return { x: dx, y: dy };
+  const cos = Math.cos(-radians);
+  const sin = Math.sin(-radians);
+  return {
+    x: dx * cos - dy * sin,
+    y: dx * sin + dy * cos
+  };
+}
+
+function circleContains({ center, radiusPx }, point) {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return (dx * dx + dy * dy) <= (radiusPx * radiusPx);
+}
+
+function rectContains({ center, halfWidthPx, halfHeightPx, angle }, point) {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const rotated = rotatePoint(dx, dy, angle);
+  return Math.abs(rotated.x) <= halfWidthPx && Math.abs(rotated.y) <= halfHeightPx;
+}
+
 function tokensInTemplate(document, handler) {
-  const template = getTemplateObject(document);
-  if (!template) return [];
-  const shape = template.shape;
-  if (!shape?.contains) return [];
+  const zone = getZoneData(document) ?? {};
   const tokens = canvas?.tokens?.placeables ?? [];
-  return tokens.filter(token => {
-    const zone = getZoneData(document);
-    if (!tokenMatchesTarget(zone ?? {}, handler, token)) return false;
-    const center = tokenCenter(token);
-    const local = worldToLocal(template, center);
-    return shape.contains(local.x, local.y);
+  if (!tokens.length) return [];
+  const config = templateConfigFor(zone, handler, document);
+  const type = (config.type ?? document?.t ?? "circle").toLowerCase();
+  const angle = normalizeAngle(document?.direction ?? config.direction ?? 0);
+  const center = { x: document?.x ?? 0, y: document?.y ?? 0 };
+
+  const matches = tokens.filter(token => {
+    if (!tokenMatchesTarget(zone, handler, token)) return false;
+    const point = tokenCenter(token);
+    if (type === "rect" || type === "rectangle") {
+      const widthUnits = Number(config.widthUnits ?? config.width ?? 0) || Number(document?.distance ?? 0) || 0;
+      const heightUnits = Number(config.heightUnits ?? config.height ?? 0) || Number(document?.width ?? 0) || widthUnits;
+      const halfWidthPx = unitsToPixels(widthUnits) / 2;
+      const halfHeightPx = unitsToPixels(heightUnits) / 2;
+      if (!halfWidthPx || !halfHeightPx) return false;
+      return rectContains({ center, halfWidthPx, halfHeightPx, angle }, point);
+    }
+
+    const radiusUnits = Number(config.radiusUnits ?? config.distance ?? config.radius ?? document?.distance ?? 0);
+    const radiusPx = unitsToPixels(radiusUnits);
+    if (!radiusPx) return false;
+    return circleContains({ center, radiusPx }, point);
   });
+
+  return matches;
 }
 
 function normalizeOccupants(list) {
@@ -559,7 +630,8 @@ export async function requestZonePlacement(actor, zoneKey, options = {}) {
       console.warn(`${MODULE_ID} | Failed to close sheet before zone placement`, err);
     }
   }
-  const templateData = buildTemplateData(options.template ?? handler.template, originToken);
+  const templateConfig = duplicateConfig(options.template ?? handler.template ?? {});
+  const templateData = buildTemplateData(templateConfig, originToken);
   const zoneData = {
     key: zoneKey,
     duration: options.duration ?? handler.duration ?? 1,
@@ -568,6 +640,7 @@ export async function requestZonePlacement(actor, zoneKey, options = {}) {
     disposition: originToken?.document?.disposition ?? null,
     target: options.target ?? handler.target ?? "any",
     extra: options.extra ?? {},
+    template: templateConfig,
     occupants: []
   };
   templateData.flags = templateData.flags ?? {};
@@ -589,7 +662,8 @@ export async function spawnZone(actor, zoneKey, options = {}) {
     return null;
   }
   const originToken = options.originToken ?? getOriginToken(actor);
-  const templateData = buildTemplateData(options.template ?? handler.template, originToken);
+  const templateConfig = duplicateConfig(options.template ?? handler.template ?? {});
+  const templateData = buildTemplateData(templateConfig, originToken);
   if (options.position) {
     templateData.x = options.position.x ?? templateData.x;
     templateData.y = options.position.y ?? templateData.y;
@@ -602,6 +676,7 @@ export async function spawnZone(actor, zoneKey, options = {}) {
     disposition: options.disposition ?? originToken?.document?.disposition ?? null,
     target: options.target ?? handler.target ?? "any",
     extra: options.extra ?? {},
+    template: templateConfig,
     occupants: []
   };
   templateData.flags = templateData.flags ?? {};
