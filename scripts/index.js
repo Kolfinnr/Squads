@@ -37,7 +37,14 @@ async function reduceActiveManeuver(actor) {
     await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
     return;
   }
-  const active = foundry.utils.duplicate(current);
+  let active;
+  try {
+    active = foundry.utils.duplicate(current);
+  } catch (err) {
+    console.error(`${MODULE_ID} | Failed to duplicate active maneuver`, err, current);
+    await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
+    return;
+  }
   const remaining = Math.max(0, Number(active.remaining ?? 0) - 1);
   if (remaining <= 0) {
     await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
@@ -108,12 +115,10 @@ async function processTurnTick(combat) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
   }
-  if (turn === 0) {
-    try {
-      await tickZones();
-    } catch (err) {
-      console.error(`${MODULE_ID} | tickZones failed`, err);
-    }
+  try {
+    await tickZones();
+  } catch (err) {
+    console.error(`${MODULE_ID} | tickZones failed`, err);
   }
   const actor = combatant.actor;
   if (!isSquadActor(actor)) {

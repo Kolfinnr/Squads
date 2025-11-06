@@ -1,6 +1,12 @@
 import { MODULE_ID } from "../config.js";
 
 export async function sendActionMessage({ actor, label, tn, rollTotal, success, margin, dmg, moraleLoss, soakDetail, hobNotes = [], backline = false, footer }) {
+  let formattedSoak = soakDetail;
+  if (typeof formattedSoak === "string") {
+    formattedSoak = formattedSoak.replace(/<br\s*\/?>(\s*)/gi, " • $1");
+    formattedSoak = formattedSoak.replace(/\s*•\s*•\s*/g, " • ");
+    formattedSoak = formattedSoak.trim();
+  }
   const content = await renderTemplate(`modules/${MODULE_ID}/templates/chat-action.hbs`, {
     label,
     actorName: actor.name,
@@ -10,7 +16,7 @@ export async function sendActionMessage({ actor, label, tn, rollTotal, success, 
     margin,
     dmg,
     moraleLoss,
-    soakDetail,
+    soakDetail: formattedSoak,
     backline,
     hobNotes,
     footer
