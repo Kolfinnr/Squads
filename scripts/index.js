@@ -162,24 +162,40 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
   console.log(`${MODULE_ID} | Ready hook executed`);
   const module = game.modules.get(MODULE_ID);
-  const basePath = module ? `modules/${module.id}/` : null;
+  if (!module) {
+    console.error(`${MODULE_ID} | Module not found via game.modules – verify module.json id`);
+  }
+
+  const modulePath = (() => {
+    if (!module) return null;
+    const raw = module?.path || module?.data?.path || `modules/${module.id}`;
+    if (!raw) return null;
+    return raw.endsWith("/") ? raw : `${raw}/`;
+  })();
+
+  const scriptsBase = modulePath ? (modulePath.endsWith("scripts/") ? modulePath : `${modulePath}scripts/`) : null;
   const fileExists = globalThis.foundry?.utils?.fileExists
     ? globalThis.foundry.utils.fileExists.bind(globalThis.foundry.utils)
     : null;
+
   for (const path of IMPORT_PATHS) {
     const resource = path.replace(/^\.\//, "");
-    let exists = "unknown";
-    if (basePath && fileExists) {
+    const resolved = scriptsBase ? `${scriptsBase}${resource}` : null;
+    let exists = scriptsBase ? "skipped" : "unknown";
+    if (resolved && fileExists) {
       try {
-        exists = await fileExists(`${basePath}${resource}`, { strict: true });
+        exists = await fileExists(resolved, { strict: true });
       } catch (err) {
         console.error(`${MODULE_ID} | Import check failed for ${path}`, err);
         exists = false;
       }
+    } else if (resolved) {
+      exists = "unverified";
     }
     console.log(`${MODULE_ID} | Import ${path} →`, {
       exists,
       resource,
+      resolved,
       type: typeof resource
     });
   }
