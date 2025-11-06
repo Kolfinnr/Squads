@@ -93,7 +93,7 @@ function markTurn(combat, round, turn) {
   return { key, processed: true };
 }
 
-async function processTurnTick(combat) {
+async function processTurnTick(combat, context = {}) {
   if (!combat) {
     console.log("[W4SQ] processTurnTick skipped: no combat");
     return;
@@ -115,8 +115,9 @@ async function processTurnTick(combat) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
   }
+  const isRoundStart = turn === 0;
   try {
-    await tickZones();
+    await tickZones({ isRoundStart, context });
   } catch (err) {
     console.error(`${MODULE_ID} | tickZones failed`, err);
   }
@@ -128,8 +129,8 @@ async function processTurnTick(combat) {
   await tickActorEntry(actor);
 }
 
-function safeProcessTurnTick(combat) {
-  processTurnTick(combat).catch(err => console.error(`${MODULE_ID} | Failed to process turn tick`, err));
+function safeProcessTurnTick(combat, context) {
+  processTurnTick(combat, context).catch(err => console.error(`${MODULE_ID} | Failed to process turn tick`, err));
 }
 
 Hooks.once("init", () => {
@@ -190,12 +191,12 @@ Hooks.once("ready", async () => {
 Hooks.on("combatStart", combat => {
   console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
   resetProcessedTurn(combat);
-  safeProcessTurnTick(combat);
+  safeProcessTurnTick(combat, { event: "combatStart" });
 });
 
 Hooks.on("combatRound", combat => {
   console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
-  safeProcessTurnTick(combat);
+  safeProcessTurnTick(combat, { event: "combatRound" });
 });
 
 Hooks.on("updateCombat", (combat, changed) => {
@@ -205,7 +206,7 @@ Hooks.on("updateCombat", (combat, changed) => {
   const turnChanged = Object.prototype.hasOwnProperty.call(changed, "turn");
   if (hasRound || turnReset || turnChanged) {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
-    safeProcessTurnTick(combat);
+    safeProcessTurnTick(combat, { event: "updateCombat", changed });
   }
 });
 

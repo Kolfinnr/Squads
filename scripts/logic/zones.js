@@ -653,7 +653,7 @@ export function getZoneHandlers() {
   return ZONE_HANDLERS;
 }
 
-export async function tickZones() {
+export async function tickZones({ isRoundStart = false } = {}) {
   if (!canvas?.scene) return;
   const templates = canvas.templates?.placeables ?? [];
   for (const template of templates) {
@@ -667,7 +667,21 @@ export async function tickZones() {
       continue;
     }
 
-    const tokens = tokensInTemplate(document, handler);
+    if (isRoundStart) {
+      const move = moveUpdate(document, handler);
+      if (Object.keys(move).length > 0) {
+        try {
+          document._w4sqSkipEnter = true;
+          await document.update(move);
+        } catch (err) {
+          console.error(`${MODULE_ID} | Failed to reposition zone`, err);
+        } finally {
+          document._w4sqSkipEnter = false;
+        }
+      }
+    }
+
+    let tokens = tokensInTemplate(document, handler);
     await syncZoneOccupants(document, handler, tokens);
     const zoneState = getZoneData(document);
     if (!zoneState) continue;
@@ -676,15 +690,23 @@ export async function tickZones() {
       continue;
     }
 
+    tokens = tokensInTemplate(document, handler);
     try {
       await handleRoundEffects(document, handler, zoneState, tokens);
     } catch (err) {
       console.error(`${MODULE_ID} | Zone round effect failed`, err);
     }
 
+    if (!isRoundStart) continue;
+
     const currentDuration = Number(zoneState.duration ?? handler.duration ?? 0);
     const nextDuration = currentDuration > 0 ? currentDuration - 1 : 0;
     if (nextDuration <= 0) {
+      try {
+        await syncZoneOccupants(document, handler, []);
+      } catch (err) {
+        console.error(`${MODULE_ID} | Failed to flush zone occupants`, err);
+      }
       try {
         await document.delete();
       } catch (err) {
@@ -693,16 +715,13 @@ export async function tickZones() {
       continue;
     }
 
-    const move = moveUpdate(document, handler);
     const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
-    const updateData = { [flagKey]: { ...zoneState, duration: nextDuration } };
-    const moved = Object.keys(move).length > 0;
-    const payload = moved ? { ...move, ...updateData } : updateData;
+    const updatedState = { ...zoneState, duration: nextDuration };
     try {
-      document._w4sqSkipEnter = !moved;
-      await document.update(payload);
+      document._w4sqSkipEnter = true;
+      await document.update({ [flagKey]: updatedState });
     } catch (err) {
-      console.error(`${MODULE_ID} | Failed to update zone`, err);
+      console.error(`${MODULE_ID} | Failed to update zone duration`, err);
     } finally {
       document._w4sqSkipEnter = false;
     }
