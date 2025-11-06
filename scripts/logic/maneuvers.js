@@ -550,9 +550,8 @@ export const MANEUVERS = {
     specialistType: "engineer",
     difficulty: "average",
     cooldown: 2,
-    target: "self",
+    target: "none",
     apply: async ({ actor }) => {
-      await addEffect(actor, E({ defSoakDice: "+2d10", tags: { braced: true, fortified: true } }, 3, `line-defense-${randomID()}`, game.i18n.localize("W4SQ.ManeuverLineDefense")));
       await requestZonePlacement(actor, "lineDefense");
       await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });
     }
@@ -563,14 +562,10 @@ export const MANEUVERS = {
     specialistType: "engineer",
     difficulty: "hard",
     cooldown: 2,
-    target: "enemy",
-    apply: async ({ actor, target }) => {
-      if (!target) return;
-      const hp = await damageHP(target, "3d20");
-      const morale = await damageMorale(target, "4d20");
-      await addEffect(target, E({ tags: { disorganized: true } }, 1, `minefield-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMinefield")));
+    target: "none",
+    apply: async ({ actor }) => {
       await requestZonePlacement(actor, "minefield");
-      await postChat(actor, "W4SQ.ChatMinefield", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+      await postChat(actor, "W4SQ.ChatMinefieldDeploy", { name: actor.name ?? "" });
     }
   },
   wolfPits: {
@@ -579,14 +574,10 @@ export const MANEUVERS = {
     specialistType: "engineer",
     difficulty: "average",
     cooldown: 2,
-    target: "enemy",
-    apply: async ({ actor, target }) => {
-      if (!target) return;
-      const hp = await damageHP(target, "2d10");
-      const morale = await damageMorale(target, "2d10");
-      await addEffect(target, E({ tags: { skipTurn: true } }, 1, `wolf-pits-${randomID()}`, game.i18n.localize("W4SQ.ManeuverWolfPits")));
+    target: "none",
+    apply: async ({ actor }) => {
       await requestZonePlacement(actor, "wolfPits");
-      await postChat(actor, "W4SQ.ChatWolfPits", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+      await postChat(actor, "W4SQ.ChatWolfPitsDeploy", { name: actor.name ?? "" });
     }
   },
   flashbombs: {

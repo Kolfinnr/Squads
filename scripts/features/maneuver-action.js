@@ -117,17 +117,18 @@ function validateManeuverPrereqs(actor, maneuver, target) {
 
 async function resolveTarget(actor, maneuver) {
   if (maneuver.target === "self") return actor;
+  if (maneuver.target === "none") return null;
   const targets = [...game.user.targets];
   if (targets.length !== 1) {
     ui.notifications.warn(game.i18n.localize("W4SQ.WarnSelectTarget"));
-    return null;
+    return undefined;
   }
   const token = targets[0];
   const targetActor = token?.actor;
   if (!targetActor) return null;
   if (maneuver.target === "ally" && !isFriendly(actor, token)) {
     ui.notifications.warn(game.i18n.localize("W4SQ.WarnSelectAlly"));
-    return null;
+    return undefined;
   }
   return targetActor;
 }
@@ -162,7 +163,7 @@ export async function openManeuverDialog(actor) {
 
 async function executeManeuver(actor, maneuver) {
   const target = await resolveTarget(actor, maneuver);
-  if (!target) return;
+  if (target === undefined) return;
   if (!validateManeuverPrereqs(actor, maneuver, target)) return;
 
   const exp = Number(actor.getFlag(FLAG_SCOPE, "experienceTier") || 0);

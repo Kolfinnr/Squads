@@ -200,12 +200,15 @@
   "W4SQ.ChatLineDefense": "{name} throws up barricades and braces the line!",
   "W4SQ.ManeuverMinefield": "Minefield",
   "W4SQ.ChatMinefield": "Explosives shred {target} for {hp} HP and {morale} Morale!",
+  "W4SQ.ChatMinefieldDeploy": "{name} scatters a deadly minefield.",
   "W4SQ.ManeuverWolfPits": "Wolf Pits",
   "W4SQ.ChatWolfPits": "Traps ensnare {target}, costing {hp} HP and {morale} Morale!",
+  "W4SQ.ChatWolfPitsDeploy": "{name} prepares concealed wolf pits.",
   "W4SQ.ManeuverFlashbombs": "Flashbombs",
   "W4SQ.ChatFlashbombs": "{target} reels from blinding charges!",
   "W4SQ.ManeuverFortify": "Fortify Position",
   "W4SQ.ChatFortify": "{name} fortifies their position and digs in!",
+  "W4SQ.EffectDeepDefense": "Deep Defense",
   "W4SQ.ManeuverCalibration": "Ballistic Calibration",
   "W4SQ.ChatCalibration": "{name} calibrates fire for {target}, sharpening their aim!"
 }
