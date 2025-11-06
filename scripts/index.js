@@ -5,6 +5,7 @@ import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
+import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -12,7 +13,8 @@ const IMPORT_PATHS = [
   "./logic/effects.js",
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
-  "./logic/specialists.js"
+  "./logic/specialists.js",
+  "./logic/zones.js"
 ];
 
 function isSquadActor(actor) {
@@ -202,6 +204,22 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
   html.find(".left").append(btn);
+});
+
+Hooks.on("createMeasuredTemplate", document => {
+  handleZoneTemplateCreated(document);
+});
+
+Hooks.on("updateMeasuredTemplate", document => {
+  handleZoneTemplateCreated(document);
+});
+
+Hooks.on("createToken", (tokenDoc) => {
+  handleZoneTokenCreated(tokenDoc);
+});
+
+Hooks.on("updateToken", (tokenDoc, changes) => {
+  handleZoneTokenMove(tokenDoc, changes);
 });
 
 function canSeeSquad(token) {

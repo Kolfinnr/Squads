@@ -27,6 +27,7 @@ export class SquadActorSheet extends ActorSheet {
   async getData(options) {
     const data = await super.getData(options);
     const f = (key, fallback = null) => this.actor.getFlag(FLAG_SCOPE, key) ?? fallback;
+    const role = f("role", "infantry");
     data.squad = {
       hp: f("hp", 100),
       hpMax: f("hpMax", 100),
@@ -34,8 +35,8 @@ export class SquadActorSheet extends ActorSheet {
       moraleMax: f("moraleMax", 100),
       experienceTier: f("experienceTier", 0),
       equipmentTier: f("equipmentTier", 0),
-      role: f("role", "infantry"),
-      weapon: f("weapon", "sword"),
+      role,
+      weapon: role === "specialist" ? null : f("weapon", "sword"),
       specialistType: f("specialistType", null),
       notes: f("notes", ""),
       fear: f("fear", false),

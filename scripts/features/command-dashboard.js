@@ -464,9 +464,6 @@ export class W4SQCommandApp extends Application {
       case "cmd-orders":
         await this._commandOrders(commander, squad);
         break;
-      case "cmd-reorg":
-        await this._commandReorg(commander, squad);
-        break;
       case "cmd-rally":
         await this._commandRally(commander, squad);
         break;
@@ -546,22 +543,19 @@ export class W4SQCommandApp extends Application {
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdOrders", { order: options[choice] || choice });
   }
 
-  async _commandReorg(commander, squad) {
-    if (!(await this._spendCP(commander, 1))) return;
-    const before = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
-    await MANEUVERS.reorg.apply({ actor: squad, target: squad });
-    await removeDisorganized(squad);
-    const after = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
-    const delta = Math.max(0, after - before);
-    await this._announceCommand(commander, squad, "W4SQ.ChatCmdReorg", { value: delta });
-  }
-
   async _commandRally(commander, squad) {
     if (!(await this._spendCP(commander, 1))) return;
-    const roll = await (new Roll("3d20").roll({ async: true }));
+    const roll = await (new Roll("4d20").roll({ async: true }));
     const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-    await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + roll.total));
+    const restored = Math.min(moraleMax, morale + roll.total);
+    await squad.setFlag(FLAG_SCOPE, "morale", restored);
+    await removeDisorganized(squad);
+    const effects = getEffects(squad).filter(effect => !effect?.mods?.tags?.routed);
+    await squad.setFlag(FLAG_SCOPE, "effects", effects);
+    if (restored <= 0 && moraleMax > 0) {
+      await squad.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, 1));
+    }
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdRally", { value: roll.total });
   }
 

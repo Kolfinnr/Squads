@@ -38,12 +38,17 @@
           <div class="placeholder"></div>
           <div class="placeholder"></div>
         {{/if}}
-        <label>{{localize "W4SQ.Weapon"}}</label>
-        <select name="flags.wfrp4e-squads.weapon">
-          {{#each weapons as |weapon key|}}
-            <option value="{{key}}" {{#if (eq ../squad.weapon key)}}selected{{/if}}>{{weapon.label}}</option>
-          {{/each}}
-        </select>
+        {{#unless (eq squad.role "specialist")}}
+          <label>{{localize "W4SQ.Weapon"}}</label>
+          <select name="flags.wfrp4e-squads.weapon">
+            {{#each weapons as |weapon key|}}
+              <option value="{{key}}" {{#if (eq ../squad.weapon key)}}selected{{/if}}>{{weapon.label}}</option>
+            {{/each}}
+          </select>
+        {{else}}
+          <div class="placeholder"></div>
+          <div class="placeholder"></div>
+        {{/unless}}
       </div>
       <div class="traits">
         <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.fear" {{checked squad.fear}}/> {{localize "W4SQ.TraitFear"}}</label>

@@ -1,5 +1,5 @@
 import { FLAG_SCOPE, DEFAULT_FLAGS, WEAPONS, ROLES, ROLL, SCALING } from "../config.js";
-import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardOnTarget, consumeGuardLink, addEffect } from "../logic/effects.js";
+import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardOnTarget, consumeGuardLink, addEffect, ensureEffect } from "../logic/effects.js";
 import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
@@ -131,6 +131,12 @@ async function moraleLossFor(defender, attacker, finalDamage) {
   await defender.setFlag(FLAG_SCOPE, "morale", next);
   if (morale > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatMoraleZero");
+    await ensureEffect(defender, {
+      key: "routed",
+      label: game.i18n.localize("W4SQ.EffectRouted"),
+      duration: 99,
+      mods: { tags: { routed: true, disorganized: true } }
+    }, effect => Boolean(effect?.mods?.tags?.routed));
   }
   if (moraleMax > 0 && next / moraleMax < 0.5) {
     await ensureDisorganized(defender, { source: "morale" });
@@ -161,11 +167,12 @@ export async function doSquadAction(actor, action) {
   const exp = Number(getF(actor, "experienceTier", 0));
   const eq = Number(getF(actor, "equipmentTier", 0));
   const role = getF(actor, "role", "infantry");
-  const weaponKey = getF(actor, "weapon", "sword");
-  const weapon = WEAPONS[weaponKey] ?? WEAPONS.sword;
+  const weaponKey = role === "specialist" ? null : getF(actor, "weapon", "sword");
+  const weapon = weaponKey ? (WEAPONS[weaponKey] ?? WEAPONS.sword) : { accuracyDice: "0", dmgDice: "0", pierceArmor: false };
   const roleDef = ROLES[role] ?? ROLES.infantry;
 
   const backlineAttack = Boolean(getF(actor, "backlineAttack", false));
+  const weaponLabel = weaponKey ?? "—";
   const aggAttack = aggregateForAttack(actor, { action, weapon: weaponKey });
   const roleBonus = roleBonuses(role, action);
 
@@ -274,7 +281,7 @@ export async function doSquadAction(actor, action) {
       moraleLoss: moraleResult,
       soakDetail: chipDetail.join("<br/>") || game.i18n.localize("W4SQ.ChatChip"),
       hobNotes,
-      footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
+      footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
     });
   }
 
@@ -517,6 +524,6 @@ export async function doSquadAction(actor, action) {
     soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
     backline: backlineAttack && action === "melee" && success,
     hobNotes,
-    footer: `Role ${role} · Weapon ${weaponKey} · EXP ${exp} · EQ ${eq}`
+    footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
   });
 }

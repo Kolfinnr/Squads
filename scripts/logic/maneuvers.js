@@ -1,5 +1,6 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, attachGuard, clearNegative, getEffects, removeDisorganized } from "./effects.js";
+import { requestZonePlacement } from "./zones.js";
 import {
   isMage,
   isEngineer,
@@ -460,14 +461,11 @@ export const MANEUVERS = {
     specialistType: "mage",
     difficulty: "hard",
     cooldown: 4,
-    target: "enemy",
-    apply: async ({ actor, target }) => {
-      if (!target) return;
-      const hp = await damageHP(target, "4d20");
-      const morale = await damageMorale(target, "6d20");
-      await addEffect(target, E({ tags: { zoneFirestorm: true } }, 3, `firestorm-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFirestorm")));
+    target: "self",
+    apply: async ({ actor }) => {
+      await requestZonePlacement(actor, "firestorm");
       await clearChannelledMagic(actor);
-      await postChat(actor, "W4SQ.ChatFirestorm", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+      await postChat(actor, "W4SQ.ChatFirestormDeploy", { name: actor.name ?? "" });
     }
   },
   fireball: {
@@ -555,6 +553,7 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ defSoakDice: "+2d10", tags: { braced: true, fortified: true } }, 3, `line-defense-${randomID()}`, game.i18n.localize("W4SQ.ManeuverLineDefense")));
+      await requestZonePlacement(actor, "lineDefense");
       await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });
     }
   },
@@ -570,6 +569,7 @@ export const MANEUVERS = {
       const hp = await damageHP(target, "3d20");
       const morale = await damageMorale(target, "4d20");
       await addEffect(target, E({ tags: { disorganized: true } }, 1, `minefield-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMinefield")));
+      await requestZonePlacement(actor, "minefield");
       await postChat(actor, "W4SQ.ChatMinefield", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
     }
   },
@@ -585,6 +585,7 @@ export const MANEUVERS = {
       const hp = await damageHP(target, "2d10");
       const morale = await damageMorale(target, "2d10");
       await addEffect(target, E({ tags: { skipTurn: true } }, 1, `wolf-pits-${randomID()}`, game.i18n.localize("W4SQ.ManeuverWolfPits")));
+      await requestZonePlacement(actor, "wolfPits");
       await postChat(actor, "W4SQ.ChatWolfPits", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
     }
   },
@@ -610,6 +611,7 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       await addEffect(actor, E({ defSoakDice: "+3d10", tags: { fortified: true, braced: true, immobile: true } }, 3, `fortify-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFortify")));
+      await requestZonePlacement(actor, "fortifyPosition");
       await postChat(actor, "W4SQ.ChatFortify", { name: actor.name ?? "" });
     }
   },
@@ -630,7 +632,8 @@ export const MANEUVERS = {
 
 export function maneuversFor(actor) {
   const role = actor.getFlag(FLAG_SCOPE, "role") || "infantry";
-  const weapon = actor.getFlag(FLAG_SCOPE, "weapon") || "sword";
+  const weaponFlag = actor.getFlag(FLAG_SCOPE, "weapon") || "sword";
+  const weapon = role === "specialist" ? null : weaponFlag;
   return Object.entries(MANEUVERS)
     .filter(([_, m]) => {
       if (m.category === "universal") return !m.roles || m.roles.includes(role);

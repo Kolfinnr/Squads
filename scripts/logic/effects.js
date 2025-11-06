@@ -6,7 +6,8 @@ const NEGATIVE_TAGS = new Set([
   "flanked",
   "encircled",
   "skipTurn",
-  "halfDamage"
+  "halfDamage",
+  "routed"
 ]);
 
 const NEGATIVE_DICE_KEYS = [
