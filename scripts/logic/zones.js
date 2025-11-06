@@ -34,21 +34,23 @@ function buildTemplateData(templateConfig = {}, originToken = null) {
   };
 
   if (data.t === "circle") {
-    if (config.distance != null) {
+    if (config.radiusUnits != null) {
+      data.distance = Number(config.radiusUnits) * unitDistance;
+    } else if (config.distance != null) {
       data.distance = Number(config.distance);
-    } else if (config.radiusUnits != null) {
-      data.distance = Number(config.radiusUnits);
+    } else if (config.radius != null) {
+      data.distance = Number(config.radius) * unitDistance;
     } else {
-      const radiusSquares = Number(config.radius ?? config.size ?? 1) || 1;
+      const radiusSquares = Number(config.size ?? 1) || 1;
       data.distance = radiusSquares * unitDistance;
     }
   } else {
     const widthUnits = config.widthUnits != null ? Number(config.widthUnits) : null;
     const heightUnits = config.heightUnits != null ? Number(config.heightUnits) : null;
-    const widthSquares = config.widthSquares != null ? Number(config.widthSquares) : Number(config.size ?? 1);
-    const heightSquares = config.heightSquares != null ? Number(config.heightSquares) : Number(config.size ?? 1);
-    const widthPx = widthUnits != null ? (widthUnits / unitDistance) * sizePx : widthSquares * sizePx;
-    const heightPx = heightUnits != null ? (heightUnits / unitDistance) * sizePx : heightSquares * sizePx;
+    const widthSquares = widthUnits != null ? Number(widthUnits) : (config.widthSquares != null ? Number(config.widthSquares) : Number(config.size ?? 1));
+    const heightSquares = heightUnits != null ? Number(heightUnits) : (config.heightSquares != null ? Number(config.heightSquares) : Number(config.size ?? 1));
+    const widthPx = widthSquares * sizePx;
+    const heightPx = heightSquares * sizePx;
     data.width = widthPx;
     data.height = heightPx;
   }
@@ -212,7 +214,7 @@ async function applyFortifyBuffs({ actor, document, zone }) {
 const ZONE_HANDLERS = {
   firestorm: {
     duration: 3,
-    template: { type: "circle", distance: 3 },
+    template: { type: "circle", radiusUnits: 3 },
     target: "any",
     moveSquares: 2,
     async onEnter({ actor, document, zone, sourceActor }) {
@@ -245,7 +247,7 @@ const ZONE_HANDLERS = {
   },
   lineDefense: {
     duration: 3,
-    template: { type: "circle", distance: 1.5 },
+    template: { type: "circle", radiusUnits: 1.5 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       const duration = zone.duration ?? 1;
@@ -260,7 +262,7 @@ const ZONE_HANDLERS = {
   },
   minefield: {
     duration: 3,
-    template: { type: "circle", distance: 1.5 },
+    template: { type: "circle", radiusUnits: 1.5 },
     target: "enemies",
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
@@ -283,7 +285,7 @@ const ZONE_HANDLERS = {
   },
   wolfPits: {
     duration: 3,
-    template: { type: "circle", distance: 1.5 },
+    template: { type: "circle", radiusUnits: 1.5 },
     target: "enemies",
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
@@ -311,7 +313,7 @@ const ZONE_HANDLERS = {
   },
   fortifyPosition: {
     duration: 99,
-    template: { type: "rect", widthUnits: 5, heightUnits: 4.5 },
+    template: { type: "rect", widthUnits: 5, heightUnits: 5 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });

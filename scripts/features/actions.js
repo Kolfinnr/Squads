@@ -279,7 +279,7 @@ export async function doSquadAction(actor, action) {
       margin: tn - roll.total,
       dmg: damage,
       moraleLoss: moraleResult,
-      soakDetail: chipDetail.join("<br/>") || game.i18n.localize("W4SQ.ChatChip"),
+      soakDetail: chipDetail.join(" • ") || game.i18n.localize("W4SQ.ChatChip"),
       hobNotes,
       footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
     });
@@ -521,7 +521,7 @@ export async function doSquadAction(actor, action) {
     margin: tn - roll.total,
     dmg: finalDamage,
     moraleLoss,
-    soakDetail: soakNotes.join("<br/>") || game.i18n.localize("W4SQ.ChatNoSoak"),
+    soakDetail: soakNotes.join(" • ") || game.i18n.localize("W4SQ.ChatNoSoak"),
     backline: backlineAttack && action === "melee" && success,
     hobNotes,
     footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
