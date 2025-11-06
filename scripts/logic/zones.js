@@ -44,6 +44,15 @@ function buildTemplateData(templateConfig = {}, originToken = null) {
 }
 
 async function previewTemplate(document, { originToken } = {}) {
+  if (typeof MeasuredTemplate?.createPreview === "function") {
+    try {
+      const preview = await MeasuredTemplate.createPreview({ document, user: game.user });
+      if (preview?.document) return preview.document;
+      return preview ?? null;
+    } catch (err) {
+      console.error(`${MODULE_ID} | MeasuredTemplate.createPreview failed`, err);
+    }
+  }
   if (canvas?.templates?.preview?.create) {
     try {
       return await new Promise(resolve => {
@@ -58,22 +67,6 @@ async function previewTemplate(document, { originToken } = {}) {
       });
     } catch (err) {
       console.error(`${MODULE_ID} | Template preview failed`, err);
-    }
-  }
-  if (typeof MeasuredTemplate?.createPreview === "function") {
-    try {
-      return await new Promise(resolve => {
-        MeasuredTemplate.createPreview({
-          document,
-          user: game.user,
-          callback: result => {
-            if (result?.document) return resolve(result.document);
-            resolve(result ?? null);
-          }
-        });
-      });
-    } catch (err) {
-      console.error(`${MODULE_ID} | MeasuredTemplate.createPreview failed`, err);
     }
   }
   const data = document.toObject();
@@ -106,12 +99,81 @@ async function postZoneChat(actor, key, data = {}) {
   });
 }
 
+function escapeName(actor) {
+  const raw = actor?.name ?? game.i18n.localize("W4SQ.UnknownSquad");
+  if (typeof TextEditor?.escapeHTML === "function") return TextEditor.escapeHTML(raw);
+  return raw;
+}
+
+async function postDefeatLine(actor, key) {
+  if (!actor) return;
+  const name = escapeName(actor);
+  const template = game.i18n?.has?.(key)
+    ? game.i18n.format(key, { name })
+    : `<strong>${name}</strong>`;
+  const content = `<p>${template}</p>`;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content
+  });
+}
+
+async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = null } = {}) {
+  if (!actor) return { hp: 0, morale: 0 };
+  let hp = 0;
+  let morale = 0;
+  let moraleBefore = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
+  let moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+  const hpBefore = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+  if (hpFormula) {
+    const roll = await (new Roll(hpFormula).roll({ async: true }));
+    hp = roll.total;
+    const result = await adjustFlag(actor, "hp", -hp, "hpMax");
+    const hpAfter = result.after;
+    if (hpBefore > 0 && hpAfter <= 0) {
+      await postDefeatLine(actor, "W4SQ.ChatHPZero");
+    }
+  }
+  if (moraleFormula) {
+    const roll = await (new Roll(moraleFormula).roll({ async: true }));
+    morale = roll.total;
+    const result = await adjustFlag(actor, "morale", -morale, "moraleMax");
+    const moraleAfter = result.after;
+    moraleBefore = result.before;
+    moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+    if (moraleBefore > 0 && moraleAfter <= 0) {
+      await ensureEffect(actor, {
+        key: "routed",
+        label: game.i18n.localize("W4SQ.EffectRouted"),
+        duration: 99,
+        mods: { tags: { routed: true, disorganized: true } }
+      }, effect => Boolean(effect?.mods?.tags?.routed));
+      await postDefeatLine(actor, "W4SQ.ChatMoraleZero");
+    } else if (moraleMax > 0 && moraleAfter / moraleMax < 0.5) {
+      await ensureDisorganized(actor, { source: "morale" });
+    }
+  }
+  return { hp, morale };
+}
+
+const DIRECTIONS = [
+  { dx: 0, dy: -1, label: "N" },
+  { dx: 1, dy: -1, label: "NE" },
+  { dx: 1, dy: 0, label: "E" },
+  { dx: 1, dy: 1, label: "SE" },
+  { dx: 0, dy: 1, label: "S" },
+  { dx: -1, dy: 1, label: "SW" },
+  { dx: -1, dy: 0, label: "W" },
+  { dx: -1, dy: -1, label: "NW" }
+];
+
 const ZONE_HANDLERS = {
   firestorm: {
     duration: 3,
     template: { type: "rect", widthSquares: 2, heightSquares: 2 },
     target: "any",
-    async onEnter({ actor, document, zone }) {
+    moveSquares: 2,
+    async onEnter({ actor, document, zone, sourceActor }) {
       const duration = zone.duration ?? 1;
       const key = `zone-firestorm-${document.id}-${actor.id}`;
       const label = game.i18n.localize("W4SQ.ManeuverFirestorm");
@@ -121,6 +183,22 @@ const ZONE_HANDLERS = {
         duration,
         mods: { tags: { zoneFirestorm: true, [`zone-${document.id}`]: true } }
       }, effect => effect.key === key);
+      const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
+      const caster = sourceActor ?? (zone.actorId ? game.actors.get(zone.actorId) ?? null : null) ?? actor;
+      await postZoneChat(caster, "W4SQ.ChatFirestorm", {
+        name: caster.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+        target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+        hp: damage.hp,
+        morale: damage.morale
+      });
+    },
+    async onRound({ actor, zone, sourceActor }) {
+      const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
+      await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFirestormPulse", {
+        name: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+        hp: damage.hp,
+        morale: damage.morale
+      });
     }
   },
   lineDefense: {
@@ -270,6 +348,40 @@ async function applyZone(document, handler, tokens) {
   }
 }
 
+function randomDirection() {
+  const idx = Math.floor(Math.random() * DIRECTIONS.length);
+  return DIRECTIONS[idx] ?? DIRECTIONS[0];
+}
+
+function squareDistance(squares = 1) {
+  const size = gridSize();
+  return squares * size;
+}
+
+function moveUpdate(document, handler) {
+  const squares = handler.moveSquares ?? 0;
+  if (!squares) return {};
+  const dir = randomDirection();
+  const dist = squareDistance(squares);
+  const dx = dir.dx * dist;
+  const dy = dir.dy * dist;
+  if (!dx && !dy) return {};
+  const x = (document.x ?? 0) + dx;
+  const y = (document.y ?? 0) + dy;
+  return { x, y };
+}
+
+async function handleRoundEffects(document, handler, zone) {
+  if (!handler?.onRound) return;
+  const tokens = tokensInTemplate(document, handler);
+  const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+  for (const token of tokens) {
+    const actor = token?.actor;
+    if (!actor) continue;
+    await handler.onRound({ actor, token, document, zone, sourceActor });
+  }
+}
+
 export async function requestZonePlacement(actor, zoneKey, options = {}) {
   const handler = getZoneHandler(zoneKey);
   if (!handler) {
@@ -308,6 +420,10 @@ export async function requestZonePlacement(actor, zoneKey, options = {}) {
 
 export async function handleZoneTemplateCreated(document) {
   if (!document) return;
+  if (document._w4sqSkipEnter) {
+    document._w4sqSkipEnter = false;
+    return;
+  }
   const zone = getZoneData(document);
   if (!zone) return;
   const handler = getZoneHandler(zone.key);
@@ -348,4 +464,51 @@ export async function handleZoneTokenCreated(tokenDoc) {
 
 export function getZoneHandlers() {
   return ZONE_HANDLERS;
+}
+
+export async function tickZones() {
+  if (!canvas?.scene) return;
+  const templates = canvas.templates?.placeables ?? [];
+  for (const template of templates) {
+    const document = template?.document;
+    const zone = getZoneData(document);
+    if (!zone) continue;
+    const handler = getZoneHandler(zone.key);
+    if (!handler) continue;
+    if (handler.singleUse && zone.triggered) {
+      await document.delete();
+      continue;
+    }
+
+    try {
+      await handleRoundEffects(document, handler, zone);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Zone round effect failed`, err);
+    }
+
+    const currentDuration = Number(zone.duration ?? handler.duration ?? 0);
+    const nextDuration = currentDuration > 0 ? currentDuration - 1 : 0;
+    if (nextDuration <= 0) {
+      try {
+        await document.delete();
+      } catch (err) {
+        console.error(`${MODULE_ID} | Failed to delete expired zone`, err);
+      }
+      continue;
+    }
+
+    const move = moveUpdate(document, handler);
+    const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
+    const updateData = { [flagKey]: { ...zone, duration: nextDuration } };
+    const moved = Object.keys(move).length > 0;
+    const payload = moved ? { ...move, ...updateData } : updateData;
+    try {
+      document._w4sqSkipEnter = !moved;
+      await document.update(payload);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Failed to update zone`, err);
+    } finally {
+      document._w4sqSkipEnter = false;
+    }
+  }
 }

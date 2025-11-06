@@ -50,8 +50,7 @@
 | --- | --- | --- |
 | **Ranged! Fire at the Target!** | 2 CP | Selected squad immediately performs a ranged attack and gains the `Ranged Command` cooldown for 3 rounds. |
 | **New Orders!** | 1 CP | Clears current orders and maneuver reminder, then prompts for Melee, Ranged, or Hold. Posts the new order to chat. Commanders cannot receive orders. |
-| **Keep it Together, Men!** | 1 CP | Removes Tired and Disorganized effects, then restores 2d20 Morale. |
-| **Rally!** | 1 CP | Restores 3d20 Morale instantly. |
+| **Rally!** | 1 CP | Clears Routed and Disorganized, then restores 4d20 Morale (units at 0 Morale stand back up at 1). |
 | **Unit! Withdraw!** | 1 CP | Removes Flanked/Encircled tags and grants Withdraw for 1 round (+1d10 Defense soak, Disengaged). |
 | **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. |
 | **Player Special Action** | 1 CP | Prompts custom text and posts it to chat for narration. |

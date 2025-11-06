@@ -76,7 +76,21 @@ export class SquadActorSheet extends ActorSheet {
           if (value === "true") value = true;
           if (value === "false") value = false;
         }
-        await this.actor.update({ [input.name]: value });
+        const update = { [input.name]: value };
+        if (input.name === `flags.${FLAG_SCOPE}.role`) {
+          if (value === "specialist") {
+            update[`flags.${FLAG_SCOPE}.weapon`] = null;
+          } else {
+            const current = this.actor.getFlag(FLAG_SCOPE, "weapon");
+            if (!current) {
+              update[`flags.${FLAG_SCOPE}.weapon`] = DEFAULT_FLAGS.weapon;
+            }
+          }
+        }
+        if (input.name === `flags.${FLAG_SCOPE}.specialistType` && value === "") {
+          update[input.name] = null;
+        }
+        await this.actor.update(update);
       });
     });
   }

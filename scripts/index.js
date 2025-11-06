@@ -5,7 +5,7 @@ import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
-import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated } from "./logic/zones.js";
+import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -102,6 +102,13 @@ async function processTurnTick(combat) {
   if (!combatant) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
+  }
+  if (turn === 0) {
+    try {
+      await tickZones();
+    } catch (err) {
+      console.error(`${MODULE_ID} | tickZones failed`, err);
+    }
   }
   const actor = combatant.actor;
   if (!isSquadActor(actor)) {
