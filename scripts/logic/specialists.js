@@ -1,5 +1,6 @@
 import { FLAG_SCOPE, SPECIALIST_TYPES } from "../config.js";
 import { addEffect, ensureDisorganized } from "./effects.js";
+import { spawnZone, randomScenePoint } from "./zones.js";
 
 function logDebug(...args) {
   if (globalThis.console?.debugSpecialist) {
@@ -17,7 +18,7 @@ async function applyDelta(actor, key, delta, { min = 0, max = null } = {}) {
   if (!actor) return 0;
   const current = Number(actor.getFlag(FLAG_SCOPE, key) || 0);
   const flagMax = Number(actor.getFlag(FLAG_SCOPE, `${key}Max`) || 0);
-  const targetMax = max ?? (flagMax || null);
+  const targetMax = (max ?? flagMax) || null;
   let value = current + delta;
   if (targetMax !== null) value = Math.min(targetMax, value);
   value = Math.max(min, value);
@@ -36,6 +37,28 @@ async function notify(actor, key, data = {}) {
   const speaker = ChatMessage.getSpeaker({ actor });
   const content = `<p>${formatMessage(key, data)}</p>`;
   await ChatMessage.create({ speaker, content });
+}
+
+function tokenCenter(token) {
+  if (!token) return { x: 0, y: 0 };
+  if (token.center) return token.center;
+  return { x: token.x + (token.width ?? 0) / 2, y: token.y + (token.height ?? 0) / 2 };
+}
+
+function randomFriendlyToken(actor) {
+  const tokens = canvas?.tokens?.placeables ?? [];
+  if (!tokens.length) return null;
+  const origin = actor?.getActiveTokens?.(true)?.[0] ?? null;
+  const disposition = origin?.document?.disposition ?? null;
+  const filtered = tokens.filter(token => {
+    if (!token?.actor) return false;
+    if (disposition === null) return true;
+    return token.document?.disposition === disposition;
+  });
+  const pool = filtered.length ? filtered : tokens.filter(t => t?.actor);
+  if (!pool.length) return null;
+  const index = Math.floor(Math.random() * pool.length);
+  return pool[index] ?? null;
 }
 
 export function getSpecialistType(actor) {
@@ -150,45 +173,58 @@ const MINOR_PERILS = [
 ];
 
 const MAJOR_PERILS = [
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     const hp = await rollTotal("5d20");
     const morale = await rollTotal("7d20");
     await applyDelta(actor, "hp", -hp.total, { min: 0 });
     await applyDelta(actor, "morale", -morale.total, { min: 0 });
     await notify(actor, "W4SQ.PerilMajor1", { hp: hp.total, morale: morale.total });
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor2");
   },
-  async actor => {
-    const roll = await rollTotal("2d20");
-    await applyDelta(actor, "morale", -roll.total);
-    await notify(actor, "W4SQ.PerilMajor3", { value: roll.total });
+  async (actor, { roll = 0, context = {} } = {}) => {
+    const perilRoll = await rollTotal("2d20");
+    await applyDelta(actor, "morale", -perilRoll.total);
+    await notify(actor, "W4SQ.PerilMajor3", { value: perilRoll.total });
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor4");
   },
-  async actor => {
-    const roll = await rollTotal("6d20");
-    await applyDelta(actor, "hp", -roll.total);
-    await notify(actor, "W4SQ.PerilMajor5", { value: roll.total });
+  async (actor, { roll = 0, context = {} } = {}) => {
+    const perilRoll = await rollTotal("6d20");
+    await applyDelta(actor, "hp", -perilRoll.total);
+    await notify(actor, "W4SQ.PerilMajor5", { value: perilRoll.total });
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor6");
+    if (context?.maneuverKey === "firestorm") {
+      const point = randomScenePoint();
+      if (point) {
+        await spawnZone(actor, "firestorm", { position: point });
+      }
+    }
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor7");
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor8");
+    if (context?.maneuverKey === "firestorm") {
+      const token = randomFriendlyToken(actor);
+      if (token) {
+        const center = tokenCenter(token);
+        await spawnZone(actor, "firestorm", { position: center, originToken: token });
+      }
+    }
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await ensureDisorganized(actor, { source: "peril" });
-    const roll = await rollTotal("1d20");
-    await applyDelta(actor, "morale", -roll.total);
-    await notify(actor, "W4SQ.PerilMajor9", { value: roll.total });
+    const perilRoll = await rollTotal("1d20");
+    await applyDelta(actor, "morale", -perilRoll.total);
+    await notify(actor, "W4SQ.PerilMajor9", { value: perilRoll.total });
   },
-  async actor => {
+  async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor10");
   }
 ];
@@ -259,12 +295,12 @@ export async function triggerMinorPeril(actor) {
   await entry(actor);
 }
 
-export async function triggerMajorPeril(actor) {
+export async function triggerMajorPeril(actor, context = {}) {
   if (!actor) return;
   const { entry, roll } = await pickEntry(MAJOR_PERILS);
-  logDebug("Major Peril", actor.name, roll.total);
+  logDebug("Major Peril", actor.name, roll.total, context);
   await notify(actor, "W4SQ.PerilMajorRoll", { roll: roll.total });
-  await entry(actor);
+  await entry(actor, { roll: roll.total, context });
 }
 
 export async function triggerEngineerMishap(actor) {

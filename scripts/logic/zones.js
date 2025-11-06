@@ -16,10 +16,26 @@ function gridDistance() {
   return canvas?.dimensions?.distance ?? canvas?.grid?.distance ?? 5;
 }
 
+function sceneBounds() {
+  const dims = canvas?.dimensions;
+  if (dims) {
+    const size = dims.size ?? gridSize();
+    const width = dims.sceneWidth ?? ((dims.width ?? 0) * size);
+    const height = dims.sceneHeight ?? ((dims.height ?? 0) * size);
+    const x = dims.sceneX ?? 0;
+    const y = dims.sceneY ?? 0;
+    return { x, y, width, height };
+  }
+  const grid = gridSize();
+  const scene = canvas?.scene;
+  const width = (scene?.width ?? 0) * grid;
+  const height = (scene?.height ?? 0) * grid;
+  return { x: 0, y: 0, width, height };
+}
+
 function buildTemplateData(templateConfig = {}, originToken = null) {
   const defaults = { type: "rect" };
   const config = foundry.utils.mergeObject(defaults, templateConfig ?? {}, { inplace: false });
-  const sizePx = gridSize();
   const unitDistance = gridDistance() || 1;
   const originX = originToken ? (originToken.center?.x ?? (originToken.x + originToken.width / 2)) : 0;
   const originY = originToken ? (originToken.center?.y ?? (originToken.y + originToken.height / 2)) : 0;
@@ -35,24 +51,30 @@ function buildTemplateData(templateConfig = {}, originToken = null) {
 
   if (data.t === "circle") {
     if (config.radiusUnits != null) {
-      data.distance = Number(config.radiusUnits) * unitDistance;
+      data.distance = Number(config.radiusUnits);
     } else if (config.distance != null) {
       data.distance = Number(config.distance);
     } else if (config.radius != null) {
       data.distance = Number(config.radius) * unitDistance;
+    } else if (config.size != null) {
+      data.distance = Number(config.size) * unitDistance;
     } else {
-      const radiusSquares = Number(config.size ?? 1) || 1;
-      data.distance = radiusSquares * unitDistance;
+      data.distance = unitDistance;
     }
   } else {
-    const widthUnits = config.widthUnits != null ? Number(config.widthUnits) : null;
-    const heightUnits = config.heightUnits != null ? Number(config.heightUnits) : null;
-    const widthSquares = widthUnits != null ? Number(widthUnits) : (config.widthSquares != null ? Number(config.widthSquares) : Number(config.size ?? 1));
-    const heightSquares = heightUnits != null ? Number(heightUnits) : (config.heightSquares != null ? Number(config.heightSquares) : Number(config.size ?? 1));
-    const widthPx = widthSquares * sizePx;
-    const heightPx = heightSquares * sizePx;
-    data.width = widthPx;
-    data.height = heightPx;
+    const fallback = Number(config.size ?? 1) || 1;
+    const widthUnits = config.widthUnits != null
+      ? Number(config.widthUnits)
+      : config.widthSquares != null
+        ? Number(config.widthSquares) * unitDistance
+        : fallback * unitDistance;
+    const heightUnits = config.heightUnits != null
+      ? Number(config.heightUnits)
+      : config.heightSquares != null
+        ? Number(config.heightSquares) * unitDistance
+        : fallback * unitDistance;
+    data.distance = widthUnits || unitDistance;
+    data.width = heightUnits || unitDistance;
   }
 
   return data;
@@ -189,11 +211,12 @@ function deepDefenseKey(document, actor) {
 async function applyFortifyBuffs({ actor, document, zone }) {
   if (!actor) return;
   const baseKey = `zone-fortify-${document.id}-${actor.id}`;
+  const activeDuration = Math.max(1, Number(zone?.duration ?? 1));
   await removeEffectByKey(actor, baseKey);
   await addEffect(actor, {
     key: baseKey,
     label: game.i18n.localize("W4SQ.ManeuverFortify"),
-    duration: 2,
+    duration: activeDuration,
     mods: { defSoakDice: "+3d10", tags: { fortified: true, braced: true } }
   });
 
@@ -203,7 +226,7 @@ async function applyFortifyBuffs({ actor, document, zone }) {
     await addEffect(actor, {
       key,
       label: game.i18n.localize("W4SQ.EffectDeepDefense"),
-      duration: 2,
+      duration: activeDuration,
       mods: { defSoakDice: "+1d20", tags: { deepDefense: true } }
     });
   } else {
@@ -313,7 +336,7 @@ const ZONE_HANDLERS = {
   },
   fortifyPosition: {
     duration: 99,
-    template: { type: "rect", widthUnits: 5, heightUnits: 5 },
+    template: { type: "rect", widthUnits: 5, heightUnits: 4.5 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });
@@ -507,6 +530,17 @@ async function handleRoundEffects(document, handler, zone, tokensOverride) {
   }
 }
 
+export function randomScenePoint(padding = 0) {
+  const bounds = sceneBounds();
+  if (!bounds.width || !bounds.height) return null;
+  const pad = Math.max(0, Number(padding) || 0);
+  const width = Math.max(0, bounds.width - pad * 2);
+  const height = Math.max(0, bounds.height - pad * 2);
+  const x = bounds.x + pad + Math.random() * (width || 0);
+  const y = bounds.y + pad + Math.random() * (height || 0);
+  return { x, y };
+}
+
 export async function requestZonePlacement(actor, zoneKey, options = {}) {
   const handler = getZoneHandler(zoneKey);
   if (!handler) {
@@ -542,6 +576,43 @@ export async function requestZonePlacement(actor, zoneKey, options = {}) {
   const document = new DocumentClass(templateData, { parent: canvas.scene });
   const placed = await previewTemplate(document, { originToken });
   return placed ?? null;
+}
+
+export async function spawnZone(actor, zoneKey, options = {}) {
+  const handler = getZoneHandler(zoneKey);
+  if (!handler) {
+    console.warn(`${MODULE_ID} | Unknown zone key`, zoneKey);
+    return null;
+  }
+  if (!canvas?.scene) {
+    console.warn(`${MODULE_ID} | No scene to spawn zone ${zoneKey}`);
+    return null;
+  }
+  const originToken = options.originToken ?? getOriginToken(actor);
+  const templateData = buildTemplateData(options.template ?? handler.template, originToken);
+  if (options.position) {
+    templateData.x = options.position.x ?? templateData.x;
+    templateData.y = options.position.y ?? templateData.y;
+  }
+  const zoneData = {
+    key: zoneKey,
+    duration: options.duration ?? handler.duration ?? 1,
+    actorId: actor?.id ?? null,
+    tokenId: options.tokenId ?? originToken?.id ?? null,
+    disposition: options.disposition ?? originToken?.document?.disposition ?? null,
+    target: options.target ?? handler.target ?? "any",
+    extra: options.extra ?? {},
+    occupants: []
+  };
+  templateData.flags = templateData.flags ?? {};
+  templateData.flags[MODULE_ID] = { [FLAG_KEY]: zoneData };
+  try {
+    const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+    return created?.[0] ?? null;
+  } catch (err) {
+    console.error(`${MODULE_ID} | Failed to spawn zone ${zoneKey}`, err);
+    return null;
+  }
 }
 
 export async function handleZoneTemplateCreated(document) {

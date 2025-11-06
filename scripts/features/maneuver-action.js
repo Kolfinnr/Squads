@@ -238,7 +238,7 @@ async function executeManeuver(actor, maneuver) {
     await setCooldown(actor, maneuver.key, maneuver.cooldown);
   }
   if (echoAuto) {
-    await triggerMajorPeril(actor);
+    await triggerMajorPeril(actor, { maneuverKey: maneuver.key, result: "echo" });
   }
   ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),

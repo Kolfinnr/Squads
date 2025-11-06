@@ -33,6 +33,10 @@ async function enforceMoraleState(actor) {
 async function reduceActiveManeuver(actor) {
   const current = actor.getFlag(FLAG_SCOPE, "activeManeuver");
   if (!current) return;
+  if (typeof current !== "object") {
+    await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
+    return;
+  }
   const active = foundry.utils.duplicate(current);
   const remaining = Math.max(0, Number(active.remaining ?? 0) - 1);
   if (remaining <= 0) {

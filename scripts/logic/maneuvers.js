@@ -658,7 +658,7 @@ export async function onManeuverFail(actor, maneuver = null) {
         await triggerMinorPeril(actor);
         await clearChannelledMagic(actor);
       } else {
-        await triggerMajorPeril(actor);
+        await triggerMajorPeril(actor, { maneuverKey: maneuver?.key ?? null, result: "fail" });
         await clearChannelledMagic(actor);
       }
     } else if (maneuver.specialistType === "engineer") {
