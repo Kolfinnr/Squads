@@ -261,8 +261,9 @@ async function applyFortifyBuffs({ actor, document, zone }) {
 const ZONE_HANDLERS = {
   firestorm: {
     duration: 3,
-    template: { type: "circle", radiusUnits: 3 },
+    template: { type: "circle", radiusUnits: 4 },
     target: "any",
+    initialDelay: true,
     moveSquares: 2,
     async onEnter({ actor, document, zone, sourceActor }) {
       const duration = zone.duration ?? 1;
@@ -360,7 +361,7 @@ const ZONE_HANDLERS = {
   },
   fortifyPosition: {
     duration: 99,
-    template: { type: "rect", widthUnits: 5, heightUnits: 4.5 },
+    template: { type: "rect", widthUnits: 3, heightUnits: 3 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });
@@ -511,9 +512,117 @@ function recordsEqual(a, b) {
   }
 }
 
-async function applyZone(document, handler, tokens) {
+function zoneExtra(zone) {
+  const source = zone?.extra;
+  if (!source || typeof source !== "object") return {};
+  if (foundry?.utils?.duplicate) {
+    try {
+      return foundry.utils.duplicate(source);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Failed to duplicate zone extra`, err, source);
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(source));
+  } catch (err) {
+    console.error(`${MODULE_ID} | JSON clone failed for zone extra`, err, source);
+  }
+  return { ...source };
+}
+
+async function setZoneExtra(document, zone, extra) {
+  if (!document || !zone) return zone;
+  const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
+  const updated = foundry.utils.mergeObject(zone, { extra }, { inplace: false });
+  try {
+    document._w4sqSkipEnter = true;
+    await document.update({ [flagKey]: updated }, { diff: false, recursive: false });
+  } catch (err) {
+    console.error(`${MODULE_ID} | Failed to update zone extra`, err);
+  } finally {
+    document._w4sqSkipEnter = false;
+  }
+  return getZoneData(document) ?? updated;
+}
+
+function shouldDelayEnter(zone, handler) {
+  if (!zone || !handler?.onEnter) return false;
+  const extra = zone.extra ?? {};
+  if (Array.isArray(extra.pendingEnter) && extra.pendingEnter.length) return true;
+  if (extra.delayEnter) return true;
+  if (handler.initialDelay && !extra.delayConsumed) return true;
+  return false;
+}
+
+async function queueDelayedEnter(document, handler, tokens) {
+  if (!document || !handler || !tokens?.length) return getZoneData(document);
   const zone = getZoneData(document);
+  if (!zone) return zone;
+  const extra = zoneExtra(zone);
+  const pending = new Set(extra.pendingEnter ?? []);
+  for (const token of tokens) {
+    if (!token?.id) continue;
+    pending.add(token.id);
+  }
+  extra.pendingEnter = [...pending];
+  extra.delayEnter = true;
+  return await setZoneExtra(document, zone, extra);
+}
+
+async function flushDelayedEnter(document, handler, zone, tokens) {
+  if (!document || !handler?.onEnter || !zone || !tokens?.length) return zone;
+  const extra = zoneExtra(zone);
+  const pending = new Set(extra.pendingEnter ?? []);
+  const processed = [];
+  for (const token of tokens) {
+    if (!token?.id) continue;
+    if (pending.has(token.id)) {
+      processed.push(token);
+      pending.delete(token.id);
+    }
+  }
+  if (!processed.length) return zone;
+
+  extra.pendingEnter = [...pending];
+  extra.delayEnter = pending.size > 0;
+  extra.delayConsumed = true;
+  const updatedZone = await setZoneExtra(document, zone, extra);
+  const sourceActor = updatedZone.actorId ? game.actors?.get(updatedZone.actorId) ?? null : null;
+  for (const token of processed) {
+    const actor = token?.actor;
+    if (!actor) continue;
+    await handler.onEnter({ actor, token, document, zone: updatedZone, sourceActor });
+  }
+  return getZoneData(document) ?? updatedZone;
+}
+
+async function removePendingEnter(document, zone, tokenIds) {
+  if (!document || !tokenIds?.length) return zone;
+  const currentZone = getZoneData(document) ?? zone;
+  if (!currentZone) return zone;
+  const extra = zoneExtra(currentZone);
+  const pending = new Set(extra.pendingEnter ?? []);
+  let changed = false;
+  for (const id of tokenIds) {
+    if (pending.delete(id)) {
+      changed = true;
+    }
+  }
+  if (!changed) return currentZone;
+  extra.pendingEnter = [...pending];
+  if (!pending.size) {
+    extra.delayEnter = false;
+  }
+  return await setZoneExtra(document, currentZone, extra);
+}
+
+async function applyZone(document, handler, tokens) {
+  let zone = getZoneData(document);
   if (!zone || !handler?.onEnter) return;
+  if (shouldDelayEnter(zone, handler)) {
+    zone = await queueDelayedEnter(document, handler, tokens);
+    return;
+  }
   const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
   for (const token of tokens) {
     const actor = token?.actor;
@@ -549,6 +658,7 @@ async function syncZoneOccupants(document, handler, tokens) {
         console.error(`${MODULE_ID} | Zone onExit failed`, err);
       }
     }
+    await removePendingEnter(document, zone, exitedRecords.map(rec => rec.tokenId));
   }
 
   if (!recordsEqual(previous, currentRecords)) {
@@ -592,12 +702,23 @@ function moveUpdate(document, handler) {
 
 async function handleRoundEffects(document, handler, zone, tokensOverride) {
   if (!handler?.onRound) return;
-  const tokens = tokensOverride ?? tokensInTemplate(document, handler);
-  const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+  let tokens = tokensOverride ?? tokensInTemplate(document, handler);
+  let currentZone = zone;
+  const pending = new Set((zone.extra?.pendingEnter ?? []));
+  if (pending.size) {
+    const pendingTokens = tokens.filter(token => pending.has(token.id));
+    if (pendingTokens.length) {
+      currentZone = await flushDelayedEnter(document, handler, zone, pendingTokens) ?? zone;
+      const skipSet = new Set(pendingTokens.map(token => token.id));
+      tokens = tokens.filter(token => !skipSet.has(token.id));
+    }
+  }
+
+  const sourceActor = currentZone.actorId ? game.actors?.get(currentZone.actorId) ?? null : null;
   for (const token of tokens) {
     const actor = token?.actor;
     if (!actor) continue;
-    await handler.onRound({ actor, token, document, zone, sourceActor });
+    await handler.onRound({ actor, token, document, zone: currentZone, sourceActor });
   }
 }
 

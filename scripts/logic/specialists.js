@@ -17,9 +17,7 @@ async function rollTotal(formula) {
 async function applyDelta(actor, key, delta, { min = 0, max = null } = {}) {
   if (!actor) return 0;
   const current = Number(actor.getFlag(FLAG_SCOPE, key) || 0);
-  const flagMax = Number(actor.getFlag(FLAG_SCOPE, `${key}Max`) || 0);
-  const resolvedMax = max ?? flagMax;
-  const targetMax = resolvedMax ?? null;
+  const targetMax = (max ?? Number(actor.getFlag(FLAG_SCOPE, `${key}Max`) || 0)) || null;
   let value = current + delta;
   if (targetMax !== null) value = Math.min(targetMax, value);
   value = Math.max(min, value);
