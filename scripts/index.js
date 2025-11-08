@@ -116,8 +116,14 @@ async function processTurnTick(combat, context = {}) {
     return;
   }
   const isRoundStart = turn === 0;
+  const tickContext = {
+    ...(context ?? {}),
+    combatId: combat.id ?? combat._id ?? null,
+    round,
+    turn
+  };
   try {
-    await tickZones({ isRoundStart, context });
+    await tickZones({ isRoundStart, context: tickContext });
   } catch (err) {
     console.error(`${MODULE_ID} | tickZones failed`, err);
   }

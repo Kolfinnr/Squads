@@ -264,6 +264,7 @@ const ZONE_HANDLERS = {
     template: { type: "circle", radiusUnits: 4 },
     target: "any",
     initialDelay: true,
+    roundOnly: true,
     moveSquares: 2,
     async onEnter({ actor, document, zone, sourceActor }) {
       const duration = zone.duration ?? 1;
@@ -361,7 +362,7 @@ const ZONE_HANDLERS = {
   },
   fortifyPosition: {
     duration: 99,
-    template: { type: "rect", widthUnits: 3, heightUnits: 3 },
+    template: { type: "rect", widthUnits: 3, heightUnits: 3, size: 3 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });
@@ -700,8 +701,15 @@ function moveUpdate(document, handler) {
   return { x, y };
 }
 
-async function handleRoundEffects(document, handler, zone, tokensOverride) {
+async function handleRoundEffects(document, handler, zone, tokensOverride, { context = {} } = {}) {
   if (!handler?.onRound) return;
+  if (handler.roundOnly && context?.round != null) {
+    const extra = zoneExtra(zone);
+    const lastRound = extra.lastRound ?? null;
+    if (lastRound === context.round) {
+      return;
+    }
+  }
   let tokens = tokensOverride ?? tokensInTemplate(document, handler);
   let currentZone = zone;
   const pending = new Set((zone.extra?.pendingEnter ?? []));
@@ -719,6 +727,12 @@ async function handleRoundEffects(document, handler, zone, tokensOverride) {
     const actor = token?.actor;
     if (!actor) continue;
     await handler.onRound({ actor, token, document, zone: currentZone, sourceActor });
+  }
+
+  if (handler.roundOnly && context?.round != null) {
+    const extra = zoneExtra(currentZone);
+    extra.lastRound = context.round;
+    await setZoneExtra(document, currentZone, extra);
   }
 }
 
@@ -849,7 +863,7 @@ export function getZoneHandlers() {
   return ZONE_HANDLERS;
 }
 
-export async function tickZones({ isRoundStart = false } = {}) {
+export async function tickZones({ isRoundStart = false, context = {} } = {}) {
   if (!canvas?.scene) return;
   const templates = canvas.templates?.placeables ?? [];
   for (const template of templates) {
@@ -887,10 +901,13 @@ export async function tickZones({ isRoundStart = false } = {}) {
     }
 
     tokens = tokensInTemplate(document, handler);
-    try {
-      await handleRoundEffects(document, handler, zoneState, tokens);
-    } catch (err) {
-      console.error(`${MODULE_ID} | Zone round effect failed`, err);
+    const allowRound = !handler.roundOnly || context?.round != null;
+    if (allowRound) {
+      try {
+        await handleRoundEffects(document, handler, zoneState, tokens, { context });
+      } catch (err) {
+        console.error(`${MODULE_ID} | Zone round effect failed`, err);
+      }
     }
 
     if (!isRoundStart) continue;
