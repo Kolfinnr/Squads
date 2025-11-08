@@ -2,7 +2,8 @@ import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS, SPECIALIST_T
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
 import { getEffectsDetailed } from "../logic/effects.js";
-import { listCooldowns } from "../logic/cooldowns.js";
+import { getCooldown, listCooldowns } from "../logic/cooldowns.js";
+import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 
 function formatTurns(value) {
@@ -56,6 +57,23 @@ export class SquadActorSheet extends ActorSheet {
       ...cd,
       turnsLabel: formatTurns(cd.rounds ?? 0)
     }));
+    const specialistCooldowns = [];
+    if (role === "specialist") {
+      const maneuvers = maneuversFor(this.actor).filter(m => m.category === "specialist");
+      for (const maneuver of maneuvers) {
+        const base = Number(maneuver.cooldown || 0);
+        const remaining = getCooldown(this.actor, maneuver.key);
+        specialistCooldowns.push({
+          key: maneuver.key,
+          name: maneuver.name,
+          base,
+          baseLabel: base > 0 ? formatTurns(base) : game.i18n.localize("W4SQ.None"),
+          remaining,
+          remainingLabel: remaining > 0 ? formatTurns(remaining) : game.i18n.localize("W4SQ.CooldownReady")
+        });
+      }
+    }
+    data.specialistCooldowns = specialistCooldowns;
     data.roles = ROLES;
     data.weapons = WEAPONS;
     data.specialistTypes = SPECIALIST_TYPES;

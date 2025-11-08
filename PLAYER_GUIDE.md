@@ -24,24 +24,24 @@
 ## Specialist Roles
 - Set a squad’s role to **Specialist** and choose a subtype (Mage or Engineer) on the sheet.
 - Specialists use the standard TN formula, but their effective chance is capped at 90 and then scaled by current HP%. As formations weaken their spellcraft or engineering becomes harder to execute.
-- Specialist maneuvers track individual cooldowns (4 rounds for spells, 2 rounds for engineering actions). Cooldowns appear in the squad sheet and dashboard like other abilities.
+- Specialist maneuvers track individual cooldowns (4 rounds for spells, 2 rounds for engineering actions). The squad sheet lists each specialist ability with its base cooldown and remaining turns alongside the dashboard badges.
 - Mage spells require **Channel Magic** first; failing the channel invokes **Minor Perils** while failed spells trigger **Major Perils**. Engineers risk **Engineering Mishaps** on failed maneuvers.
 
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
-- **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage and leaves a lingering blaze effect.
-- **Fireball** (enemy): 3d20 HP and 4d20 Morale damage with a dramatic chat recap.
-- **Doom & Gloom** (enemy): Drains 4d20 Morale and inflicts −2d10 TN for 2 rounds.
+- **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage in a roaming 4-yard blaze that pulses once per round for 3 rounds.
+- **Fireball** (enemy): 20 + 3d10 HP and Morale damage with a dramatic chat recap.
+- **Doom & Gloom** (enemy): Drains 50 + 5d10 Morale and inflicts −2d20 TN for 2 rounds.
 - **Transmutation of Lead** (enemy): Strips Equipment Tier ×1d10 soak for 2 rounds.
-- **Magical Revification** (ally): Restores 4d10 HP and 4d10 Morale.
-- **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 1 round.
+- **Magical Revification** (ally): Restores 20 + 2d20 HP and 10 + 3d20 Morale.
+- **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 2 rounds.
 
 ### Engineer Maneuvers (Average/Hard, CD 2)
-- **Line Defense** (self): Erects barricades, adding +2d10 soak and Fortified/Braced tags for 3 turns.
+- **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies inside for 3 rounds.
 - **Minefield** (enemy): Deals 3d20 HP and 4d20 Morale, leaving the foe Disorganized.
 - **Wolf Pits** (enemy): 2d10 HP and 2d10 Morale damage plus a skip-turn snare.
-- **Flashbombs** (enemy): Blinds the target with −10d10 TN and Disorganized for 2 rounds.
-- **Fortify Position** (self): Grants +3d10 soak, Fortified, and Immobile for 3 rounds.
+- **Flashbombs** (enemy): Blinds the target with −(50 + 5d10) TN and Disorganized for 2 rounds.
+- **Fortify Position** (self): Establishes a 3.5-yard fortification that grants +10 + 2d10 soak and Fortified to allies inside; the engineer also gains Deep Defense (20 + 2d20 soak) and becomes Immobile while within the bastion.
 - **Ballistic Calibration** (ally): +5d10 TN to a ranged ally for 6 rounds.
 - Failed engineering maneuvers roll on the Mishap table; one result grants a “Spark of Genius” auto-pass on the next attempt.
 
@@ -121,6 +121,29 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 - **Trample** (Average, enemy): Deal 1d10 HP and 1d20 Morale damage, force Loose Formation, but the squad becomes Disorganized.
 - **Wheel About** (Average, self): Remove Flanked and gain +1d20 Defense soak next turn.
 - **Breakthrough** (Hard, self): Clear debuffs on self and adjacent allies, then restore 2d20 Morale and announce the surge in chat.
+
+## Active Effects Reference
+The sheet and dashboard list active effects with coloured chips. Common statuses include:
+
+- **Channelled Magic** – The mage has successfully channelled and may cast a spell. Casting or certain perils clear it.
+- **Charged** – Granted by Charge maneuvers or HoB; adds extra TN/damage to the next melee attack.
+- **Braced** – Defensive stance that adds soak and, for polearms, punishes charging foes.
+- **Loose Formation** – Spreads out to resist ranged attacks (+ranged resistance, −defense soak).
+- **Disengaged** – Easier withdrawal from melee; often paired with Withdraw or Guarded Withdrawal.
+- **Guarding / Guarded** – An infantry unit intercepts melee hits for an ally; strain damage applies when the guard is struck.
+- **Guarded Withdrawal** – The protected ally may disengage safely on its next turn.
+- **Spent Maneuver** – The unit cannot attempt further maneuvers until the next turn (e.g., after Intercept!).
+- **Fortified** – Heavy cover; immunity to Flanked while in fortifications and +10 + 2d10 soak.
+- **Deep Defense** – Engineers inside their fortification gain an additional 20 + 2d20 soak versus incoming damage.
+- **Immobile** – Unit cannot move or perform maneuvers that require movement (common for entrenched engineers).
+- **Cover Aura** – Provided by smoke bombs and similar abilities; grants soft cover to units inside the zone.
+- **Free Move** – Allows repositioning without provoking counter-attack (e.g., Shadowplay).
+- **Continuous Fire / Half Damage** – Sustained ranged attack that halves outgoing damage while the barrage continues.
+- **Skip Turn** – The unit forfeits its next activation.
+- **Tired** – Standard fatigue penalty (−1d10 TN & damage, −1d20 defense) until cleared by Reorganization or rest.
+- **Disorganized** – Severe cohesion loss (−1d20 TN & defense) applied on failed maneuvers or low morale; cleared by Reorganization/Rally.
+- **Routed!** – Morale has fallen to 0; the unit flees until successfully rallied.
+- **Fire Aspect** – Spell buff providing +TN, +damage, and +defense for 2 turns.
 
 ## Heat of Battle Tables (Roll 1d10)
 Heat of Battle (HoB) events trigger automatically on doubles, or the first time HP or Morale drop below 30%. Roll on the corresponding table and apply the listed effects immediately.

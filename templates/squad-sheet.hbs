@@ -93,6 +93,19 @@
             {{/each}}
           </ul>
         </div>
+        {{#if specialistCooldowns.length}}
+          <div>
+            <h3>{{localize "W4SQ.SpecialistCooldowns"}}</h3>
+            <ul class="specialist-cooldowns">
+              {{#each specialistCooldowns as |entry|}}
+                <li>
+                  <strong>{{entry.name}}</strong>
+                  <span class="cooldown-meta">{{localize "W4SQ.SpecialistCooldownBase"}}: {{entry.baseLabel}} • {{localize "W4SQ.SpecialistCooldownRemaining"}}: {{entry.remainingLabel}}</span>
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
           {{#if effects.length}}

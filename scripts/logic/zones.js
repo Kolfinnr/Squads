@@ -237,11 +237,15 @@ async function applyFortifyBuffs({ actor, document, zone }) {
   const baseKey = `zone-fortify-${document.id}-${actor.id}`;
   const activeDuration = Math.max(1, Number(zone?.duration ?? 1));
   await removeEffectByKey(actor, baseKey);
+  const baseTags = { fortified: true, braced: true };
+  if (zone?.actorId && actor.id === zone.actorId) {
+    baseTags.immobile = true;
+  }
   await addEffect(actor, {
     key: baseKey,
     label: game.i18n.localize("W4SQ.ManeuverFortify"),
     duration: activeDuration,
-    mods: { defSoakDice: "+3d10", tags: { fortified: true, braced: true } }
+    mods: { defSoakDice: "+10+2d10", tags: baseTags }
   });
 
   if (zone?.actorId && actor.id === zone.actorId) {
@@ -251,7 +255,7 @@ async function applyFortifyBuffs({ actor, document, zone }) {
       key,
       label: game.i18n.localize("W4SQ.EffectDeepDefense"),
       duration: activeDuration,
-      mods: { defSoakDice: "+1d20", tags: { deepDefense: true } }
+      mods: { defSoakDice: "+20+2d20", tags: { deepDefense: true } }
     });
   } else {
     await removeEffectByKey(actor, deepDefenseKey(document, actor));
@@ -702,12 +706,14 @@ function moveUpdate(document, handler) {
 }
 
 async function handleRoundEffects(document, handler, zone, tokensOverride, { context = {} } = {}) {
-  if (!handler?.onRound) return;
+  if (!handler?.onRound) {
+    return { triggered: false, zone };
+  }
   if (handler.roundOnly && context?.round != null) {
     const extra = zoneExtra(zone);
     const lastRound = extra.lastRound ?? null;
     if (lastRound === context.round) {
-      return;
+      return { triggered: false, zone };
     }
   }
   let tokens = tokensOverride ?? tokensInTemplate(document, handler);
@@ -723,17 +729,20 @@ async function handleRoundEffects(document, handler, zone, tokensOverride, { con
   }
 
   const sourceActor = currentZone.actorId ? game.actors?.get(currentZone.actorId) ?? null : null;
+  let triggered = false;
   for (const token of tokens) {
     const actor = token?.actor;
     if (!actor) continue;
     await handler.onRound({ actor, token, document, zone: currentZone, sourceActor });
+    triggered = true;
   }
 
   if (handler.roundOnly && context?.round != null) {
     const extra = zoneExtra(currentZone);
     extra.lastRound = context.round;
-    await setZoneExtra(document, currentZone, extra);
+    currentZone = await setZoneExtra(document, currentZone, extra);
   }
+  return { triggered: triggered || (handler.roundOnly && context?.round != null), zone: currentZone };
 }
 
 export function randomScenePoint(padding = 0) {
@@ -877,10 +886,14 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       continue;
     }
 
-    const currentDuration = Number(zone?.duration ?? handler.duration ?? 0);
-    const expiresThisRound = isRoundStart && currentDuration <= 1;
+    const extraBeforeMove = zoneExtra(zone);
+    const durationBeforeMove = Number(zone?.duration ?? handler.duration ?? 0);
+    const currentRound = context?.round ?? null;
+    const expiresThisStep = handler.roundOnly
+      ? (durationBeforeMove <= 1 && currentRound != null && (extraBeforeMove.lastRound ?? null) !== currentRound)
+      : (isRoundStart && durationBeforeMove <= 1);
 
-    if (isRoundStart && !expiresThisRound) {
+    if (isRoundStart && !expiresThisStep) {
       const move = moveUpdate(document, handler);
       if (Object.keys(move).length > 0) {
         try {
@@ -896,7 +909,7 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
 
     let tokens = tokensInTemplate(document, handler);
     await syncZoneOccupants(document, handler, tokens);
-    const zoneState = getZoneData(document);
+    let zoneState = getZoneData(document);
     if (!zoneState) continue;
     if (handler.singleUse && zoneState.triggered) {
       await document.delete();
@@ -905,15 +918,33 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
 
     tokens = tokensInTemplate(document, handler);
     const allowRound = !handler.roundOnly || context?.round != null;
+    let roundResult = { triggered: false, zone: zoneState };
     if (allowRound) {
       try {
-        await handleRoundEffects(document, handler, zoneState, tokens, { context });
+        roundResult = await handleRoundEffects(document, handler, zoneState, tokens, { context }) ?? roundResult;
       } catch (err) {
         console.error(`${MODULE_ID} | Zone round effect failed`, err);
       }
     }
+    zoneState = roundResult.zone ?? zoneState;
 
-    if (!isRoundStart) continue;
+    const extraAfter = zoneExtra(zoneState);
+    let shouldDecrement = false;
+    if (handler.roundOnly) {
+      if (currentRound != null) {
+        const beforeRound = extraBeforeMove.lastRound ?? null;
+        const afterRound = extraAfter.lastRound ?? null;
+        if (afterRound === currentRound && beforeRound !== currentRound) {
+          shouldDecrement = true;
+        }
+      }
+    } else if (isRoundStart) {
+      shouldDecrement = true;
+    }
+
+    if (!shouldDecrement) {
+      continue;
+    }
 
     const currentDurationState = Number(zoneState.duration ?? handler.duration ?? 0);
     const nextDuration = currentDurationState > 0 ? currentDurationState - 1 : 0;

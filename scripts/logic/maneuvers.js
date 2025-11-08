@@ -601,7 +601,6 @@ export const MANEUVERS = {
     cooldown: 2,
     target: "self",
     apply: async ({ actor }) => {
-      await addEffect(actor, E({ defSoakDice: "+3d10", tags: { fortified: true, braced: true, immobile: true } }, 3, `fortify-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFortify")));
       await requestZonePlacement(actor, "fortifyPosition");
       await postChat(actor, "W4SQ.ChatFortify", { name: actor.name ?? "" });
     }

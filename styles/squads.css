@@ -158,6 +158,21 @@
   padding: 0.5rem 0;
 }
 
+.w4sq.sheet .specialist-cooldowns {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.w4sq.sheet .specialist-cooldowns .cooldown-meta {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-text-light-3, #888);
+}
+
 .w4sq.sheet .status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
