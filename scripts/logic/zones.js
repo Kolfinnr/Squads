@@ -669,13 +669,27 @@ async function syncZoneOccupants(document, handler, tokens) {
   if (!recordsEqual(previous, currentRecords)) {
     const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
     const updated = foundry.utils.mergeObject(zone, { occupants: currentRecords }, { inplace: false });
-    try {
-      document._w4sqSkipEnter = true;
-      await document.update({ [flagKey]: updated }, { diff: false, recursive: false });
-    } catch (err) {
-      console.error(`${MODULE_ID} | Failed to update zone occupants`, err);
-    } finally {
-      document._w4sqSkipEnter = false;
+    if (!document?.id) {
+      try {
+        if (typeof document?.updateSource === "function") {
+          document.updateSource({ [flagKey]: updated });
+        } else {
+          document.flags = document.flags ?? {};
+          document.flags[MODULE_ID] = document.flags[MODULE_ID] ?? {};
+          document.flags[MODULE_ID][FLAG_KEY] = updated;
+        }
+      } catch (err) {
+        console.error(`${MODULE_ID} | Failed to cache zone occupants on preview`, err);
+      }
+    } else {
+      try {
+        document._w4sqSkipEnter = true;
+        await document.update({ [flagKey]: updated }, { diff: false, recursive: false });
+      } catch (err) {
+        console.error(`${MODULE_ID} | Failed to update zone occupants`, err);
+      } finally {
+        document._w4sqSkipEnter = false;
+      }
     }
   }
 
