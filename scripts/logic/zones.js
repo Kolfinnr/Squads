@@ -362,7 +362,7 @@ const ZONE_HANDLERS = {
   },
   fortifyPosition: {
     duration: 99,
-    template: { type: "rect", widthUnits: 3, heightUnits: 3, size: 3 },
+    template: { type: "circle", radiusUnits: 3.5 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });
@@ -877,7 +877,10 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       continue;
     }
 
-    if (isRoundStart) {
+    const currentDuration = Number(zone?.duration ?? handler.duration ?? 0);
+    const expiresThisRound = isRoundStart && currentDuration <= 1;
+
+    if (isRoundStart && !expiresThisRound) {
       const move = moveUpdate(document, handler);
       if (Object.keys(move).length > 0) {
         try {
@@ -912,8 +915,8 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
 
     if (!isRoundStart) continue;
 
-    const currentDuration = Number(zoneState.duration ?? handler.duration ?? 0);
-    const nextDuration = currentDuration > 0 ? currentDuration - 1 : 0;
+    const currentDurationState = Number(zoneState.duration ?? handler.duration ?? 0);
+    const nextDuration = currentDurationState > 0 ? currentDurationState - 1 : 0;
     if (nextDuration <= 0) {
       try {
         await syncZoneOccupants(document, handler, []);

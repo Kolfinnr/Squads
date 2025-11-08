@@ -477,8 +477,8 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      const hp = await damageHP(target, "3d20");
-      const morale = await damageMorale(target, "4d20");
+      const hp = await damageHP(target, "20 + 3d10");
+      const morale = await damageMorale(target, "20 + 3d10");
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
     }
@@ -492,8 +492,8 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      const morale = await damageMorale(target, "4d20");
-      await addEffect(target, E({ tnDice: "-2d10" }, 2, `doom-${randomID()}`, game.i18n.localize("W4SQ.ManeuverDoom")));
+      const morale = await damageMorale(target, "50 + 5d10");
+      await addEffect(target, E({ tnDice: "-2d20" }, 2, `doom-${randomID()}`, game.i18n.localize("W4SQ.ManeuverDoom")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatDoom", { name: actor.name ?? "", target: target.name ?? "", morale });
     }
@@ -523,8 +523,8 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      const hp = await healHP(target, "4d10");
-      const morale = await healMorale(target, "4d10");
+      const hp = await healHP(target, "20 + 2d20");
+      const morale = await healMorale(target, "10 + 3d20");
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatRevify", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
     }
@@ -538,7 +538,7 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true } }, 1, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
+      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true } }, 2, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFireAspect", { name: actor.name ?? "", target: target.name ?? "" });
     }
@@ -589,7 +589,7 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tnDice: "-10d10", tags: { disorganized: true } }, 2, `flashbomb-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFlashbombs")));
+      await addEffect(target, E({ tnDice: "-50 - 5d10", tags: { disorganized: true } }, 2, `flashbomb-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFlashbombs")));
       await postChat(actor, "W4SQ.ChatFlashbombs", { name: actor.name ?? "", target: target.name ?? "" });
     }
   },
