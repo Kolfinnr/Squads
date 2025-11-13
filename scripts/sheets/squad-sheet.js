@@ -49,31 +49,44 @@ export class SquadActorSheet extends ActorSheet {
       cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
       lastTargetName: f("lastTargetName", "")
     };
-    data.effects = getEffectsDetailed(this.actor).map(effect => ({
-      ...effect,
-      durationLabel: formatTurns(effect.duration ?? 0)
-    }));
-    data.cooldowns = listCooldowns(this.actor).map(cd => ({
-      ...cd,
-      turnsLabel: formatTurns(cd.rounds ?? 0)
-    }));
-    const specialistCooldowns = [];
+    const effectDetails = getEffectsDetailed(this.actor);
+    const activeEffects = [];
+    const passiveEffects = [];
+    for (const effect of effectDetails) {
+      const isPassive = Boolean(effect?.mods?.tags?.passive);
+      const entry = {
+        ...effect,
+        durationLabel: isPassive
+          ? game.i18n.localize("W4SQ.PassiveEffectDuration")
+          : formatTurns(effect.duration ?? 0)
+      };
+      if (isPassive) passiveEffects.push(entry);
+      else activeEffects.push(entry);
+    }
+    data.effects = activeEffects;
+    data.activeEffects = activeEffects;
+    data.passiveEffects = passiveEffects;
+
+    const cooldownEntries = listCooldowns(this.actor);
     if (role === "specialist") {
       const maneuvers = maneuversFor(this.actor).filter(m => m.category === "specialist");
       for (const maneuver of maneuvers) {
-        const base = Number(maneuver.cooldown || 0);
         const remaining = getCooldown(this.actor, maneuver.key);
-        specialistCooldowns.push({
-          key: maneuver.key,
-          name: maneuver.name,
-          base,
-          baseLabel: base > 0 ? formatTurns(base) : game.i18n.localize("W4SQ.None"),
-          remaining,
-          remainingLabel: remaining > 0 ? formatTurns(remaining) : game.i18n.localize("W4SQ.CooldownReady")
-        });
+        if (remaining > 0) {
+          cooldownEntries.push({
+            key: `spec-${maneuver.key}`,
+            label: maneuver.name,
+            rounds: Number(remaining || 0)
+          });
+        }
       }
     }
-    data.specialistCooldowns = specialistCooldowns;
+    data.cooldowns = cooldownEntries.map(cd => ({
+      ...cd,
+      turnsLabel: cd.rounds > 0
+        ? formatTurns(cd.rounds)
+        : game.i18n.localize("W4SQ.CooldownReady")
+    }));
     data.roles = ROLES;
     data.weapons = WEAPONS;
     data.specialistTypes = SPECIALIST_TYPES;

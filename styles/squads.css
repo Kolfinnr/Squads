@@ -158,25 +158,23 @@
   padding: 0.5rem 0;
 }
 
-.w4sq.sheet .specialist-cooldowns {
-  list-style: none;
-  padding-left: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.w4sq.sheet .specialist-cooldowns .cooldown-meta {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--color-text-light-3, #888);
-}
-
 .w4sq.sheet .status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
+}
+
+.w4sq.sheet .status-last-target {
+  margin-top: 1rem;
+}
+
+.w4sq.sheet .status-last-target h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.w4sq.sheet .status-last-target p {
+  margin: 0;
 }
 
 .w4sq.sheet textarea {

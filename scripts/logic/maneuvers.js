@@ -1,6 +1,7 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, attachGuard, clearNegative, getEffects, removeDisorganized } from "./effects.js";
 import { requestZonePlacement } from "./zones.js";
+import { getCooldown, setCooldown } from "./cooldowns.js";
 import {
   isMage,
   isEngineer,
@@ -233,7 +234,7 @@ export const MANEUVERS = {
     difficulty: "hard",
     target: "self",
     apply: async ({ actor }) => {
-      await addEffect(actor, E({ defSoakDice: "+5d10", tags: { immuneFlank: true, immuneEncircle: true } }, 1, "schiltron", "Schiltron"));
+      await addEffect(actor, E({ defSoakDice: "+5d10", tags: { immuneFlank: true, immuneEncircle: true, braced: true } }, 1, "schiltron", "Schiltron"));
       await addMorale(actor, "1d20");
     }
   },
@@ -355,6 +356,10 @@ export const MANEUVERS = {
     difficulty: "easy",
     target: "self",
     apply: async ({ actor }) => {
+      const current = getCooldown(actor, "reload");
+      if (current > 0) {
+        await setCooldown(actor, "reload", current - 1);
+      }
       await addEffect(actor, E({ tags: { tired: true } }, 1, "reload-f", "Reload"));
     }
   },
@@ -388,6 +393,10 @@ export const MANEUVERS = {
     difficulty: "easy",
     target: "self",
     apply: async ({ actor }) => {
+      const current = getCooldown(actor, "reload");
+      if (current > 0) {
+        await setCooldown(actor, "reload", current - 1);
+      }
       await addEffect(actor, E({ tags: { fastReload: true, tired: true } }, 1, "reload-a", "Reload"));
     }
   },

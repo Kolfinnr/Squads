@@ -80,10 +80,6 @@
     <div class="tab" data-group="primary" data-tab="main">
       <div class="info-grid">
         <div>
-          <h3>{{localize "W4SQ.LastTarget"}}</h3>
-          <p>{{squad.lastTargetName}}</p>
-        </div>
-        <div>
           <h3>{{localize "W4SQ.Cooldowns"}}</h3>
           <ul>
             {{#each cooldowns as |cooldown|}}
@@ -93,24 +89,23 @@
             {{/each}}
           </ul>
         </div>
-        {{#if specialistCooldowns.length}}
-          <div>
-            <h3>{{localize "W4SQ.SpecialistCooldowns"}}</h3>
-            <ul class="specialist-cooldowns">
-              {{#each specialistCooldowns as |entry|}}
-                <li>
-                  <strong>{{entry.name}}</strong>
-                  <span class="cooldown-meta">{{localize "W4SQ.SpecialistCooldownBase"}}: {{entry.baseLabel}} • {{localize "W4SQ.SpecialistCooldownRemaining"}}: {{entry.remainingLabel}}</span>
-                </li>
+        <div>
+          <h3>{{localize "W4SQ.PassiveEffects"}}</h3>
+          {{#if passiveEffects.length}}
+            <div class="effect-list">
+              {{#each passiveEffects as |eff|}}
+                <span class="effect-chip passive">{{eff.label}}</span>
               {{/each}}
-            </ul>
-          </div>
-        {{/if}}
+            </div>
+          {{else}}
+            <p>{{localize "W4SQ.None"}}</p>
+          {{/if}}
+        </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
-          {{#if effects.length}}
+          {{#if activeEffects.length}}
             <div class="effect-list">
-              {{#each effects as |eff|}}
+              {{#each activeEffects as |eff|}}
                 <span class="effect-chip {{eff.polarity}}">{{eff.label}} ({{eff.durationLabel}})</span>
               {{/each}}
             </div>
@@ -137,6 +132,10 @@
           <span>/</span>
           <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.cp.cap" value="{{squad.cp.cap}}"/>
         </div>
+      </div>
+      <div class="status-last-target">
+        <h3>{{localize "W4SQ.LastTarget"}}</h3>
+        <p>{{#if squad.lastTargetName}}{{squad.lastTargetName}}{{else}}{{localize "W4SQ.None"}}{{/if}}</p>
       </div>
     </div>
 

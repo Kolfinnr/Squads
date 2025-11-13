@@ -193,6 +193,7 @@ export async function doSquadAction(actor, action) {
 
   let targetActor = selectedTarget();
   let guardContext = null;
+  let effectiveBackline = backlineAttack;
   if (targetActor && action === "melee") {
     const guardInfo = findGuardOnTarget(targetActor);
     if (guardInfo?.guardActor && guardInfo.guardActor !== targetActor) {
@@ -206,6 +207,7 @@ export async function doSquadAction(actor, action) {
       targetActor = guardInfo.guardActor;
     }
   }
+  effectiveBackline = backlineAttack && !guardContext;
   const roll = await (new Roll("1d100").roll({ async: true }));
   let success = roll.total <= applySpecialistTN(actor, tn, hp, hpMax);
   const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
@@ -327,8 +329,8 @@ export async function doSquadAction(actor, action) {
     const targetExp = Number(getF(targetActor, "experienceTier", 0));
     const targetEq = Number(getF(targetActor, "equipmentTier", 0));
     const targetWeapon = getF(targetActor, "weapon", "sword");
-    const ignoreTags = backlineAttack ? ["braced", "antiCharge"] : [];
-    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags: { backlineAttack } });
+    const ignoreTags = effectiveBackline ? ["braced", "antiCharge"] : [];
+    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags: { backlineAttack: effectiveBackline } });
     ignoreDefense = !!aggDefense.tags?.noDefense;
 
     if (!ignoreDefense && targetExp > 0) {
@@ -369,7 +371,7 @@ export async function doSquadAction(actor, action) {
       armor = 0;
     }
 
-    if (!ignoreDefense && targetWeapon === "polearm" && !backlineAttack) {
+    if (!ignoreDefense && targetWeapon === "polearm" && !effectiveBackline) {
       const pole = await (new Roll("1d20").roll({ async: true }));
       defenseOnly += pole.total;
       polearmBonus = pole.total;
@@ -407,7 +409,7 @@ export async function doSquadAction(actor, action) {
     finalDamage = Math.floor(finalDamage / 2);
   }
 
-  if (success && targetActor && action === "melee" && backlineAttack) {
+  if (success && targetActor && action === "melee" && effectiveBackline) {
     const hpBonusRoll = await (new Roll("2d10").roll({ async: true }));
     const moraleBonusRoll = await (new Roll("3d10").roll({ async: true }));
     backlineHpBonus = hpBonusRoll.total;
@@ -460,7 +462,7 @@ export async function doSquadAction(actor, action) {
     }
   }
 
-  if (success && targetActor && action === "melee" && backlineAttack && backlineMoraleBonus && !targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
+  if (success && targetActor && action === "melee" && effectiveBackline && backlineMoraleBonus && !targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
     const morale = Number(getF(targetActor, "morale", 0));
     const moraleMax = Number(getF(targetActor, "moraleMax", 0));
     const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
@@ -522,7 +524,7 @@ export async function doSquadAction(actor, action) {
     dmg: finalDamage,
     moraleLoss,
     soakDetail: soakNotes.join(" • ") || game.i18n.localize("W4SQ.ChatNoSoak"),
-    backline: backlineAttack && action === "melee" && success,
+    backline: effectiveBackline && action === "melee" && success,
     hobNotes,
     footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
   });
