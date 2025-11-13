@@ -1,5 +1,22 @@
 import { FLAG_SCOPE } from "../config.js";
 
+const COOLDOWN_LABELS = {
+  reload: "W4SQ.CooldownReloading",
+  cmdRangedPreempt: "W4SQ.CooldownCmdRanged",
+  firestorm: "W4SQ.ManeuverFirestorm",
+  fireball: "W4SQ.ManeuverFireball",
+  doomGloom: "W4SQ.ManeuverDoom",
+  transmuteLead: "W4SQ.ManeuverLead",
+  revification: "W4SQ.ManeuverRevification",
+  fireAspect: "W4SQ.ManeuverFireAspect",
+  lineDefense: "W4SQ.ManeuverLineDefense",
+  minefield: "W4SQ.ManeuverMinefield",
+  wolfPits: "W4SQ.ManeuverWolfPits",
+  flashbombs: "W4SQ.ManeuverFlashbombs",
+  fortifyPosition: "W4SQ.ManeuverFortify",
+  ballisticCalibration: "W4SQ.ManeuverCalibration"
+};
+
 export function getCooldowns(actor) {
   return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "cooldowns") ?? {});
 }
@@ -61,14 +78,9 @@ export async function tickCooldowns(actor) {
 }
 
 export function describeCooldown(key) {
-  switch (key) {
-    case "reload":
-      return game.i18n.localize("W4SQ.CooldownReloading");
-    case "cmdRangedPreempt":
-      return game.i18n.localize("W4SQ.CooldownCmdRanged");
-    default:
-      return key;
-  }
+  const translation = COOLDOWN_LABELS[key];
+  if (translation) return game.i18n.localize(translation);
+  return key;
 }
 
 export function listCooldowns(actor) {

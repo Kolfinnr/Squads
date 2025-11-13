@@ -68,13 +68,15 @@ export class SquadActorSheet extends ActorSheet {
     data.passiveEffects = passiveEffects;
 
     const cooldownEntries = listCooldowns(this.actor);
+    const seenCooldowns = new Set(cooldownEntries.map(cd => cd.key));
     if (role === "specialist") {
       const maneuvers = maneuversFor(this.actor).filter(m => m.category === "specialist");
       for (const maneuver of maneuvers) {
         const remaining = getCooldown(this.actor, maneuver.key);
-        if (remaining > 0) {
+        if (remaining > 0 && !seenCooldowns.has(maneuver.key)) {
+          seenCooldowns.add(maneuver.key);
           cooldownEntries.push({
-            key: `spec-${maneuver.key}`,
+            key: maneuver.key,
             label: maneuver.name,
             rounds: Number(remaining || 0)
           });

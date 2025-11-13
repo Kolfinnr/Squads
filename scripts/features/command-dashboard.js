@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
-import { MANEUVERS, friendlyTokensNear } from "../logic/maneuvers.js";
+import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
@@ -240,6 +240,7 @@ export class W4SQCommandApp extends Application {
   _getVisibleSquads() {
     return this._getSquadTokens().map(token => {
       const actor = token.actor;
+      const role = actor.getFlag(FLAG_SCOPE, "role") || "infantry";
       const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
       const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
       const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
@@ -256,10 +257,26 @@ export class W4SQCommandApp extends Application {
         ...effect,
         durationLabel: formatTurns(effect.duration ?? 0)
       }));
-      const cooldowns = listCooldowns(actor).map(cd => ({
+      let cooldowns = listCooldowns(actor).map(cd => ({
         ...cd,
         turnsLabel: formatTurns(cd.rounds ?? 0)
       }));
+      if (role === "specialist") {
+        const seen = new Set(cooldowns.map(cd => cd.key));
+        for (const maneuver of maneuversFor(actor)) {
+          if (maneuver.category !== "specialist") continue;
+          const remaining = getCooldown(actor, maneuver.key);
+          if (remaining > 0 && !seen.has(maneuver.key)) {
+            seen.add(maneuver.key);
+            cooldowns.push({
+              key: maneuver.key,
+              label: maneuver.name,
+              rounds: remaining,
+              turnsLabel: formatTurns(remaining)
+            });
+          }
+        }
+      }
       let order = actor.getFlag(FLAG_SCOPE, "order");
       if (order === undefined || order === null) {
         order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
