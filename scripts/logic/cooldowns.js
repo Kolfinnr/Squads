@@ -17,6 +17,17 @@ const COOLDOWN_LABELS = {
   ballisticCalibration: "W4SQ.ManeuverCalibration"
 };
 
+function normalizeRounds(value) {
+  return Math.max(0, Number(value ?? 0));
+}
+
+export function formatCooldownRounds(value) {
+  const rounds = normalizeRounds(value);
+  if (rounds <= 0) return game.i18n.localize("W4SQ.CooldownReady");
+  if (rounds === 1) return game.i18n.localize("W4SQ.TurnSingle");
+  return game.i18n.format("W4SQ.TurnPlural", { value: rounds });
+}
+
 export function getCooldowns(actor) {
   return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "cooldowns") ?? {});
 }
@@ -83,10 +94,16 @@ export function describeCooldown(key) {
   return key;
 }
 
-export function listCooldowns(actor) {
-  return Object.entries(getCooldowns(actor)).map(([key, value]) => ({
-    key,
-    label: describeCooldown(key),
-    rounds: Number(value || 0)
-  }));
+export function listCooldowns(actor, { includeZero = false } = {}) {
+  return Object.entries(getCooldowns(actor))
+    .map(([key, value]) => {
+      const rounds = normalizeRounds(value);
+      return {
+        key,
+        label: describeCooldown(key),
+        rounds,
+        turnsLabel: formatCooldownRounds(rounds)
+      };
+    })
+    .filter(entry => includeZero || entry.rounds > 0);
 }

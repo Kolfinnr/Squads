@@ -2,7 +2,7 @@ import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
-import { getCooldown, setCooldown, listCooldowns } from "../logic/cooldowns.js";
+import { getCooldown, setCooldown, listCooldowns, formatCooldownRounds } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
@@ -257,10 +257,7 @@ export class W4SQCommandApp extends Application {
         ...effect,
         durationLabel: formatTurns(effect.duration ?? 0)
       }));
-      let cooldowns = listCooldowns(actor).map(cd => ({
-        ...cd,
-        turnsLabel: formatTurns(cd.rounds ?? 0)
-      }));
+      let cooldowns = [...listCooldowns(actor)];
       if (role === "specialist") {
         const seen = new Set(cooldowns.map(cd => cd.key));
         for (const maneuver of maneuversFor(actor)) {
@@ -272,7 +269,7 @@ export class W4SQCommandApp extends Application {
               key: maneuver.key,
               label: maneuver.name,
               rounds: remaining,
-              turnsLabel: formatTurns(remaining)
+              turnsLabel: formatCooldownRounds(remaining)
             });
           }
         }

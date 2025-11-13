@@ -2,7 +2,7 @@ import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS, SPECIALIST_T
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
 import { getEffectsDetailed } from "../logic/effects.js";
-import { getCooldown, listCooldowns } from "../logic/cooldowns.js";
+import { getCooldown, listCooldowns, formatCooldownRounds } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 
@@ -67,7 +67,7 @@ export class SquadActorSheet extends ActorSheet {
     data.activeEffects = activeEffects;
     data.passiveEffects = passiveEffects;
 
-    const cooldownEntries = listCooldowns(this.actor);
+    const cooldownEntries = [...listCooldowns(this.actor)];
     const seenCooldowns = new Set(cooldownEntries.map(cd => cd.key));
     if (role === "specialist") {
       const maneuvers = maneuversFor(this.actor).filter(m => m.category === "specialist");
@@ -75,20 +75,17 @@ export class SquadActorSheet extends ActorSheet {
         const remaining = getCooldown(this.actor, maneuver.key);
         if (remaining > 0 && !seenCooldowns.has(maneuver.key)) {
           seenCooldowns.add(maneuver.key);
+          const rounds = Number(remaining || 0);
           cooldownEntries.push({
             key: maneuver.key,
             label: maneuver.name,
-            rounds: Number(remaining || 0)
+            rounds,
+            turnsLabel: formatCooldownRounds(rounds)
           });
         }
       }
     }
-    data.cooldowns = cooldownEntries.map(cd => ({
-      ...cd,
-      turnsLabel: cd.rounds > 0
-        ? formatTurns(cd.rounds)
-        : game.i18n.localize("W4SQ.CooldownReady")
-    }));
+    data.cooldowns = cooldownEntries;
     data.roles = ROLES;
     data.weapons = WEAPONS;
     data.specialistTypes = SPECIALIST_TYPES;
