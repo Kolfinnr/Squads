@@ -134,10 +134,14 @@ async function resolveTarget(actor, maneuver) {
 }
 
 export async function openManeuverDialog(actor) {
-  const maneuvers = maneuversFor(actor).map(m => ({
-    ...m,
-    cooldown: getCooldown(actor, m.key)
-  }));
+  const maneuvers = maneuversFor(actor).map(m => {
+    const remainingCooldown = getCooldown(actor, m.key);
+    return {
+      ...m,
+      remainingCooldown,
+      isOnCooldown: remainingCooldown > 0
+    };
+  });
 
   const content = await renderTemplate(`modules/wfrp4e-squads/templates/maneuver-dialog.hbs`, { maneuvers });
 
@@ -152,7 +156,7 @@ export async function openManeuverDialog(actor) {
       if (!key) return;
       const maneuver = maneuvers.find(m => m.key === key);
       if (!maneuver) return;
-      if (maneuver.cooldown > 0) {
+      if (maneuver.remainingCooldown > 0) {
         ui.notifications.warn(game.i18n.localize("W4SQ.OnCooldown"));
         return;
       }
