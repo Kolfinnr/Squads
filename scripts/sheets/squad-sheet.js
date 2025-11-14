@@ -85,6 +85,11 @@ export class SquadActorSheet extends ActorSheet {
         }
       }
     }
+    cooldownEntries.sort((a, b) => {
+      const aLabel = a?.label ?? "";
+      const bLabel = b?.label ?? "";
+      return aLabel.localeCompare(bLabel, game.i18n?.lang ?? "en", { sensitivity: "base" });
+    });
     data.cooldowns = cooldownEntries;
     data.roles = ROLES;
     data.weapons = WEAPONS;
