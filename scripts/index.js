@@ -5,8 +5,7 @@ import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
-import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones } from "./logic/zones.js";
-import { startSquadAoePreview } from "./aoe.js";
+import * as AOE from "./aoe.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -15,7 +14,6 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
-  "./logic/zones.js",
   "./aoe.js"
 ];
 
@@ -124,11 +122,6 @@ async function processTurnTick(combat, context = {}) {
     round,
     turn
   };
-  try {
-    await tickZones({ isRoundStart, context: tickContext });
-  } catch (err) {
-    console.error(`${MODULE_ID} | tickZones failed`, err);
-  }
   const actor = combatant.actor;
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
@@ -210,6 +203,7 @@ Hooks.once("ready", async () => {
   console.log(`${MODULE_ID} | combatRound handlers`, Hooks.events.combatRound);
   game.w4sq = game.w4sq || {};
   game.w4sq.openCommand = openCommandDashboard;
+  AOE.registerAoEHooks();
 });
 
 Hooks.on("combatStart", combat => {
@@ -246,22 +240,6 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
   html.find(".left").append(btn);
-});
-
-Hooks.on("createMeasuredTemplate", document => {
-  handleZoneTemplateCreated(document);
-});
-
-Hooks.on("updateMeasuredTemplate", document => {
-  handleZoneTemplateCreated(document);
-});
-
-Hooks.on("createToken", (tokenDoc) => {
-  handleZoneTokenCreated(tokenDoc);
-});
-
-Hooks.on("updateToken", (tokenDoc, changes) => {
-  handleZoneTokenMove(tokenDoc, changes);
 });
 
 function canSeeSquad(token) {
@@ -309,5 +287,3 @@ Hooks.on("deleteCombat", combat => {
 Hooks.on("combatEnd", combat => {
   resetProcessedTurn(combat);
 });
-
-export { startSquadAoePreview };

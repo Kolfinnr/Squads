@@ -1,7 +1,7 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, attachGuard, clearNegative, getEffects, removeDisorganized } from "./effects.js";
-import { requestZonePlacement } from "./zones.js";
 import { getCooldown, setCooldown } from "./cooldowns.js";
+import { createAoEFromEffect } from "../aoe.js";
 import {
   isMage,
   isEngineer,
@@ -87,6 +87,10 @@ async function subMorale(actor, dice) {
   const roll = await (new Roll(dice).roll({ async: true }));
   const cur = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
   await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, cur - roll.total));
+}
+
+function firstActiveToken(actor) {
+  return actor?.getActiveTokens?.(true)?.[0] ?? null;
 }
 
 export const MANEUVERS = {
@@ -472,7 +476,15 @@ export const MANEUVERS = {
     cooldown: 4,
     target: "self",
     apply: async ({ actor }) => {
-      await requestZonePlacement(actor, "firestorm");
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "firestorm",
+        duration: 3,
+        data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 }
+      });
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFirestormDeploy", { name: actor.name ?? "" });
     }
@@ -484,12 +496,18 @@ export const MANEUVERS = {
     difficulty: "hard",
     cooldown: 4,
     target: "enemy",
-    apply: async ({ actor, target }) => {
-      if (!target) return;
-      const hp = await damageHP(target, "20 + 3d10");
-      const morale = await damageMorale(target, "20 + 3d10");
+    apply: async ({ actor }) => {
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "fireball",
+        duration: 1,
+        data: { hpDamage: "3d20", moraleDamage: "4d20" }
+      });
       await clearChannelledMagic(actor);
-      await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "", target: target.name ?? "", hp, morale });
+      await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "" });
     }
   },
   doomGloom: {
@@ -561,7 +579,15 @@ export const MANEUVERS = {
     cooldown: 2,
     target: "none",
     apply: async ({ actor }) => {
-      await requestZonePlacement(actor, "lineDefense");
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "lineDefense",
+        duration: 3,
+        data: {}
+      });
       await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });
     }
   },
@@ -573,7 +599,15 @@ export const MANEUVERS = {
     cooldown: 2,
     target: "none",
     apply: async ({ actor }) => {
-      await requestZonePlacement(actor, "minefield");
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "minefield",
+        duration: 4,
+        data: { hpDamage: "3d20", moraleDamage: "4d20" }
+      });
       await postChat(actor, "W4SQ.ChatMinefieldDeploy", { name: actor.name ?? "" });
     }
   },
@@ -585,7 +619,15 @@ export const MANEUVERS = {
     cooldown: 2,
     target: "none",
     apply: async ({ actor }) => {
-      await requestZonePlacement(actor, "wolfPits");
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "wolfPits",
+        duration: 4,
+        data: { hpDamage: "2d10", moraleDamage: "2d10" }
+      });
       await postChat(actor, "W4SQ.ChatWolfPitsDeploy", { name: actor.name ?? "" });
     }
   },
@@ -610,7 +652,15 @@ export const MANEUVERS = {
     cooldown: 2,
     target: "self",
     apply: async ({ actor }) => {
-      await requestZonePlacement(actor, "fortifyPosition");
+      const token = firstActiveToken(actor);
+      await createAoEFromEffect({
+        sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
+        userId: game.user.id,
+        casterTokenId: token?.id ?? null,
+        type: "fortify",
+        duration: null,
+        data: {}
+      });
       await postChat(actor, "W4SQ.ChatFortify", { name: actor.name ?? "" });
     }
   },

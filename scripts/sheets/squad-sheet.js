@@ -5,7 +5,6 @@ import { getEffectsDetailed } from "../logic/effects.js";
 import { getCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
-import { startSquadAoePreview } from "../aoe.js";
 
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
@@ -126,9 +125,5 @@ export class SquadActorSheet extends ActorSheet {
     html.find('button[data-action="ranged"]').on("click", () => doSquadAction(this.actor, "ranged"));
     html.find('button[data-action="maneuver"]').on("click", () => openManeuverDialog(this.actor));
     html.find('button[data-action="command"]').on("click", () => openCommandDashboard(this.actor));
-    html.find(".squad-aoe-button").on("click", ev => {
-      ev.preventDefault();
-      startSquadAoePreview(this.actor, { distance: 6, type: "circle" });
-    });
   }
 }

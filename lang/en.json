@@ -191,7 +191,7 @@
   "W4SQ.ChatFirestorm": "{name}'s firestorm engulfs {target}, scorching {hp} HP and {morale} Morale!",
   "W4SQ.ChatFirestormDeploy": "{name} unleashes a firestorm! Place the template.",
   "W4SQ.ChatFirestormPulse": "Firestorm continues to lash {name}, burning {hp} HP and {morale} Morale!",
-  "W4SQ.ChatFireball": "Fireball slams into {target}, burning {hp} HP and {morale} Morale!",
+  "W4SQ.ChatFireball": "{name} hurls a fireball—place the impact zone!",
   "W4SQ.ManeuverGuard": "Guard",
   "W4SQ.ManeuverDoom": "Doom & Gloom",
   "W4SQ.ChatDoom": "Shadows claw at {target}, draining {morale} Morale!",
@@ -215,6 +215,9 @@
   "W4SQ.ManeuverFortify": "Fortify Position",
   "W4SQ.ChatFortify": "{name} fortifies their position and digs in!",
   "W4SQ.EffectDeepDefense": "Deep Defense",
+  "W4SQ.EffectFortifyZone": "Fortified Position",
+  "W4SQ.EffectLineDefense": "Barricade Cover",
+  "W4SQ.EffectWolfPits": "Snared in Wolf Pits",
   "W4SQ.ManeuverCalibration": "Ballistic Calibration",
   "W4SQ.ChatCalibration": "{name} calibrates fire for {target}, sharpening their aim!"
 }

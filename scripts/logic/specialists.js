@@ -1,6 +1,6 @@
 import { FLAG_SCOPE, SPECIALIST_TYPES } from "../config.js";
 import { addEffect, ensureDisorganized } from "./effects.js";
-import { spawnZone, randomScenePoint } from "./zones.js";
+import { createAoEFromEffect } from "../aoe.js";
 
 function logDebug(...args) {
   if (globalThis.console?.debugSpecialist) {
@@ -58,6 +58,21 @@ function randomFriendlyToken(actor) {
   if (!pool.length) return null;
   const index = Math.floor(Math.random() * pool.length);
   return pool[index] ?? null;
+}
+
+function randomScenePoint(padding = 0) {
+  const dims = canvas?.dimensions;
+  if (!dims) return null;
+  const size = dims.size ?? 100;
+  const width = (dims.width ?? 0) * size;
+  const height = (dims.height ?? 0) * size;
+  const pad = Math.max(0, Number(padding) || 0);
+  const spanX = Math.max(0, width - pad * 2);
+  const spanY = Math.max(0, height - pad * 2);
+  return {
+    x: pad + Math.random() * (spanX || 0),
+    y: pad + Math.random() * (spanY || 0)
+  };
 }
 
 export function getSpecialistType(actor) {
@@ -200,7 +215,15 @@ const MAJOR_PERILS = [
     if (context?.maneuverKey === "firestorm") {
       const point = randomScenePoint();
       if (point) {
-        await spawnZone(actor, "firestorm", { position: point });
+        await createAoEFromEffect({
+          sceneId: canvas.scene?.id,
+          userId: game.user.id,
+          type: "firestorm",
+          duration: 3,
+          data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 },
+          position: point,
+          skipPreview: true
+        });
       }
     }
   },
@@ -213,7 +236,16 @@ const MAJOR_PERILS = [
       const token = randomFriendlyToken(actor);
       if (token) {
         const center = tokenCenter(token);
-        await spawnZone(actor, "firestorm", { position: center, originToken: token });
+        await createAoEFromEffect({
+          sceneId: token.document.parent?.id ?? canvas.scene?.id,
+          userId: game.user.id,
+          casterTokenId: token.id,
+          type: "firestorm",
+          duration: 3,
+          data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 },
+          position: center,
+          skipPreview: true
+        });
       }
     }
   },
