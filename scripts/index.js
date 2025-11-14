@@ -6,6 +6,7 @@ import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones } from "./logic/zones.js";
+import { startSquadAoePreview } from "./aoe.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -14,7 +15,8 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
-  "./logic/zones.js"
+  "./logic/zones.js",
+  "./aoe.js"
 ];
 
 function isSquadActor(actor) {
@@ -307,3 +309,5 @@ Hooks.on("deleteCombat", combat => {
 Hooks.on("combatEnd", combat => {
   resetProcessedTurn(combat);
 });
+
+export { startSquadAoePreview };
