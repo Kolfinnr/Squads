@@ -105,6 +105,15 @@ function buildTemplateData(templateConfig = {}, originToken = null) {
 }
 
 async function previewTemplate(document, { originToken } = {}) {
+  if (canvas?.templates?.activatePreview) {
+    try {
+      const result = await canvas.templates.activatePreview({ document, user: game.user });
+      if (result?.document) return result.document;
+      return result ?? null;
+    } catch (err) {
+      console.error(`${MODULE_ID} | canvas.templates.activatePreview failed`, err);
+    }
+  }
   if (typeof MeasuredTemplate?.createPreview === "function") {
     try {
       const preview = await MeasuredTemplate.createPreview({ document, user: game.user });
