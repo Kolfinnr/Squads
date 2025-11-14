@@ -3,6 +3,7 @@ import { FLAG_SCOPE } from "../config.js";
 const COOLDOWN_LABELS = {
   reload: "W4SQ.CooldownReloading",
   cmdRangedPreempt: "W4SQ.CooldownCmdRanged",
+  guard: "W4SQ.ManeuverGuard",
   firestorm: "W4SQ.ManeuverFirestorm",
   fireball: "W4SQ.ManeuverFireball",
   doomGloom: "W4SQ.ManeuverDoom",
@@ -29,7 +30,18 @@ export function formatCooldownRounds(value) {
 }
 
 export function getCooldowns(actor) {
-  return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "cooldowns") ?? {});
+  const raw = actor?.getFlag?.(FLAG_SCOPE, "cooldowns") ?? {};
+  const duplicate = foundry?.utils?.duplicate
+    ? foundry.utils.duplicate
+    : (data => {
+        if (typeof structuredClone === "function") return structuredClone(data);
+        try {
+          return JSON.parse(JSON.stringify(data));
+        } catch {
+          return { ...data };
+        }
+      });
+  return duplicate(raw);
 }
 
 export function getCooldown(actor, key) {
@@ -94,16 +106,44 @@ export function describeCooldown(key) {
   return key;
 }
 
+function buildEntry(key, value) {
+  const rounds = normalizeRounds(value);
+  return {
+    key,
+    label: describeCooldown(key),
+    rounds,
+    turnsLabel: formatCooldownRounds(rounds)
+  };
+}
+
 export function listCooldowns(actor, { includeZero = false } = {}) {
   return Object.entries(getCooldowns(actor))
-    .map(([key, value]) => {
-      const rounds = normalizeRounds(value);
-      return {
-        key,
-        label: describeCooldown(key),
-        rounds,
-        turnsLabel: formatCooldownRounds(rounds)
-      };
-    })
+    .map(([key, value]) => buildEntry(key, value))
     .filter(entry => includeZero || entry.rounds > 0);
+}
+
+export function mergeCooldownEntries(actor, extras = [], { includeZero = false, sort = true } = {}) {
+  const merged = new Map();
+  for (const entry of listCooldowns(actor, { includeZero: true })) {
+    merged.set(entry.key, entry);
+  }
+
+  for (const extra of extras) {
+    if (!extra || !extra.key) continue;
+    const normalized = normalizeRounds(extra.rounds);
+    if (!includeZero && normalized <= 0) continue;
+    const existing = merged.get(extra.key) ?? buildEntry(extra.key, normalized);
+    existing.rounds = normalized;
+    existing.label = extra.label ?? existing.label;
+    existing.turnsLabel = formatCooldownRounds(normalized);
+    merged.set(extra.key, existing);
+  }
+
+  let entries = [...merged.values()];
+  if (!includeZero) entries = entries.filter(entry => entry.rounds > 0);
+  if (sort) {
+    const locale = game.i18n?.lang ?? "en";
+    entries.sort((a, b) => (a.label ?? "").localeCompare(b.label ?? "", locale, { sensitivity: "base" }));
+  }
+  return entries;
 }

@@ -192,6 +192,7 @@
   "W4SQ.ChatFirestormDeploy": "{name} unleashes a firestorm! Place the template.",
   "W4SQ.ChatFirestormPulse": "Firestorm continues to lash {name}, burning {hp} HP and {morale} Morale!",
   "W4SQ.ChatFireball": "Fireball slams into {target}, burning {hp} HP and {morale} Morale!",
+  "W4SQ.ManeuverGuard": "Guard",
   "W4SQ.ManeuverDoom": "Doom & Gloom",
   "W4SQ.ChatDoom": "Shadows claw at {target}, draining {morale} Morale!",
   "W4SQ.ManeuverLead": "Transmutation of Lead",

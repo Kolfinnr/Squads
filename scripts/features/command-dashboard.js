@@ -2,7 +2,7 @@ import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
 import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
-import { getCooldown, setCooldown, listCooldowns, formatCooldownRounds } from "../logic/cooldowns.js";
+import { getCooldown, setCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
@@ -257,23 +257,17 @@ export class W4SQCommandApp extends Application {
         ...effect,
         durationLabel: formatTurns(effect.duration ?? 0)
       }));
-      let cooldowns = [...listCooldowns(actor)];
+      const specialistExtras = [];
       if (role === "specialist") {
-        const seen = new Set(cooldowns.map(cd => cd.key));
         for (const maneuver of maneuversFor(actor)) {
           if (maneuver.category !== "specialist") continue;
           const remaining = getCooldown(actor, maneuver.key);
-          if (remaining > 0 && !seen.has(maneuver.key)) {
-            seen.add(maneuver.key);
-            cooldowns.push({
-              key: maneuver.key,
-              label: maneuver.name,
-              rounds: remaining,
-              turnsLabel: formatCooldownRounds(remaining)
-            });
+          if (remaining > 0) {
+            specialistExtras.push({ key: maneuver.key, label: maneuver.name, rounds: remaining });
           }
         }
       }
+      const cooldowns = mergeCooldownEntries(actor, specialistExtras);
       let order = actor.getFlag(FLAG_SCOPE, "order");
       if (order === undefined || order === null) {
         order = actor.getFlag(FLAG_SCOPE, "standingOrder") || "";
