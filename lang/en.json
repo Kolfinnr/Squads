@@ -199,7 +199,7 @@
   "W4SQ.PassiveMsgHumanToTheBitterEnd": "{name} fight to the bitter end, clawing back {amount} Morale and refusing to rout!",
   "W4SQ.PassiveMsgDwarfAncestralGrudge": "Ancestral hatred drives {name}; {target} suffers +{amount} damage!",
   "W4SQ.PassiveMsgDwarfGrudgin": "Grudgin' tally rises — {name} gain +{amount} to their next checks.",
-  "W4SQ.PassiveMsgElfAestheticPerfection": "A flawless flourish from {name} turns the moment into a critical success!",
+  "W4SQ.PassiveMsgElfAestheticPerfection": "A flawless flourish from {name} turns their action into a spectacular success!",
   "W4SQ.PassiveMsgMonsterRegeneration": "Regeneration surges through {name}, restoring {amount} HP.",
   "W4SQ.PassiveMsgMonsterThickHide": "Thick hide hardens — {name} shrug off {amount} soak this blow.",
   "W4SQ.PassiveMsgMonsterPredatorInstinctStrike": "Predator instinct! {name} smell weakness in {target}, adding +{amount} Morale pressure.",
