@@ -26,13 +26,8 @@
             <option value="{{key}}" {{#if (eq ../squad.role key)}}selected{{/if}}>{{role.label}}</option>
           {{/each}}
         </select>
-        <label>{{localize "W4SQ.Origin"}}</label>
-        <select name="system.squad.origin">
-          <option value="">{{localize "W4SQ.OriginNone"}}</option>
-          {{#each originOptions as |opt|}}
-            <option value="{{opt.key}}" {{#if (eq ../squad.origin opt.key)}}selected{{/if}}>{{opt.label}}</option>
-          {{/each}}
-        </select>
+        <div class="placeholder"></div>
+        <div class="placeholder"></div>
         {{#if (eq squad.role "specialist")}}
           <label>{{localize "W4SQ.SpecialistType"}}</label>
           <select name="flags.wfrp4e-squads.specialistType">
@@ -98,15 +93,39 @@
         </div>
         <div>
           <h3>{{localize "W4SQ.PassiveEffects"}}</h3>
-          {{#if passiveEffects.length}}
-            <div class="effect-list">
-              {{#each passiveEffects as |eff|}}
-                <span class="effect-chip passive">{{eff.label}}</span>
+          <div class="origin-select">
+            <label for="w4sq-origin-select">{{localize "W4SQ.Origin"}}</label>
+            <select id="w4sq-origin-select" name="system.squad.origin" data-nullable="true">
+              <option value="">{{localize "W4SQ.OriginNone"}}</option>
+              {{#each originOptions as |opt|}}
+                <option value="{{opt.key}}" {{#if (eq ../squad.origin opt.key)}}selected{{/if}}>{{opt.label}}</option>
               {{/each}}
-            </div>
-          {{else}}
-            <p>{{localize "W4SQ.None"}}</p>
-          {{/if}}
+            </select>
+          </div>
+          <div class="origin-passives">
+            <h4>{{localize "W4SQ.OriginPassives"}}</h4>
+            {{#if originPassives.length}}
+              <div class="origin-passive-list">
+                {{#each originPassives as |entry|}}
+                  <label><input type="checkbox" data-dtype="Boolean" name="system.squad.passives.{{entry.key}}" {{checked entry.checked}}/> {{localize entry.label}}</label>
+                {{/each}}
+              </div>
+            {{else}}
+              <p>{{localize "W4SQ.OriginPassivesEmpty"}}</p>
+            {{/if}}
+          </div>
+          <div class="passive-effects-summary">
+            <h4>{{localize "W4SQ.PassiveSummary"}}</h4>
+            {{#if passiveEffects.length}}
+              <div class="effect-list">
+                {{#each passiveEffects as |eff|}}
+                  <span class="effect-chip passive">{{eff.label}}</span>
+                {{/each}}
+              </div>
+            {{else}}
+              <p>{{localize "W4SQ.None"}}</p>
+            {{/if}}
+          </div>
         </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
@@ -139,18 +158,6 @@
           <span>/</span>
           <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.cp.cap" value="{{squad.cp.cap}}"/>
         </div>
-      </div>
-      <div class="status-passives">
-        <h3>{{localize "W4SQ.OriginPassives"}}</h3>
-        {{#if originPassives.length}}
-          <div class="origin-passive-list">
-            {{#each originPassives as |entry|}}
-              <label><input type="checkbox" data-dtype="Boolean" name="system.squad.passives.{{entry.key}}" {{checked entry.checked}}/> {{localize entry.label}}</label>
-            {{/each}}
-          </div>
-        {{else}}
-          <p>{{localize "W4SQ.OriginPassivesEmpty"}}</p>
-        {{/if}}
       </div>
       <div class="status-last-target">
         <h3>{{localize "W4SQ.LastTarget"}}</h3>

@@ -27,6 +27,7 @@
   "W4SQ.CooldownReady": "Ready",
   "W4SQ.PassiveEffects": "Passive Effects",
   "W4SQ.PassiveEffectDuration": "Passive",
+  "W4SQ.PassiveSummary": "Current Passive Effects",
   "W4SQ.ActiveEffects": "Active Effects",
   "W4SQ.ManeuverFlag": "Maneuver",
   "W4SQ.PlayerControl": "Player Control",

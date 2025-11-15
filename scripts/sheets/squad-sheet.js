@@ -135,11 +135,39 @@ export class SquadActorSheet extends ActorSheet {
 
   activateListeners(html) {
     super.activateListeners(html);
-    this._bindFlagInputs(html[0] ?? html);
+    const root = html[0] ?? html;
+    this._bindFlagInputs(root);
+    this._bindSystemInputs(root);
 
     html.find('button[data-action="melee"]').on("click", () => doSquadAction(this.actor, "melee"));
     html.find('button[data-action="ranged"]').on("click", () => doSquadAction(this.actor, "ranged"));
     html.find('button[data-action="maneuver"]').on("click", () => openManeuverDialog(this.actor));
     html.find('button[data-action="command"]').on("click", () => openCommandDashboard(this.actor));
+  }
+
+  _bindSystemInputs(root) {
+    if (!root) return;
+    root.querySelectorAll('[name^="system.squad."]').forEach(el => {
+      el.addEventListener("change", async ev => {
+        const input = ev.currentTarget;
+        const path = input.name;
+        let value;
+        if (input.type === "checkbox") {
+          value = input.checked;
+        } else if (input.dataset.dtype === "Number") {
+          value = Number(input.value || 0);
+        } else {
+          value = input.value;
+        }
+        if (input.dataset.nullable === "true" && value === "") {
+          value = null;
+        }
+        try {
+          await this.actor.update({ [path]: value });
+        } catch (err) {
+          console.error(`wfrp4e-squads | Failed to update ${path}`, err);
+        }
+      });
+    });
   }
 }
