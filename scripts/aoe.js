@@ -135,6 +135,11 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     base.y = center?.y ?? 0;
   }
 
+  const combat = game.combat;
+  const placedRound = combat ? Number(combat.round ?? 0) : null;
+  const placedTurn = combat ? Number(combat.turn ?? 0) : null;
+  const armed = !ENTRY_TRIGGER_TYPES.has(type);
+
   const flagData = {
     aoeType: type,
     duration: duration ?? null,
@@ -147,7 +152,10 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     occupants: [],
     direction: null,
     userId,
-    sceneId
+    sceneId,
+    armed,
+    placedRound,
+    placedTurn
   };
 
   base.flags = base.flags ?? {};
@@ -170,8 +178,10 @@ async function handleCombatRound(combat) {
 
 async function handleUpdateCombat(combat, changed) {
   if (!combat || !changed) return;
-  if (Object.prototype.hasOwnProperty.call(changed, "round")) {
-    await tickAoEZones(combat, { reason: "round" });
+  const changedRound = Object.prototype.hasOwnProperty.call(changed, "round");
+  const changedTurn = Object.prototype.hasOwnProperty.call(changed, "turn");
+  if (changedRound || changedTurn) {
+    await tickAoEZones(combat, { reason: changedRound ? "round" : "turn" });
   }
 }
 
@@ -184,6 +194,12 @@ async function handleTokenMove(tokenDoc) {
   for (const template of templates) {
     const state = getAoEState(template);
     if (!state) continue;
+    if (ENTRY_TRIGGER_TYPES.has(state.aoeType) && !isAoEArmed(state)) {
+      if (shouldArmAoE(state)) {
+        await armAoE(template, state);
+      }
+      if (!isAoEArmed(state)) continue;
+    }
     if (!ENTRY_TRIGGER_TYPES.has(state.aoeType)) continue;
     if (state.spent) continue;
     if (isTokenInside(template, token)) {
@@ -215,6 +231,18 @@ async function processTemplateTick(templateDoc, { round, turn }) {
     return;
   }
 
+  if (ENTRY_TRIGGER_TYPES.has(state.aoeType) && !isAoEArmed(state)) {
+    if (shouldArmAoE(state, { round, turn })) {
+      await armAoE(templateDoc, state);
+    }
+    if (!isAoEArmed(state)) {
+      state.lastRound = round;
+      state.lastTurn = turn;
+      await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
+      return;
+    }
+  }
+
   const template = getTemplateObject(templateDoc);
   const tokens = tokensInTemplate(templateDoc, template);
 
@@ -239,6 +267,30 @@ async function processTemplateTick(templateDoc, { round, turn }) {
 
   state.lastRound = round;
   state.lastTurn = turn;
+  await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
+}
+
+function isAoEArmed(state) {
+  return state?.armed !== false;
+}
+
+function shouldArmAoE(state, source) {
+  if (!state) return false;
+  if (state.armed) return false;
+  const round = Number(source?.round ?? game.combat?.round ?? 0);
+  const turn = Number(source?.turn ?? game.combat?.turn ?? 0);
+  const placedRound = state.placedRound;
+  const placedTurn = state.placedTurn;
+  if (placedRound == null || placedTurn == null) return true;
+  if (round > placedRound) return true;
+  if (round === placedRound && turn !== placedTurn) return true;
+  return false;
+}
+
+async function armAoE(templateDoc, state) {
+  state.armed = true;
+  state.placedRound = Number(game.combat?.round ?? state.placedRound ?? 0);
+  state.placedTurn = Number(game.combat?.turn ?? state.placedTurn ?? 0);
   await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
 }
 
