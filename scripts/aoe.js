@@ -449,7 +449,8 @@ async function handleLineDefenseTick(templateDoc, state, tokens) {
     if (!actor) continue;
     if (casterDisposition != null && token.document.disposition !== casterDisposition) continue;
     const effectKey = `line-defense-${templateDoc.id}`;
-    await ensureEffect(actor, {
+    await removeEffectByKey(actor, effectKey);
+    await addEffect(actor, {
       key: effectKey,
       label: game.i18n.localize("W4SQ.EffectLineDefense"),
       duration: 2,
@@ -457,7 +458,7 @@ async function handleLineDefenseTick(templateDoc, state, tokens) {
         defSoakDice: "+2d10",
         tags: { braced: true, fortified: true }
       }
-    }, eff => eff.key === effectKey);
+    });
     occupantIds.add(actor.id);
   }
   await clearDepartedOccupants(state, occupantIds, templateDoc.id);
