@@ -585,7 +585,7 @@ export const MANEUVERS = {
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "lineDefense",
-        duration: 3,
+        duration: 4,
         data: {}
       });
       await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });

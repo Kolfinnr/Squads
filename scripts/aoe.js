@@ -50,7 +50,7 @@ const AOE_DEFINITIONS = {
   },
   lineDefense: {
     template: { t: "circle", distance: 1.5 },
-    duration: 3,
+    duration: 4,
     roundOnly: true,
     labelKey: "W4SQ.AoELineDefense"
   }
