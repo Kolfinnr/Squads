@@ -86,7 +86,6 @@ export async function createAoEFromEffect(opts = {}) {
     return null;
   }
 
-  const user = game.users.get(userId) ?? game.user;
   const templateData = buildTemplateData(definition.template, {
     casterTokenId,
     type,
@@ -96,28 +95,39 @@ export async function createAoEFromEffect(opts = {}) {
     sceneId,
     position
   });
+  templateData.flags ??= {};
+  templateData.flags[MODULE_ID] ??= {};
+  const state = templateData.flags[MODULE_ID][AOE_FLAG] ?? (templateData.flags[MODULE_ID][AOE_FLAG] = {});
 
-  const DocumentClass = CONFIG.MeasuredTemplate.documentClass;
-  const document = new DocumentClass(templateData, { parent: scene });
+  if (!skipPreview) {
+    if (!canvas?.scene) {
+      ui.notifications?.warn?.("No active scene to place this AoE.");
+      return null;
+    }
+    if (canvas.scene.id !== scene.id) {
+      ui.notifications?.warn?.("Switch to the caster's scene to place this AoE.");
+      return null;
+    }
 
-  if (!skipPreview && canvas?.scene?.id === scene.id && canvas?.templates?.activatePreview) {
-    try {
-      const placed = await canvas.templates.activatePreview({ document, user });
-      const doc = placed?.document ?? placed ?? null;
-      if (doc) {
-        await finalizeTemplate(doc, templateData.flags?.[MODULE_ID]?.[AOE_FLAG]);
-      }
-      return doc;
-    } catch (err) {
-      console.error("[W4SQ] Failed to start AoE preview", err);
+    const previewId =
+      globalThis.foundry?.utils?.randomID?.() ??
+      (typeof randomID === "function" ? randomID() : Math.random().toString(36).slice(2));
+    templateData.flags[MODULE_ID][AOE_FLAG].previewId = previewId;
+
+    const startResult = startAoEPreview(templateData, async doc => {
+      await finalizeTemplate(doc, { ...state, previewId });
+    });
+
+    if (startResult !== false) {
+      return startResult;
     }
   }
 
   try {
-    const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [document.toObject()]);
+    const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
     const doc = created?.[0] ?? null;
     if (doc) {
-      await finalizeTemplate(doc, templateData.flags?.[MODULE_ID]?.[AOE_FLAG]);
+      await finalizeTemplate(doc, state);
     }
     return doc;
   } catch (err) {
@@ -176,6 +186,70 @@ async function finalizeTemplate(templateDoc, state) {
     ...state,
     templateId: templateDoc.id
   });
+}
+
+function startAoEPreview(templateData, finalize) {
+  const previewId = templateData?.flags?.[MODULE_ID]?.[AOE_FLAG]?.previewId;
+  let hookId = null;
+  const cleanup = () => {
+    if (hookId !== null) Hooks.off("createMeasuredTemplate", hookId);
+  };
+
+  const listener = doc => {
+    const docState = doc?.getFlag(MODULE_ID, AOE_FLAG);
+    if (!docState) return;
+    if (docState.previewId !== previewId) return;
+    cleanup();
+    Promise.resolve(finalize?.(doc)).catch(err => console.error("[W4SQ] AoE finalize failed", err));
+  };
+
+  if (game.measuredTemplate?.createPreview) {
+    hookId = Hooks.on("createMeasuredTemplate", listener);
+    let preview;
+    try {
+      preview = game.measuredTemplate.createPreview({ templateData, user: game.user });
+    } catch (err) {
+      cleanup();
+      console.error("[W4SQ] Failed to start AoE preview", err);
+      return false;
+    }
+    if (typeof preview?.catch === "function") {
+      preview.catch(err => {
+        cleanup();
+        console.error("[W4SQ] AoE preview error", err);
+      });
+    }
+    if (typeof preview?.once === "function") {
+      preview.once("destroy", cleanup);
+    }
+    return preview ?? true;
+  }
+
+  if (canvas?.templates?.activatePreview) {
+    hookId = Hooks.on("createMeasuredTemplate", listener);
+    let preview;
+    try {
+      preview = canvas.templates.activatePreview(templateData);
+    } catch (err) {
+      cleanup();
+      console.error("[W4SQ] Failed to start legacy AoE preview", err);
+      return false;
+    }
+    if (typeof preview?.catch === "function") {
+      preview.catch(err => {
+        cleanup();
+        console.error("[W4SQ] Legacy AoE preview error", err);
+      });
+    }
+    if (typeof preview?.once === "function") {
+      preview.once("destroy", cleanup);
+    }
+    return preview ?? true;
+  }
+
+  cleanup();
+  ui.notifications?.warn?.("Cannot start AoE preview on this client/version.");
+  return false;
 }
 
 async function handleCombatRound(combat) {
