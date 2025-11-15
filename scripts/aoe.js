@@ -444,16 +444,29 @@ async function handleFortifyTick(templateDoc, state, tokens) {
 async function handleLineDefenseTick(templateDoc, state, tokens) {
   const casterDisposition = getCasterDisposition(state.casterTokenId);
   const occupantIds = new Set();
+
+  const remaining = Number.isFinite(Number(state.remaining))
+    ? Number(state.remaining)
+    : Number(state.duration ?? 0);
+
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    await templateDoc.delete();
+    return true;
+  }
+
+  const effectDuration = Math.max(1, remaining - 1);
+
   for (const token of tokens) {
     const actor = token.actor;
     if (!actor) continue;
     if (casterDisposition != null && token.document.disposition !== casterDisposition) continue;
+
     const effectKey = `line-defense-${templateDoc.id}`;
     await removeEffectByKey(actor, effectKey);
     await addEffect(actor, {
       key: effectKey,
       label: game.i18n.localize("W4SQ.EffectLineDefense"),
-      duration: 2,
+      duration: effectDuration,
       mods: {
         defSoakDice: "+2d10",
         tags: { braced: true, fortified: true }
@@ -461,7 +474,9 @@ async function handleLineDefenseTick(templateDoc, state, tokens) {
     });
     occupantIds.add(actor.id);
   }
+
   await clearDepartedOccupants(state, occupantIds, templateDoc.id);
+
   decrementRemaining(state);
   if (state.remaining !== null && state.remaining <= 0) {
     await templateDoc.delete();
