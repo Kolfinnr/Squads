@@ -219,5 +219,15 @@
   "W4SQ.EffectLineDefense": "Barricade Cover",
   "W4SQ.EffectWolfPits": "Snared in Wolf Pits",
   "W4SQ.ManeuverCalibration": "Ballistic Calibration",
-  "W4SQ.ChatCalibration": "{name} calibrates fire for {target}, sharpening their aim!"
+  "W4SQ.ChatCalibration": "{name} calibrates fire for {target}, sharpening their aim!",
+  "W4SQ.AoEFirestorm": "Firestorm",
+  "W4SQ.AoEFireball": "Fireball",
+  "W4SQ.AoEMinefield": "Minefield",
+  "W4SQ.AoEWolfPits": "Wolf Pits",
+  "W4SQ.AoEFortify": "Fortified Zone",
+  "W4SQ.AoELineDefense": "Line Defense",
+  "W4SQ.AoEUnknown": "Area of Effect",
+  "W4SQ.ChatAoEHitSingle": "{aoe} engulfs {target}!",
+  "W4SQ.ChatAoEHits": "{aoe} engulfs {targets}!",
+  "W4SQ.WordAnd": "and"
 }

@@ -21,32 +21,38 @@ const AOE_DEFINITIONS = {
   firestorm: {
     template: { t: "circle", distance: 4 },
     duration: 3,
-    roundOnly: true
+    roundOnly: true,
+    labelKey: "W4SQ.AoEFirestorm"
   },
   fireball: {
     template: { t: "circle", distance: 3 },
     duration: 1,
-    roundOnly: true
+    roundOnly: true,
+    labelKey: "W4SQ.AoEFireball"
   },
   minefield: {
     template: { t: "circle", distance: 1.5 },
     duration: 4,
-    triggerOnEntry: true
+    triggerOnEntry: true,
+    labelKey: "W4SQ.AoEMinefield"
   },
   wolfPits: {
     template: { t: "circle", distance: 1.5 },
     duration: 4,
-    triggerOnEntry: true
+    triggerOnEntry: true,
+    labelKey: "W4SQ.AoEWolfPits"
   },
   fortify: {
     template: { t: "circle", distance: 3.5 },
     duration: null,
-    roundOnly: true
+    roundOnly: true,
+    labelKey: "W4SQ.AoEFortify"
   },
   lineDefense: {
     template: { t: "rect", distance: 5, width: 4.5 },
     duration: 3,
-    roundOnly: true
+    roundOnly: true,
+    labelKey: "W4SQ.AoELineDefense"
   }
 };
 
@@ -348,7 +354,10 @@ async function handleFirestormTick(templateDoc, state, tokens, round) {
     state.pendingFirstTick = false;
     return false;
   }
-  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "4d20", state.data?.moraleDamage ?? "6d20");
+  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "4d20", state.data?.moraleDamage ?? "6d20", {
+    state,
+    template: templateDoc
+  });
   await moveFirestorm(templateDoc, state);
   decrementRemaining(state);
   if (state.remaining !== null && state.remaining <= 0) {
@@ -379,7 +388,10 @@ async function moveFirestorm(templateDoc, state) {
 }
 
 async function handleFireballTick(templateDoc, state, tokens) {
-  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "3d20", state.data?.moraleDamage ?? "4d20");
+  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "3d20", state.data?.moraleDamage ?? "4d20", {
+    state,
+    template: templateDoc
+  });
   await templateDoc.delete();
   return true;
 }
@@ -456,7 +468,10 @@ async function handleLineDefenseTick(templateDoc, state, tokens) {
 }
 
 async function handleMinefieldTrigger(templateDoc, state, tokens) {
-  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "3d20", state.data?.moraleDamage ?? "4d20");
+  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "3d20", state.data?.moraleDamage ?? "4d20", {
+    state,
+    template: templateDoc
+  });
   for (const entry of tokens) {
     const actor = entry.actor;
     if (!actor) continue;
@@ -467,7 +482,10 @@ async function handleMinefieldTrigger(templateDoc, state, tokens) {
 }
 
 async function handleWolfPitsTrigger(templateDoc, state, tokens) {
-  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "2d10", state.data?.moraleDamage ?? "2d10");
+  await applyDamageToTokens(tokens, state.data?.hpDamage ?? "2d10", state.data?.moraleDamage ?? "2d10", {
+    state,
+    template: templateDoc
+  });
   for (const entry of tokens) {
     const actor = entry.actor;
     if (!actor) continue;
@@ -482,17 +500,25 @@ async function handleWolfPitsTrigger(templateDoc, state, tokens) {
   await templateDoc.delete();
 }
 
-async function applyDamageToTokens(tokens, hpFormula, moraleFormula) {
+async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {}) {
+  const affectedEnemies = [];
   for (const token of tokens) {
     const actor = token.actor;
     if (!actor) continue;
+    let hpTotal = 0;
+    let moraleTotal = 0;
+    let inflicted = false;
     if (hpFormula) {
       const hpRoll = await rollFormula(hpFormula);
-      await adjustActorFlag(actor, "hp", -hpRoll.total, "hpMax");
+      hpTotal = hpRoll.total;
+      if (hpTotal > 0) inflicted = true;
+      await adjustActorFlag(actor, "hp", -hpTotal, "hpMax");
     }
     if (moraleFormula) {
       const moraleRoll = await rollFormula(moraleFormula);
-      const result = await adjustActorFlag(actor, "morale", -moraleRoll.total, "moraleMax");
+      moraleTotal = moraleRoll.total;
+      if (moraleTotal > 0) inflicted = true;
+      const result = await adjustActorFlag(actor, "morale", -moraleTotal, "moraleMax");
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
       if (moraleMax > 0 && result.after / moraleMax < 0.5) {
         await ensureDisorganized(actor, { source: "morale" });
@@ -506,6 +532,12 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula) {
         }, eff => eff?.mods?.tags?.routed);
       }
     }
+    if (inflicted) {
+      affectedEnemies.push({ token, hpTotal, moraleTotal });
+    }
+  }
+  if (affectedEnemies.length) {
+    await sendAoEFlavorMessage(affectedEnemies, context);
   }
 }
 
@@ -567,4 +599,58 @@ function getCasterDisposition(tokenId) {
   if (!tokenId) return null;
   const token = canvas.tokens.get(tokenId);
   return token?.document?.disposition ?? null;
+}
+
+async function sendAoEFlavorMessage(entries, context = {}) {
+  const state = context.state;
+  if (!state) return;
+  const definition = AOE_DEFINITIONS[state.aoeType];
+  const labelKey = definition?.labelKey ?? "W4SQ.AoEUnknown";
+  const aoeLabel = game.i18n?.localize?.(labelKey) ?? state.aoeType ?? "AoE";
+
+  const casterToken = state.casterTokenId ? canvas?.tokens?.get(state.casterTokenId) : null;
+  const casterActor = casterToken?.actor ?? null;
+  const casterDisposition = casterToken?.document?.disposition ?? null;
+
+  const seen = new Set();
+  const enemyNames = [];
+  for (const entry of entries) {
+    const token = entry?.token;
+    if (!token) continue;
+    const disposition = token.document?.disposition ?? null;
+    let isEnemy = true;
+    if (casterDisposition !== null && casterDisposition !== undefined) {
+      isEnemy = disposition !== casterDisposition;
+    } else if (disposition !== CONST.TOKEN_DISPOSITIONS.HOSTILE) {
+      isEnemy = false;
+    }
+    if (!isEnemy) continue;
+    const name = token.name ?? token.document?.name;
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    enemyNames.push(name);
+  }
+
+  if (!enemyNames.length) return;
+
+  const key = enemyNames.length === 1 ? "W4SQ.ChatAoEHitSingle" : "W4SQ.ChatAoEHits";
+  const message = game.i18n?.format?.(key, {
+    aoe: aoeLabel,
+    target: enemyNames[0],
+    targets: formatNameList(enemyNames)
+  }) ?? `${aoeLabel} engulfs ${formatNameList(enemyNames)}`;
+
+  const speakerActor = casterActor ?? entries[0]?.token?.actor ?? null;
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: speakerActor }),
+    content: `<p>${message}</p>`
+  });
+}
+
+function formatNameList(names = []) {
+  const unique = [...names];
+  if (unique.length <= 1) return unique[0] ?? "";
+  if (unique.length === 2) return `${unique[0]} ${game.i18n?.localize?.("W4SQ.WordAnd") ?? "and"} ${unique[1]}`;
+  const last = unique.pop();
+  return `${unique.join(", ")}, ${game.i18n?.localize?.("W4SQ.WordAnd") ?? "and"} ${last}`;
 }
