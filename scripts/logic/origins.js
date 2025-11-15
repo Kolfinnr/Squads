@@ -1,4 +1,4 @@
-import { FLAG_SCOPE, MODULE_ID } from "../config.js";
+import { FLAG_SCOPE } from "../config.js";
 import { addEffect, removeEffectByKey, ensureEffect, actorHasTag, getEffects, removeDisorganized } from "./effects.js";
 import { maybeTriggerHoB } from "./hob.js";
 
@@ -100,6 +100,25 @@ const PASSIVE_LABELS = {
   ratTreacherous: "W4SQ.PassiveRatTreacherous",
   ratNumerous: "W4SQ.PassiveRatNumerous"
 };
+
+const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
+
+function safeName(entity) {
+  if (!entity) {
+    return escapeHtml(game.i18n.localize("W4SQ.UnknownSquad"));
+  }
+  const raw = typeof entity === "string" ? entity : entity.name;
+  return escapeHtml(raw || game.i18n.localize("W4SQ.UnknownSquad"));
+}
+
+async function sendPassiveMessage(actor, key, data = {}) {
+  if (!actor || !key) return null;
+  const formatted = game.i18n.format(key, data);
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<p>${formatted}</p>`
+  });
+}
 
 export function getOrigin(actor) {
   if (!actor) return null;
@@ -350,6 +369,10 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
   if (origin === "monster" && passives.monsterThickHide) {
     const roll = await new Roll("3d10+5").roll({ async: true });
     armor += roll.total;
+    await sendPassiveMessage(defender, "W4SQ.PassiveMsgMonsterThickHide", {
+      name: safeName(defender),
+      amount: roll.total
+    });
   }
   if (attackerOrigin === "monster" && attackerPassives.monsterLurker && action === "melee") {
     const penalty = await new Roll("1d20").roll({ async: true });
@@ -374,6 +397,8 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
   const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
   const moraleRatioTarget = moraleRatio(defender);
+  const actorName = safeName(actor);
+  const defenderName = safeName(defender);
 
   let damage = Number(hpDamage) || 0;
   let moraleBonus = 0;
@@ -388,19 +413,42 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
     moraleBonus += 10;
     if (passives.monsterBulky) damage += 10;
     if (passives.monsterHorrorIncarnate) moraleBonus += 40;
-    if (passives.monsterPredatorInstinct && moraleRatioTarget < 0.5) moraleBonus += 30;
+    if (passives.monsterPredatorInstinct && moraleRatioTarget < 0.5) {
+      moraleBonus += 30;
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgMonsterPredatorInstinctStrike", {
+        name: actorName,
+        target: defenderName,
+        amount: 30
+      });
+    }
     if (passives.monsterColossal) damage += 30;
     if (passives.monsterMonstrousCharge && isCharge) {
       const chargeBonus = await new Roll("1d20").roll({ async: true });
       damage += chargeBonus.total;
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgMonsterMonstrousCharge", {
+        name: actorName,
+        amount: chargeBonus.total
+      });
     }
     if (passives.monsterMultipleAppendages && action === "melee") {
       extraAttacks += 1;
     }
   }
   if (origin === "greenskin") {
-    if (hpMax > 0 && hp / hpMax > 0.5) damage += 10;
-    if (passives.greenSurge && actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) damage += 20;
+    if (hpMax > 0 && hp / hpMax > 0.5) {
+      damage += 10;
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgGreenskinOrigin", {
+        name: actorName,
+        amount: 10
+      });
+    }
+    if (passives.greenSurge && actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) {
+      damage += 20;
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgGreenSurge", {
+        name: actorName,
+        amount: 20
+      });
+    }
     if (passives.greenUnstoppableWave && isCharge) moraleBonus += 40;
     if (passives.greenBigChoppas) armorPierceBonus += 10;
   }
@@ -410,6 +458,11 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   if (origin === "dwarf" && passives.dwarfAncestralGrudge) {
     if (defenderOrigin === "greenskin" || defenderOrigin === "ratmen") {
       damage += 20;
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgDwarfAncestralGrudge", {
+        name: actorName,
+        target: defenderName,
+        amount: 20
+      });
     }
   }
   if (origin === "ratmen" && passives.ratTreacherous) {
@@ -426,15 +479,16 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10; // overwhelmed baseline
   }
-  if (origin === "monster" && passives.monsterPredatorInstinct) {
-    // Monster takes +20 later when defending.
-  }
   if (origin === "monster" && passives.monsterDevourer && defender && sameSide(actor, defender)) {
     const heal = await new Roll("3d10+20").roll({ async: true });
     const hpCurrent = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
     const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
     const next = Math.min(hpMax, hpCurrent + heal.total);
     await actor.setFlag(FLAG_SCOPE, "hp", next);
+    await sendPassiveMessage(actor, "W4SQ.PassiveMsgMonsterDevourer", {
+      name: actorName,
+      amount: heal.total
+    });
   }
   if (origin === "greenskin" && passives.greenMobMentality) {
     const buff = actor.getFlag(FLAG_SCOPE, "greenMobBonus");
@@ -445,6 +499,13 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   }
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10;
+  }
+  if (origin === "ratmen" && passives.ratTreacherous && defender && sameSide(actor, defender)) {
+    await sendPassiveMessage(actor, "W4SQ.PassiveMsgRatTreacherous", {
+      name: actorName,
+      target: defenderName,
+      amount: 10
+    });
   }
 
   return { damage, moraleBonus, armorPierceBonus, extraAttacks };
@@ -485,6 +546,10 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   if (origin === "monster") {
     if (passives.monsterPredatorInstinct) {
       damage += 20;
+      await sendPassiveMessage(defender, "W4SQ.PassiveMsgMonsterPredatorInstinctExpose", {
+        name: safeName(defender),
+        amount: 20
+      });
     }
     if (passives.monsterColossal && damageType === "ranged") {
       damage += 30;
@@ -536,12 +601,19 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
   const passives = getPassives(attacker);
 
   if (origin === "ratmen" && passives.ratPoisoner) {
+    const alreadyPoisoned = actorHasTag(defender, "ratPoison");
     await ensureEffect(defender, {
       key: randomID?.() ?? `rat-poison-${Date.now()}`,
       label: game.i18n.localize("W4SQ.PassiveRatPoisoner"),
       duration: 2,
       mods: { tags: { ratPoison: true }, tnDice: "-20" }
     }, eff => Boolean(eff?.mods?.tags?.ratPoison));
+    if (!alreadyPoisoned) {
+      await sendPassiveMessage(attacker, "W4SQ.PassiveMsgRatPoisoner", {
+        name: safeName(attacker),
+        target: safeName(defender)
+      });
+    }
   }
   if (origin === "ratmen" && passives.ratNumerous) {
     await ensureEffect(defender, {
@@ -560,7 +632,12 @@ export async function recordDamageTaken(defender, { hpDamage = 0 } = {}) {
 
   if (origin === "dwarf" && passives.dwarfGrudgin) {
     const current = Number(defender.getFlag(FLAG_SCOPE, "dwarfGrudgeTicks") || 0);
-    await defender.setFlag(FLAG_SCOPE, "dwarfGrudgeTicks", Math.min(current + 1, 4));
+    const next = Math.min(current + 1, 4);
+    await defender.setFlag(FLAG_SCOPE, "dwarfGrudgeTicks", next);
+    await sendPassiveMessage(defender, "W4SQ.PassiveMsgDwarfGrudgin", {
+      name: safeName(defender),
+      amount: Math.min(next * 5, 20)
+    });
   }
   if (origin === "elf" && passives.elfSwift) {
     await defender.setFlag(FLAG_SCOPE, "elfSwiftReady", true);
@@ -617,6 +694,7 @@ export async function handleMoraleZero(defender, attacker) {
   const morale = Number(defender.getFlag(FLAG_SCOPE, "morale") || 0);
   const moraleMax = Number(defender.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   const restored = Math.min(moraleMax, morale + roll.total);
+  const gained = Math.max(0, restored - morale);
   await defender.setFlag(FLAG_SCOPE, "morale", restored);
   await removeDisorganized(defender);
   const effects = getEffects(defender).filter(effect => !effect?.mods?.tags?.routed);
@@ -624,10 +702,9 @@ export async function handleMoraleZero(defender, attacker) {
   if (moraleMax > 0 && restored <= 0) {
     await defender.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, 1));
   }
-  const name = defender.name || game.i18n.localize("W4SQ.UnknownSquad");
-  await ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor: defender }),
-    content: `<p><strong>${game.i18n.localize("W4SQ.PassiveHumanToTheBitterEnd")}</strong> — ${name} rally!</p>`
+  await sendPassiveMessage(defender, "W4SQ.PassiveMsgHumanToTheBitterEnd", {
+    name: safeName(defender),
+    amount: gained
   });
 }
 
@@ -641,6 +718,10 @@ export async function handleTurnTick(actor, context = {}) {
     const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
     const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
     await actor.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hp + roll.total));
+    await sendPassiveMessage(actor, "W4SQ.PassiveMsgMonsterRegeneration", {
+      name: safeName(actor),
+      amount: roll.total
+    });
   }
   if (origin === "greenskin" && passives.greenSurge) {
     const active = round > 0 && round % 4 === 0;
@@ -681,6 +762,9 @@ export async function maybeTriggerAestheticHoB(actor, { roll, tn, target, type }
   if (tn <= 0) return null;
   const threshold = Math.floor(tn * 0.1);
   if (roll > threshold) return null;
+  await sendPassiveMessage(actor, "W4SQ.PassiveMsgElfAestheticPerfection", {
+    name: safeName(actor)
+  });
   const forced = await maybeTriggerHoB(actor, { roll: 11, success: true, type, target });
   return forced;
 }
