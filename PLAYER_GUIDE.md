@@ -37,7 +37,7 @@
 - **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 2 rounds.
 
 ### Engineer Maneuvers (Average/Hard, CD 2)
-- **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies inside for 3 rounds.
+- **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies standing inside (the bonus ends as soon as they leave) for 3 rounds.
 - **Minefield** (enemy): Deals 3d20 HP and 4d20 Morale, leaving the foe Disorganized.
 - **Wolf Pits** (enemy): 2d10 HP and 2d10 Morale damage plus a skip-turn snare.
 - **Flashbombs** (enemy): Blinds the target with −(50 + 5d10) TN and Disorganized for 2 rounds.

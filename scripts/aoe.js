@@ -49,7 +49,7 @@ const AOE_DEFINITIONS = {
     labelKey: "W4SQ.AoEFortify"
   },
   lineDefense: {
-    template: { t: "rect", distance: 5, width: 4.5 },
+    template: { t: "circle", distance: 1.5 },
     duration: 3,
     roundOnly: true,
     labelKey: "W4SQ.AoELineDefense"
@@ -328,6 +328,12 @@ function unitsToPixels(units) {
 function isTokenInside(templateDoc, token, templateObject) {
   if (!token?.center) return false;
   const { x, y } = token.center;
+
+  if (templateObject?.shape?.contains && templateObject?.worldTransform) {
+    const world = templateObject.worldTransform.applyInverse({ x, y });
+    if (templateObject.shape.contains(world.x, world.y)) return true;
+  }
+
   const type = templateDoc.t;
   if (type === "circle") {
     const radiusPx = unitsToPixels(templateDoc.distance ?? 0);
@@ -341,10 +347,6 @@ function isTokenInside(templateDoc, token, templateObject) {
     const cx = templateDoc.x ?? 0;
     const cy = templateDoc.y ?? 0;
     return Math.abs(x - cx) <= widthPx && Math.abs(y - cy) <= heightPx;
-  }
-  if (templateObject?.shape?.contains) {
-    const world = templateObject.worldTransform.applyInverse({ x, y });
-    return templateObject.shape.contains(world.x, world.y);
   }
   return false;
 }
