@@ -1,0 +1,10 @@
+<div class="w4sq-maneuver-dialog">
+  <label for="maneuver-select">{{localize "W4SQ.SelectManeuver"}}</label>
+  <select name="maneuver" id="maneuver-select">
+    {{#each maneuvers as |man|}}
+      <option value="{{man.key}}" {{#if man.isOnCooldown}}disabled{{/if}}>
+        {{man.name}} ({{man.difficulty}}) {{#if man.isOnCooldown}}- {{localize "W4SQ.OnCooldown"}}: {{man.remainingCooldown}}{{/if}}
+      </option>
+    {{/each}}
+  </select>
+</div>
