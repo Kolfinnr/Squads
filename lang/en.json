@@ -227,7 +227,15 @@
   "W4SQ.AoEFortify": "Fortified Zone",
   "W4SQ.AoELineDefense": "Line Defense",
   "W4SQ.AoEUnknown": "Area of Effect",
-  "W4SQ.ChatAoEHitSingle": "{aoe} engulfs {target}!",
-  "W4SQ.ChatAoEHits": "{aoe} engulfs {targets}!",
+  "W4SQ.ChatAoEFirestormSingle": "Firestorm engulfs {target}, dealing {damage} total damage ({hp} HP / {morale} Morale)!",
+  "W4SQ.ChatAoEFirestormMulti": "Firestorm sweeps over {targets}, burning {hp} HP and {morale} Morale in total!",
+  "W4SQ.ChatAoEFireballSingle": "Fireball detonates around {target}, blasting {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEFireballMulti": "Fireball shrapnel rips through {targets}, costing {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEMinefieldSingle": "{target} wanders into a minefield, losing {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEMinefieldMulti": "A minefield erupts beneath {targets}, stripping {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEWolfPitsSingle": "{target} falls into hidden wolf pits, suffering {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEWolfPitsMulti": "Wolf pits collapse under {targets}, inflicting {hp} HP and {morale} Morale!",
+  "W4SQ.ChatAoEHitSingle": "{aoe} batters {target}!",
+  "W4SQ.ChatAoEHits": "{aoe} crashes into {targets}!",
   "W4SQ.WordAnd": "and"
 }

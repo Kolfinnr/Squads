@@ -44,22 +44,6 @@ function tokenCenter(token) {
   return { x: token.x + (token.width ?? 0) / 2, y: token.y + (token.height ?? 0) / 2 };
 }
 
-function randomFriendlyToken(actor) {
-  const tokens = canvas?.tokens?.placeables ?? [];
-  if (!tokens.length) return null;
-  const origin = actor?.getActiveTokens?.(true)?.[0] ?? null;
-  const disposition = origin?.document?.disposition ?? null;
-  const filtered = tokens.filter(token => {
-    if (!token?.actor) return false;
-    if (disposition === null) return true;
-    return token.document?.disposition === disposition;
-  });
-  const pool = filtered.length ? filtered : tokens.filter(t => t?.actor);
-  if (!pool.length) return null;
-  const index = Math.floor(Math.random() * pool.length);
-  return pool[index] ?? null;
-}
-
 function randomScenePoint(padding = 0) {
   const dims = canvas?.dimensions;
   if (!dims) return null;
@@ -73,6 +57,145 @@ function randomScenePoint(padding = 0) {
     x: pad + Math.random() * (spanX || 0),
     y: pad + Math.random() * (spanY || 0)
   };
+}
+
+function firstActiveToken(actor) {
+  return actor?.getActiveTokens?.(true)?.[0] ?? null;
+}
+
+function getTokenDisposition(token) {
+  return token?.document?.disposition ?? null;
+}
+
+function isEnemyRelative(originDisposition, tokenDisposition) {
+  if (originDisposition === null || originDisposition === undefined) {
+    return tokenDisposition === CONST.TOKEN_DISPOSITIONS.HOSTILE;
+  }
+  return tokenDisposition !== originDisposition;
+}
+
+function isAllyRelative(originDisposition, tokenDisposition) {
+  if (originDisposition === null || originDisposition === undefined) {
+    return tokenDisposition !== CONST.TOKEN_DISPOSITIONS.HOSTILE;
+  }
+  return tokenDisposition === originDisposition;
+}
+
+function randomToken(tokens = []) {
+  if (!tokens.length) return null;
+  const index = Math.floor(Math.random() * tokens.length);
+  return tokens[index] ?? null;
+}
+
+function randomTokenByRelation(actor, relation) {
+  const placeables = canvas?.tokens?.placeables ?? [];
+  if (!placeables.length) return null;
+  const origin = firstActiveToken(actor);
+  const originDisposition = getTokenDisposition(origin);
+  const filtered = placeables.filter(token => {
+    if (!token?.actor) return false;
+    const disp = getTokenDisposition(token);
+    if (relation === "enemy") return isEnemyRelative(originDisposition, disp);
+    if (relation === "ally") return isAllyRelative(originDisposition, disp);
+    return true;
+  });
+  if (!filtered.length && relation !== "any") {
+    return randomTokenByRelation(actor, "any");
+  }
+  return randomToken(filtered.length ? filtered : placeables);
+}
+
+function sceneIdForToken(token) {
+  return token?.document?.parent?.id ?? canvas.scene?.id;
+}
+
+const AOE_REPEAT_DATA = {
+  firestorm: { type: "firestorm", duration: 3, data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 } },
+  fireball: { type: "fireball", duration: 1, data: { hpDamage: "3d20", moraleDamage: "4d20" } }
+};
+
+let maneuversCache = null;
+async function loadManeuvers() {
+  if (maneuversCache) return maneuversCache;
+  try {
+    const module = await import("./maneuvers.js");
+    maneuversCache = module?.MANEUVERS ?? null;
+  } catch (err) {
+    console.error("[W4SQ] Failed to load maneuvers for specialist perils", err);
+    maneuversCache = null;
+  }
+  return maneuversCache;
+}
+
+function pickTokenForTargetType(actor, maneuver, { mode = "random" } = {}) {
+  const targetType = maneuver?.target ?? "none";
+  if (mode === "self") return firstActiveToken(actor);
+  switch (targetType) {
+    case "enemy":
+      return randomTokenByRelation(actor, "enemy");
+    case "ally":
+      return randomTokenByRelation(actor, "ally");
+    case "self":
+      return firstActiveToken(actor);
+    default:
+      return null;
+  }
+}
+
+async function handleAethyricEcho(actor, context = {}) {
+  const key = context?.maneuverKey;
+  if (!key) return;
+  if (key in AOE_REPEAT_DATA) {
+    const origin = firstActiveToken(actor);
+    const config = AOE_REPEAT_DATA[key];
+    const targetToken = key === "firestorm"
+      ? (randomTokenByRelation(actor, "enemy") ?? randomTokenByRelation(actor, "any"))
+      : randomTokenByRelation(actor, "enemy");
+    const position = targetToken ? tokenCenter(targetToken) : randomScenePoint();
+    await createAoEFromEffect({
+      sceneId: sceneIdForToken(targetToken ?? origin),
+      userId: game.user.id,
+      casterTokenId: origin?.id ?? null,
+      type: config.type,
+      duration: config.duration,
+      data: config.data,
+      position
+    });
+    return;
+  }
+
+  const maneuvers = await loadManeuvers();
+  const maneuver = maneuvers?.[key];
+  if (!maneuver?.apply) return;
+  const token = pickTokenForTargetType(actor, maneuver, { mode: "random" });
+  const targetActor = token?.actor ?? (maneuver.target === "self" ? actor : null);
+  if (maneuver.target && !targetActor && maneuver.target !== "none") return;
+  await maneuver.apply({ actor, target: targetActor });
+}
+
+async function handleWarpMirror(actor, context = {}) {
+  const key = context?.maneuverKey;
+  if (!key) return;
+  if (key in AOE_REPEAT_DATA) {
+    const origin = firstActiveToken(actor);
+    if (!origin) return;
+    const config = AOE_REPEAT_DATA[key];
+    await createAoEFromEffect({
+      sceneId: sceneIdForToken(origin),
+      userId: game.user.id,
+      casterTokenId: origin.id,
+      type: config.type,
+      duration: config.duration,
+      data: config.data,
+      position: tokenCenter(origin)
+    });
+    return;
+  }
+
+  const maneuvers = await loadManeuvers();
+  const maneuver = maneuvers?.[key];
+  if (!maneuver?.apply) return;
+  await maneuver.apply({ actor, target: actor });
 }
 
 export function getSpecialistType(actor) {
@@ -212,42 +335,14 @@ const MAJOR_PERILS = [
   },
   async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor6");
-    if (context?.maneuverKey === "firestorm") {
-      const point = randomScenePoint();
-      if (point) {
-        await createAoEFromEffect({
-          sceneId: canvas.scene?.id,
-          userId: game.user.id,
-          type: "firestorm",
-          duration: 3,
-          data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 },
-          position: point,
-          skipPreview: true
-        });
-      }
-    }
+    await handleAethyricEcho(actor, context);
   },
   async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor7");
   },
   async (actor, { roll = 0, context = {} } = {}) => {
     await notify(actor, "W4SQ.PerilMajor8");
-    if (context?.maneuverKey === "firestorm") {
-      const token = randomFriendlyToken(actor);
-      if (token) {
-        const center = tokenCenter(token);
-        await createAoEFromEffect({
-          sceneId: token.document.parent?.id ?? canvas.scene?.id,
-          userId: game.user.id,
-          casterTokenId: token.id,
-          type: "firestorm",
-          duration: 3,
-          data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 },
-          position: center,
-          skipPreview: true
-        });
-      }
-    }
+    await handleWarpMirror(actor, context);
   },
   async (actor, { roll = 0, context = {} } = {}) => {
     await ensureDisorganized(actor, { source: "peril" });

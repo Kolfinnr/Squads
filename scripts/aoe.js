@@ -601,6 +601,15 @@ function getCasterDisposition(tokenId) {
   return token?.document?.disposition ?? null;
 }
 
+const AOE_FLAVOR_KEYS = {
+  firestorm: { single: "W4SQ.ChatAoEFirestormSingle", multi: "W4SQ.ChatAoEFirestormMulti" },
+  fireball: { single: "W4SQ.ChatAoEFireballSingle", multi: "W4SQ.ChatAoEFireballMulti" },
+  minefield: { single: "W4SQ.ChatAoEMinefieldSingle", multi: "W4SQ.ChatAoEMinefieldMulti" },
+  wolfPits: { single: "W4SQ.ChatAoEWolfPitsSingle", multi: "W4SQ.ChatAoEWolfPitsMulti" }
+};
+
+const DEFAULT_AOE_FLAVOR = { single: "W4SQ.ChatAoEHitSingle", multi: "W4SQ.ChatAoEHits" };
+
 async function sendAoEFlavorMessage(entries, context = {}) {
   const state = context.state;
   if (!state) return;
@@ -633,12 +642,28 @@ async function sendAoEFlavorMessage(entries, context = {}) {
 
   if (!enemyNames.length) return;
 
-  const key = enemyNames.length === 1 ? "W4SQ.ChatAoEHitSingle" : "W4SQ.ChatAoEHits";
+  const totals = entries.reduce((acc, entry) => {
+    acc.hp += Number(entry?.hpTotal ?? 0);
+    acc.morale += Number(entry?.moraleTotal ?? 0);
+    return acc;
+  }, { hp: 0, morale: 0 });
+
+  const keySet = AOE_FLAVOR_KEYS[state.aoeType] ?? DEFAULT_AOE_FLAVOR;
+  const single = enemyNames.length === 1;
+  const key = single ? keySet.single : keySet.multi;
+  const firstEntry = entries[0] ?? {};
+  const hpValue = single ? Number(firstEntry.hpTotal ?? 0) : totals.hp;
+  const moraleValue = single ? Number(firstEntry.moraleTotal ?? 0) : totals.morale;
+  const damageValue = hpValue + moraleValue;
+
   const message = game.i18n?.format?.(key, {
     aoe: aoeLabel,
     target: enemyNames[0],
-    targets: formatNameList(enemyNames)
-  }) ?? `${aoeLabel} engulfs ${formatNameList(enemyNames)}`;
+    targets: formatNameList(enemyNames),
+    hp: hpValue,
+    morale: moraleValue,
+    damage: damageValue
+  }) ?? `${aoeLabel} batters ${formatNameList(enemyNames)}`;
 
   const speakerActor = casterActor ?? entries[0]?.token?.actor ?? null;
   await ChatMessage.create({
