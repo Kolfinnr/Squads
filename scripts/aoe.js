@@ -190,10 +190,15 @@ async function finalizeTemplate(templateDoc, state) {
 
 function startAoEPreview(templateData, finalize) {
   const previewId = templateData?.flags?.[MODULE_ID]?.[AOE_FLAG]?.previewId;
+  const userId = templateData?.user ?? game.user?.id;
   const registerHook = () => {
     const hookId = Hooks.on("createMeasuredTemplate", doc => {
-      const docState = doc?.getFlag(MODULE_ID, AOE_FLAG);
-      if (!docState || docState.previewId !== previewId) return;
+      if (!doc) return;
+      if (doc.parent?.id !== canvas.scene?.id) return;
+      const docState = doc.getFlag(MODULE_ID, AOE_FLAG);
+      const docPreviewId = docState?.previewId;
+      if (docPreviewId && docPreviewId !== previewId) return;
+      if (!docPreviewId && userId && doc.user?.id !== userId) return;
       Hooks.off("createMeasuredTemplate", hookId);
       Promise.resolve(finalize?.(doc)).catch(err => console.error("[W4SQ] AoE finalize failed", err));
     });
