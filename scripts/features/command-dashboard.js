@@ -553,7 +553,7 @@ export class W4SQCommandApp extends Application {
 
   async _commandRally(commander, squad) {
     if (!(await this._spendCP(commander, 1))) return;
-    const roll = await (new Roll("4d20").roll({ async: true }));
+    const roll = await (new Roll("4d20").evaluate({}));
     const morale = Number(squad.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     const restored = Math.min(moraleMax, morale + roll.total);

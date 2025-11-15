@@ -116,7 +116,7 @@ async function removeTired(actor) {
 }
 
 async function rollFormula(formula) {
-  return (await new Roll(formula).roll({ async: true }));
+  return (await new Roll(formula).evaluate({}));
 }
 
 function immediateFromRoll(roll) {

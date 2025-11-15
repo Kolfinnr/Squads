@@ -1,5 +1,13 @@
 import { MODULE_ID } from "../config.js";
 
+function renderTemplateCompat(path, data) {
+  const fn = foundry?.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+  if (!fn) {
+    throw new Error("Foundry Handlebars renderTemplate helper is unavailable");
+  }
+  return fn(path, data);
+}
+
 export async function sendActionMessage({ actor, label, tn, rollTotal, success, margin, dmg, moraleLoss, soakDetail, hobNotes = [], backline = false, footer }) {
   let formattedSoak = soakDetail;
   if (typeof formattedSoak === "string") {
@@ -7,7 +15,7 @@ export async function sendActionMessage({ actor, label, tn, rollTotal, success, 
     formattedSoak = formattedSoak.replace(/\s*•\s*•\s*/g, " • ");
     formattedSoak = formattedSoak.trim();
   }
-  const content = await renderTemplate(`modules/${MODULE_ID}/templates/chat-action.hbs`, {
+  const content = await renderTemplateCompat(`modules/${MODULE_ID}/templates/chat-action.hbs`, {
     label,
     actorName: actor.name,
     tn,

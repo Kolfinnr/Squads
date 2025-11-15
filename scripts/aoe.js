@@ -609,7 +609,7 @@ function decrementRemaining(state) {
 
 async function rollFormula(formula) {
   if (!formula || formula === "0") return { total: 0 };
-  const roll = await (new Roll(formula)).roll({ async: true });
+  const roll = await (new Roll(formula)).evaluate({});
   return roll;
 }
 

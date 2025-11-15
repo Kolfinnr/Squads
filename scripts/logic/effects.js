@@ -117,8 +117,8 @@ async function applyFlagDelta(actor, key, delta, maxKey = null) {
 async function handleSpecialEffect(actor, effect) {
   const tags = effect?.mods?.tags ?? {};
   if (tags.zoneFirestorm) {
-    const hpRoll = await (new Roll("4d20").roll({ async: true }));
-    const moraleRoll = await (new Roll("6d20").roll({ async: true }));
+    const hpRoll = await (new Roll("4d20").evaluate({}));
+    const moraleRoll = await (new Roll("6d20").evaluate({}));
     await applyFlagDelta(actor, "hp", -hpRoll.total, "hpMax");
     const moraleResult = await applyFlagDelta(actor, "morale", -moraleRoll.total, "moraleMax");
     const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);

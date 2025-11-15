@@ -25,7 +25,7 @@ const E = (mods, duration = 1, key = null, label = null) => ({
 
 async function rollFormula(formula) {
   if (!formula || formula === "0") return { total: 0, formula: "0" };
-  const roll = await (new Roll(formula).roll({ async: true }));
+  const roll = await (new Roll(formula).evaluate({}));
   return { total: roll.total, formula: roll.formula };
 }
 
@@ -77,14 +77,14 @@ async function postChat(actor, key, data = {}) {
 }
 
 async function addMorale(actor, dice) {
-  const roll = await (new Roll(dice).roll({ async: true }));
+  const roll = await (new Roll(dice).evaluate({}));
   const cur = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
   const max = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   await actor.setFlag(FLAG_SCOPE, "morale", Math.min(max, cur + roll.total));
 }
 
 async function subMorale(actor, dice) {
-  const roll = await (new Roll(dice).roll({ async: true }));
+  const roll = await (new Roll(dice).evaluate({}));
   const cur = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
   await actor.setFlag(FLAG_SCOPE, "morale", Math.max(0, cur - roll.total));
 }
@@ -292,8 +292,8 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ actor, target }) => {
       await addEffect(actor, E({ tnDice: "-1d20", dmgDice: "-1d20" }, 1, "bow-fire", "Awkward Fireshot"));
-      const mor = await (new Roll("2d20").roll({ async: true }));
-      const hp = await (new Roll("1d10").roll({ async: true }));
+      const mor = await (new Roll("2d20").evaluate({}));
+      const hp = await (new Roll("1d10").evaluate({}));
       const curMor = Number(target.getFlag(FLAG_SCOPE, "morale") || 0);
       const curHP = Number(target.getFlag(FLAG_SCOPE, "hp") || 0);
       await target.setFlag(FLAG_SCOPE, "morale", Math.max(0, curMor - mor.total));
@@ -375,7 +375,7 @@ export const MANEUVERS = {
     difficulty: "hard",
     target: "enemy",
     apply: async ({ target }) => {
-      const roll = await (new Roll("2d20").roll({ async: true }));
+      const roll = await (new Roll("2d20").evaluate({}));
       const hp = Number(target.getFlag(FLAG_SCOPE, "hp") || 0);
       await target.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - roll.total));
     }
@@ -756,8 +756,8 @@ MANEUVERS.trample = {
   target: "enemy",
   apply: async ({ actor, target }) => {
     if (!target) return;
-    const hpRoll = await (new Roll("1d10").roll({ async: true }));
-    const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+    const hpRoll = await (new Roll("1d10").evaluate({}));
+    const moraleRoll = await (new Roll("1d20").evaluate({}));
     const hp = Number(target.getFlag(FLAG_SCOPE, "hp") || 0);
     const hpMax = Number(target.getFlag(FLAG_SCOPE, "hpMax") || 0);
     const morale = Number(target.getFlag(FLAG_SCOPE, "morale") || 0);
@@ -795,7 +795,7 @@ MANEUVERS.breakthrough = {
       await clearNegative(ally);
       await removeDisorganized(ally);
     }
-    const moraleRoll = await (new Roll("2d20").roll({ async: true }));
+    const moraleRoll = await (new Roll("2d20").evaluate({}));
     const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
     const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     await actor.setFlag(FLAG_SCOPE, "morale", Math.min(moraleMax, morale + moraleRoll.total));

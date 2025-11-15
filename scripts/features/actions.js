@@ -93,7 +93,7 @@ async function rollMaybe(expr) {
   const s = (expr || "").toString().trim();
   if (!s || s === "0") return { total: 0, formula: "0" };
   if (s === "-1/2") return { total: -0.5, formula: "-1/2" };
-  const r = await (new Roll(s).roll({ async: true }));
+  const r = await (new Roll(s).evaluate({}));
   return { total: r.total, formula: r.formula };
 }
 
@@ -130,22 +130,22 @@ function roleBonuses(role, action) {
 async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
   if (defender.getFlag(FLAG_SCOPE, "unbreakable")) return null;
   const base = finalDamage;
-  const extraRoll = await (new Roll("1d20").roll({ async: true }));
+  const extraRoll = await (new Roll("1d20").evaluate({}));
   let total = base + extraRoll.total + Number(options.moraleBonus ?? 0);
   const extras = [];
   if (attacker.getFlag(FLAG_SCOPE, "fear")) {
-    const fearRoll = await (new Roll("1d10").roll({ async: true }));
+    const fearRoll = await (new Roll("1d10").evaluate({}));
     total += fearRoll.total;
     extras.push(fearRoll.total);
   }
   if (attacker.getFlag(FLAG_SCOPE, "terror")) {
-    const terrorRoll = await (new Roll("3d10").roll({ async: true }));
+    const terrorRoll = await (new Roll("3d10").evaluate({}));
     total += terrorRoll.total;
     extras.push(terrorRoll.total);
   }
   const defenderTerror = defender.getFlag(FLAG_SCOPE, "terror");
   if (defenderTerror && attacker.getFlag(FLAG_SCOPE, "fear") && !attacker.getFlag(FLAG_SCOPE, "terror")) {
-    const counter = await (new Roll("1d10").roll({ async: true }));
+    const counter = await (new Roll("1d10").evaluate({}));
     total += counter.total;
     extras.push(counter.total);
   }
@@ -237,7 +237,7 @@ export async function doSquadAction(actor, action) {
   }
   effectiveBackline = backlineAttack && !guardContext;
   tn = await adjustAttackTN(actor, targetActor, { tn, action, isCharge: Boolean(aggAttack.tags?.charged) });
-  const roll = await (new Roll("1d100").roll({ async: true }));
+  const roll = await (new Roll("1d100").evaluate({}));
   let success = roll.total <= applySpecialistTN(actor, tn, hp, hpMax);
   let hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
   const aestheticHoB = await maybeTriggerAestheticHoB(actor, { roll: roll.total, tn, target: targetActor, type: action });
@@ -256,7 +256,7 @@ export async function doSquadAction(actor, action) {
     await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
   }
 
-  const chipRoll = await (new Roll("1d10").roll({ async: true }));
+  const chipRoll = await (new Roll("1d10").evaluate({}));
   const chipData = await adjustChipDamage(actor, chipRoll, { action });
   const chipValue = chipData.total;
 
@@ -266,7 +266,7 @@ export async function doSquadAction(actor, action) {
     let moraleResult = null;
     let damage = chipValue;
     if (guardContext) {
-      const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+      const guardHpRoll = await (new Roll("1d20").evaluate({}));
       guardHpBonus = guardHpRoll.total;
       damage += guardHpBonus;
     }
@@ -287,7 +287,7 @@ export async function doSquadAction(actor, action) {
           });
         }
         if (!targetActor.getFlag(FLAG_SCOPE, "unbreakable")) {
-          const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+          const moraleRoll = await (new Roll("1d20").evaluate({}));
           guardMoraleBonus = moraleRoll.total;
           const morale = Number(getF(targetActor, "morale", 0));
           const moraleMax = Number(getF(targetActor, "moraleMax", 0));
@@ -323,7 +323,7 @@ export async function doSquadAction(actor, action) {
     });
   }
 
-  const atkBase = await (new Roll(`1d20 + ${exp}d10`).roll({ async: true }));
+  const atkBase = await (new Roll(`1d20 + ${exp}d10`).evaluate({}));
   const atkWeapon = await rollMaybe(weapon.dmgDice);
   const atkRole = await rollMaybe(roleBonus.dmg);
   const atkEffect = await rollMaybe(aggAttack.dmgDice);
@@ -374,12 +374,12 @@ export async function doSquadAction(actor, action) {
     ignoreDefense = !!aggDefense.tags?.noDefense;
 
     if (!ignoreDefense && targetExp > 0) {
-      const defRoll = await (new Roll(`${targetExp}d6`).roll({ async: true }));
+      const defRoll = await (new Roll(`${targetExp}d6`).evaluate({}));
       defenseOnly += defRoll.total;
     }
 
     if (!ignoreDefense && isEngineer(targetActor)) {
-      const deepRoll = await (new Roll("3d10").roll({ async: true }));
+      const deepRoll = await (new Roll("3d10").evaluate({}));
       defenseOnly += deepRoll.total;
       deepDefenseBonus = deepRoll.total;
     }
@@ -399,7 +399,7 @@ export async function doSquadAction(actor, action) {
     if (!(weapon.pierceArmor || aggAttack.tags?.pierceArmor)) {
       const armorDice = Math.min(targetEq, 10);
       if (armorDice > 0) {
-        const armorRoll = await (new Roll(`${armorDice}d3`).roll({ async: true }));
+        const armorRoll = await (new Roll(`${armorDice}d3`).evaluate({}));
         armor = armorRoll.total;
         const ignorePct = Number(aggAttack.tags?.armorIgnorePct || 0);
         if (ignorePct > 0) {
@@ -412,7 +412,7 @@ export async function doSquadAction(actor, action) {
     }
 
     if (!ignoreDefense && targetWeapon === "polearm" && !effectiveBackline) {
-      const pole = await (new Roll("1d20").roll({ async: true }));
+      const pole = await (new Roll("1d20").evaluate({}));
       defenseOnly += pole.total;
       polearmBonus = pole.total;
     }
@@ -432,7 +432,7 @@ export async function doSquadAction(actor, action) {
     }
 
     if (action === "melee" && role === "mounted" && aggAttack.tags?.charged && aggDefense?.tags?.braced && targetWeapon === "polearm") {
-      const counter = await (new Roll("2d20").roll({ async: true }));
+      const counter = await (new Roll("2d20").evaluate({}));
       const aHPMax = Number(getF(actor, "hpMax", 1));
       const aHP = Number(getF(actor, "hp", 0));
       await actor.setFlag(FLAG_SCOPE, "hp", clamp(aHP - counter.total, 0, aHPMax));
@@ -489,15 +489,15 @@ export async function doSquadAction(actor, action) {
   }
 
   if (success && targetActor && action === "melee" && effectiveBackline) {
-    const hpBonusRoll = await (new Roll("2d10").roll({ async: true }));
-    const moraleBonusRoll = await (new Roll("3d10").roll({ async: true }));
+    const hpBonusRoll = await (new Roll("2d10").evaluate({}));
+    const moraleBonusRoll = await (new Roll("3d10").evaluate({}));
     backlineHpBonus = hpBonusRoll.total;
     backlineMoraleBonus = moraleBonusRoll.total;
     finalDamage += backlineHpBonus;
   }
 
   if (success && guardContext) {
-    const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
+    const guardHpRoll = await (new Roll("1d20").evaluate({}));
     guardHpBonus = guardHpRoll.total;
     finalDamage += guardHpBonus;
   }
@@ -537,7 +537,7 @@ export async function doSquadAction(actor, action) {
       });
     }
     if (!targetActor?.getFlag(FLAG_SCOPE, "unbreakable")) {
-      const moraleRoll = await (new Roll("1d20").roll({ async: true }));
+      const moraleRoll = await (new Roll("1d20").evaluate({}));
       guardMoraleBonus = moraleRoll.total;
       const morale = Number(getF(targetActor, "morale", 0));
       const moraleMax = Number(getF(targetActor, "moraleMax", 0));

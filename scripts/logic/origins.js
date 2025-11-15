@@ -338,7 +338,7 @@ export async function adjustChipDamage(actor, chip, { action } = {}) {
   const passives = getPassives(actor);
   let total = Number(chip?.total ?? chip ?? 0);
   if (origin === "monster" && passives.monsterMultipleAppendages && action === "melee") {
-    const extra = await new Roll("1d10").roll({ async: true });
+    const extra = await new Roll("1d10").evaluate({});
     total += extra.total;
     return { total, formula: `${chip?.formula || "1d10"} + ${extra.formula}` };
   }
@@ -367,7 +367,7 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
     armor += 10;
   }
   if (origin === "monster" && passives.monsterThickHide) {
-    const roll = await new Roll("3d10+5").roll({ async: true });
+    const roll = await new Roll("3d10+5").evaluate({});
     armor += roll.total;
     await sendPassiveMessage(defender, "W4SQ.PassiveMsgMonsterThickHide", {
       name: safeName(defender),
@@ -375,7 +375,7 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
     });
   }
   if (attackerOrigin === "monster" && attackerPassives.monsterLurker && action === "melee") {
-    const penalty = await new Roll("1d20").roll({ async: true });
+    const penalty = await new Roll("1d20").evaluate({});
     defenseOnly = Math.max(0, defenseOnly - penalty.total);
   }
 
@@ -423,7 +423,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
     }
     if (passives.monsterColossal) damage += 30;
     if (passives.monsterMonstrousCharge && isCharge) {
-      const chargeBonus = await new Roll("1d20").roll({ async: true });
+      const chargeBonus = await new Roll("1d20").evaluate({});
       damage += chargeBonus.total;
       await sendPassiveMessage(actor, "W4SQ.PassiveMsgMonsterMonstrousCharge", {
         name: actorName,
@@ -480,7 +480,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
     moraleBonus += 10; // overwhelmed baseline
   }
   if (origin === "monster" && passives.monsterDevourer && defender && sameSide(actor, defender)) {
-    const heal = await new Roll("3d10+20").roll({ async: true });
+    const heal = await new Roll("3d10+20").evaluate({});
     const hpCurrent = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
     const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
     const next = Math.min(hpMax, hpCurrent + heal.total);
@@ -493,7 +493,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   if (origin === "greenskin" && passives.greenMobMentality) {
     const buff = actor.getFlag(FLAG_SCOPE, "greenMobBonus");
     if (buff?.remaining > 0) {
-      const roll = await new Roll("4d10+10").roll({ async: true });
+      const roll = await new Roll("4d10+10").evaluate({});
       moraleBonus += roll.total;
     }
   }
@@ -690,7 +690,7 @@ export async function handleMoraleZero(defender, attacker) {
   if (await defender.getFlag(FLAG_SCOPE, "usedBitterEnd")) return;
 
   await defender.setFlag(FLAG_SCOPE, "usedBitterEnd", true);
-  const roll = await new Roll("4d20").roll({ async: true });
+  const roll = await new Roll("4d20").evaluate({});
   const morale = Number(defender.getFlag(FLAG_SCOPE, "morale") || 0);
   const moraleMax = Number(defender.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   const restored = Math.min(moraleMax, morale + roll.total);
@@ -714,7 +714,7 @@ export async function handleTurnTick(actor, context = {}) {
   const { round } = getRoundSignature();
 
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
-    const roll = await new Roll("1d20+10").roll({ async: true });
+    const roll = await new Roll("1d20+10").evaluate({});
     const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
     const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
     await actor.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hp + roll.total));

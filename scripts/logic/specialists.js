@@ -10,7 +10,7 @@ function logDebug(...args) {
 
 async function rollTotal(formula) {
   if (!formula || formula === "0") return { total: 0, formula: "0" };
-  const roll = await (new Roll(formula).roll({ async: true }));
+  const roll = await (new Roll(formula).evaluate({}));
   return { total: roll.total, formula: roll.formula };
 }
 
@@ -408,7 +408,7 @@ const ENGINEER_MISHAPS = [
 ];
 
 async function pickEntry(table) {
-  const roll = await (new Roll("1d10").roll({ async: true }));
+  const roll = await (new Roll("1d10").evaluate({}));
   const index = Math.min(table.length - 1, Math.max(0, roll.total - 1));
   return { entry: table[index], roll };
 }

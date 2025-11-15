@@ -1,10 +1,18 @@
-import { FLAG_SCOPE, ROLL } from "../config.js";
+import { FLAG_SCOPE, ROLL, MODULE_ID } from "../config.js";
 import { maneuversFor, onManeuverFail, friendlyTokensNear } from "../logic/maneuvers.js";
 import { aggregateForManeuvers, actorHasTag } from "../logic/effects.js";
 import { getCooldown, setCooldown } from "../logic/cooldowns.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
 import { adjustManeuverTN } from "../logic/origins.js";
 import { canChannel, hasChannelledMagic, isSpecialist, consumeSpecialistEcho, consumeEngineerGenius, triggerMajorPeril } from "../logic/specialists.js";
+
+function renderTemplateCompat(path, data) {
+  const fn = foundry?.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+  if (!fn) {
+    throw new Error("Foundry Handlebars renderTemplate helper is unavailable");
+  }
+  return fn(path, data);
+}
 
 function diffMod(difficulty) {
   switch (difficulty) {
@@ -18,7 +26,7 @@ function diffMod(difficulty) {
 async function rollMaybe(expr) {
   const s = (expr || "0").trim();
   if (!s || s === "0") return 0;
-  const roll = await (new Roll(s).roll({ async: true }));
+  const roll = await (new Roll(s).evaluate({}));
   return roll.total;
 }
 
@@ -144,7 +152,7 @@ export async function openManeuverDialog(actor) {
     };
   });
 
-  const content = await renderTemplate(`modules/wfrp4e-squads/templates/maneuver-dialog.hbs`, { maneuvers });
+  const content = await renderTemplateCompat(`modules/${MODULE_ID}/templates/maneuver-dialog.hbs`, { maneuvers });
 
   return Dialog.prompt({
     title: game.i18n.localize("W4SQ.Maneuvers"),
@@ -199,7 +207,7 @@ async function executeManeuver(actor, maneuver) {
   }
   const autoPass = autoPassFlag || echoAuto || engineerAuto;
 
-  const roll = await (new Roll("1d100").roll({ async: true }));
+  const roll = await (new Roll("1d100").evaluate({}));
   let success = roll.total <= tn || autoPass;
   const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: "maneuver", target });
   const hobNotes = [...(hobResult?.notes ?? [])];
