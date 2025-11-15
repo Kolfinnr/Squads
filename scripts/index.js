@@ -6,6 +6,7 @@ import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { handleTurnTick } from "./logic/origins.js";
+import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
 
 const IMPORT_PATHS = [
@@ -15,6 +16,7 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
+  "./services/gm-bridge.js",
   "./aoe.js"
 ];
 
@@ -138,6 +140,7 @@ function safeProcessTurnTick(combat, context) {
 
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | Initialising squads v1.0.2`);
+  patchFlagOverrides();
   Actors.registerSheet(MODULE_ID, SquadActorSheet, { types: ACTOR_TYPES, makeDefault: false, label: "Squad" });
 
   Handlebars.registerHelper("eq", (a, b) => a === b);
@@ -164,6 +167,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", async () => {
   console.log(`${MODULE_ID} | Ready hook executed`);
+  registerSocketBridge();
   const module = game.modules.get(MODULE_ID);
   if (!module) {
     console.error(`${MODULE_ID} | Module not found via game.modules – verify module.json id`);
