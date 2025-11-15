@@ -57,8 +57,6 @@ export function registerAoEHooks() {
   hooksRegistered = true;
   Hooks.on("combatRound", handleCombatRound);
   Hooks.on("updateCombat", handleUpdateCombat);
-  Hooks.on("updateToken", handleTokenMove);
-  Hooks.on("createToken", handleTokenMove);
   Hooks.on("deleteMeasuredTemplate", handleTemplateDelete);
 }
 
@@ -185,29 +183,6 @@ async function handleUpdateCombat(combat, changed) {
   }
 }
 
-async function handleTokenMove(tokenDoc) {
-  if (!canvas?.scene) return;
-  if (tokenDoc?.parent?.id !== canvas.scene.id) return;
-  const token = canvas.tokens.get(tokenDoc.id);
-  if (!token) return;
-  const templates = canvas.scene.templates.contents.filter(t => !!t.getFlag(MODULE_ID, AOE_FLAG));
-  for (const template of templates) {
-    const state = getAoEState(template);
-    if (!state) continue;
-    if (ENTRY_TRIGGER_TYPES.has(state.aoeType) && !isAoEArmed(state)) {
-      if (shouldArmAoE(state)) {
-        await armAoE(template, state);
-      }
-      if (!isAoEArmed(state)) continue;
-    }
-    if (!ENTRY_TRIGGER_TYPES.has(state.aoeType)) continue;
-    if (state.spent) continue;
-    if (isTokenInside(template, token)) {
-      await processEntryTrigger(template, state, token);
-    }
-  }
-}
-
 async function tickAoEZones(combat, context = {}) {
   if (!game.user.isGM) return;
   const scene = combat?.scene ?? canvas.scene;
@@ -231,20 +206,44 @@ async function processTemplateTick(templateDoc, { round, turn }) {
     return;
   }
 
-  if (ENTRY_TRIGGER_TYPES.has(state.aoeType) && !isAoEArmed(state)) {
-    if (shouldArmAoE(state, { round, turn })) {
-      await armAoE(templateDoc, state);
-    }
-    if (!isAoEArmed(state)) {
-      state.lastRound = round;
-      state.lastTurn = turn;
-      await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
-      return;
-    }
-  }
-
   const template = getTemplateObject(templateDoc);
   const tokens = tokensInTemplate(templateDoc, template);
+
+  if (ENTRY_TRIGGER_TYPES.has(state.aoeType)) {
+    if (!isAoEArmed(state)) {
+      if (shouldArmAoE(state, { round, turn })) {
+        await armAoE(templateDoc, state);
+      }
+      if (!isAoEArmed(state)) {
+        state.lastRound = round;
+        state.lastTurn = turn;
+        await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
+        return;
+      }
+    }
+
+    if (!state.spent && tokens.length) {
+      let removed = false;
+      switch (state.aoeType) {
+        case "minefield":
+          await handleMinefieldTrigger(templateDoc, state, tokens);
+          removed = true;
+          break;
+        case "wolfPits":
+          await handleWolfPitsTrigger(templateDoc, state, tokens);
+          removed = true;
+          break;
+        default:
+          break;
+      }
+      if (removed) return;
+    }
+
+    state.lastRound = round;
+    state.lastTurn = turn;
+    await templateDoc.setFlag(MODULE_ID, AOE_FLAG, state);
+    return;
+  }
 
   let removed = false;
   switch (state.aoeType) {
@@ -396,7 +395,7 @@ async function handleFortifyTick(templateDoc, state, tokens) {
     await ensureEffect(actor, {
       key: effectKey,
       label: game.i18n.localize("W4SQ.EffectFortifyZone"),
-      duration: 2,
+      duration: 99,
       mods: {
         defSoakDice: "+10 + 2d10",
         tags: { fortified: true }
@@ -408,7 +407,7 @@ async function handleFortifyTick(templateDoc, state, tokens) {
       await ensureEffect(actor, {
         key: deepKey,
         label: game.i18n.localize("W4SQ.EffectDeepDefense"),
-        duration: 2,
+        duration: 99,
         mods: {
           defSoakDice: "+20 + 2d20",
           tags: { deepDefense: true }
@@ -456,21 +455,7 @@ async function handleLineDefenseTick(templateDoc, state, tokens) {
   return false;
 }
 
-async function processEntryTrigger(templateDoc, state, token) {
-  switch (state.aoeType) {
-    case "minefield":
-      await handleMinefieldTrigger(templateDoc, state, token);
-      break;
-    case "wolfPits":
-      await handleWolfPitsTrigger(templateDoc, state, token);
-      break;
-    default:
-      break;
-  }
-}
-
-async function handleMinefieldTrigger(templateDoc, state, token) {
-  const tokens = tokensInTemplate(templateDoc, getTemplateObject(templateDoc));
+async function handleMinefieldTrigger(templateDoc, state, tokens) {
   await applyDamageToTokens(tokens, state.data?.hpDamage ?? "3d20", state.data?.moraleDamage ?? "4d20");
   for (const entry of tokens) {
     const actor = entry.actor;
@@ -481,8 +466,7 @@ async function handleMinefieldTrigger(templateDoc, state, token) {
   await templateDoc.delete();
 }
 
-async function handleWolfPitsTrigger(templateDoc, state, token) {
-  const tokens = tokensInTemplate(templateDoc, getTemplateObject(templateDoc));
+async function handleWolfPitsTrigger(templateDoc, state, tokens) {
   await applyDamageToTokens(tokens, state.data?.hpDamage ?? "2d10", state.data?.moraleDamage ?? "2d10");
   for (const entry of tokens) {
     const actor = entry.actor;
