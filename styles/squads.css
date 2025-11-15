@@ -23,9 +23,43 @@
   margin-bottom: 0.5rem;
 }
 
-.w4sq.sheet .stats-grid .placeholder {
-  min-height: 1.8rem;
-  visibility: hidden;
+.w4sq.sheet .origin-passive-controls {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.w4sq.sheet .origin-passive-controls .manage-passives {
+  align-self: flex-start;
+}
+
+.w4sq.sheet .origin-passive-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-light-5, #555);
+}
+
+.w4sq-passive-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.w4sq-passive-dialog .hint {
+  margin: 0;
+}
+
+.w4sq-passive-dialog .passive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.w4sq-passive-dialog .passive-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .w4sq.sheet .pair {

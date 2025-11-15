@@ -26,8 +26,6 @@
             <option value="{{key}}" {{#if (eq ../squad.role key)}}selected{{/if}}>{{role.label}}</option>
           {{/each}}
         </select>
-        <div class="placeholder"></div>
-        <div class="placeholder"></div>
         {{#if (eq squad.role "specialist")}}
           <label>{{localize "W4SQ.SpecialistType"}}</label>
           <select name="flags.wfrp4e-squads.specialistType">
@@ -37,20 +35,13 @@
             {{/each}}
           </select>
         {{else}}
-          <div class="placeholder"></div>
-          <div class="placeholder"></div>
-        {{/if}}
-        {{#unless (eq squad.role "specialist")}}
           <label>{{localize "W4SQ.Weapon"}}</label>
           <select name="flags.wfrp4e-squads.weapon">
             {{#each weapons as |weapon key|}}
               <option value="{{key}}" {{#if (eq ../squad.weapon key)}}selected{{/if}}>{{weapon.label}}</option>
             {{/each}}
           </select>
-        {{else}}
-          <div class="placeholder"></div>
-          <div class="placeholder"></div>
-        {{/unless}}
+        {{/if}}
       </div>
       <div class="traits">
         <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.fear" {{checked squad.fear}}/> {{localize "W4SQ.TraitFear"}}</label>
@@ -102,17 +93,11 @@
               {{/each}}
             </select>
           </div>
-          <div class="origin-passives">
-            <h4>{{localize "W4SQ.OriginPassives"}}</h4>
-            {{#if originPassives.length}}
-              <div class="origin-passive-list">
-                {{#each originPassives as |entry|}}
-                  <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.passives.{{entry.key}}" {{checked entry.checked}}/> {{localize entry.label}}</label>
-                {{/each}}
-              </div>
-            {{else}}
-              <p>{{localize "W4SQ.OriginPassivesEmpty"}}</p>
-            {{/if}}
+          <div class="origin-passive-controls">
+            <button type="button" class="manage-passives" data-action="manage-passives">{{localize "W4SQ.ManagePassives"}}</button>
+            {{#unless originPassives.length}}
+              <p class="origin-passive-hint">{{localize "W4SQ.OriginPassivesEmpty"}}</p>
+            {{/unless}}
           </div>
           <div class="passive-effects-summary">
             <h4>{{localize "W4SQ.PassiveSummary"}}</h4>

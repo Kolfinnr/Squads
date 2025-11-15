@@ -144,6 +144,10 @@ export class SquadActorSheet extends ActorSheet {
     html.find('button[data-action="ranged"]').on("click", () => doSquadAction(this.actor, "ranged"));
     html.find('button[data-action="maneuver"]').on("click", () => openManeuverDialog(this.actor));
     html.find('button[data-action="command"]').on("click", () => openCommandDashboard(this.actor));
+    html.find('button[data-action="manage-passives"]').on("click", ev => {
+      ev.preventDefault();
+      this._openPassivesDialog();
+    });
   }
 
   _bindSystemInputs(root) {
@@ -170,5 +174,68 @@ export class SquadActorSheet extends ActorSheet {
         }
       });
     });
+  }
+
+  _getOriginSelection() {
+    const originFlag = this.actor.getFlag(FLAG_SCOPE, "origin");
+    if (typeof originFlag === "string" && originFlag.length) return originFlag;
+    const squadSystem = foundry.utils.getProperty(this.actor.system ?? this.actor.data?.data, "squad") || {};
+    return squadSystem.origin ?? null;
+  }
+
+  _openPassivesDialog() {
+    const origin = this._getOriginSelection();
+    if (!origin) {
+      ui.notifications?.info(game.i18n.localize("W4SQ.ManagePassivesNoOrigin"));
+      return;
+    }
+
+    const passiveKeys = getOriginPassivesFor(origin) || [];
+    if (!passiveKeys.length) {
+      ui.notifications?.info(game.i18n.localize("W4SQ.ManagePassivesUnavailable"));
+      return;
+    }
+
+    const originLabel = game.i18n.localize(getOriginLabelKey(origin));
+    const passiveState = foundry.utils.duplicate(this.actor.getFlag(FLAG_SCOPE, "passives") || {});
+    const rows = passiveKeys.map(key => {
+      const label = game.i18n.localize(getPassiveLabel(key));
+      const checked = passiveState?.[key] ? "checked" : "";
+      return `<label class="passive-entry"><input type="checkbox" data-passive-key="${key}" ${checked}/> ${label}</label>`;
+    }).join("");
+
+    const content = `
+      <form class="w4sq-passive-dialog">
+        <p class="hint">${game.i18n.format("W4SQ.ManagePassivesHint", { origin: originLabel })}</p>
+        <div class="passive-list">
+          ${rows}
+        </div>
+      </form>
+    `;
+
+    const dialog = new Dialog({
+      title: game.i18n.localize("W4SQ.ManagePassivesTitle"),
+      content,
+      buttons: {
+        close: {
+          icon: "",
+          label: game.i18n.localize("Close")
+        }
+      },
+      render: html => {
+        html.find("input[data-passive-key]").on("change", async ev => {
+          const input = ev.currentTarget;
+          const key = input.dataset.passiveKey;
+          const checked = input.checked;
+          try {
+            await this.actor.update({ [`flags.${FLAG_SCOPE}.passives.${key}`]: checked });
+          } catch (err) {
+            console.error(`wfrp4e-squads | Failed to update passive ${key}`, err);
+          }
+        });
+      }
+    });
+
+    dialog.render(true);
   }
 }
