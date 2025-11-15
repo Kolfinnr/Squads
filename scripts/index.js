@@ -5,6 +5,7 @@ import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
+import { handleTurnTick } from "./logic/origins.js";
 import * as AOE from "./aoe.js";
 
 const IMPORT_PATHS = [
@@ -54,7 +55,7 @@ async function reduceActiveManeuver(actor) {
   }
 }
 
-async function tickActorEntry(actor) {
+async function tickActorEntry(actor, context = {}) {
   if (!actor) return;
   console.log(`[W4SQ] tick actor ${actor.name ?? actor.id}`);
   try {
@@ -70,6 +71,7 @@ async function tickActorEntry(actor) {
   await reduceActiveManeuver(actor);
   await enforceMoraleState(actor);
   await clearSpecialistRoundFlags(actor);
+  await handleTurnTick(actor, context);
 }
 
 const processedTurns = new Map();
@@ -127,7 +129,7 @@ async function processTurnTick(combat, context = {}) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
   }
-  await tickActorEntry(actor);
+  await tickActorEntry(actor, tickContext);
 }
 
 function safeProcessTurnTick(combat, context) {

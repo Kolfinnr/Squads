@@ -164,6 +164,24 @@
   gap: 0.5rem;
 }
 
+.w4sq.sheet .status-passives {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.w4sq.sheet .status-passives h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.w4sq.sheet .origin-passive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 .w4sq.sheet .status-last-target {
   margin-top: 1rem;
 }

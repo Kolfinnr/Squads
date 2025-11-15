@@ -355,6 +355,10 @@ export function aggregateForDefense(actor, options = {}) {
   if (hasDisorganized) {
     pushDice(defSoakParts, DISORG_BASE.defSoakDice);
   }
+  if (attackerTags?.forceFlanked && action === "melee" && !tags.flanked) {
+    pushDice(defPenaltyParts, "-1d20");
+    tags.flanked = true;
+  }
   if (attackerTags?.backlineAttack) {
     delete tags.flanked;
     delete tags.encircled;

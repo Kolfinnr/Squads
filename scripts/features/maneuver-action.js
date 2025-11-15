@@ -3,6 +3,7 @@ import { maneuversFor, onManeuverFail, friendlyTokensNear } from "../logic/maneu
 import { aggregateForManeuvers, actorHasTag } from "../logic/effects.js";
 import { getCooldown, setCooldown } from "../logic/cooldowns.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
+import { adjustManeuverTN } from "../logic/origins.js";
 import { canChannel, hasChannelledMagic, isSpecialist, consumeSpecialistEcho, consumeEngineerGenius, triggerMajorPeril } from "../logic/specialists.js";
 
 function diffMod(difficulty) {
@@ -182,6 +183,7 @@ async function executeManeuver(actor, maneuver) {
   if (moraleMax > 0 && morale / moraleMax < 0.3) tn -= 10;
   if (hp <= 0) tn -= 20;
   tn = applySpecialistTN(actor, tn, hp, hpMax);
+  tn = await adjustManeuverTN(actor, target, { tn, maneuverKey: maneuver.key });
 
   let autoPassFlag = !!actor.getFlag(FLAG_SCOPE, "hob_autoPassManeuver");
   if (autoPassFlag) {

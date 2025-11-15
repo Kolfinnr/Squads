@@ -3,6 +3,20 @@ import { aggregateForAttack, aggregateForDefense, ensureDisorganized, findGuardO
 import { setCooldown, clearCooldown } from "../logic/cooldowns.js";
 import { sendActionMessage } from "../services/chat.js";
 import { maybeTriggerHoB } from "../logic/hob.js";
+import {
+  adjustAttackTN,
+  adjustAttackDamage,
+  adjustDefenseSoak,
+  adjustIncomingDamage,
+  adjustChipDamage,
+  applyPostAttackEffects,
+  recordDamageTaken,
+  handleMoraleZero,
+  adjustMoraleLoss,
+  maybeTriggerAestheticHoB,
+  getOrigin,
+  getPassives
+} from "../logic/origins.js";
 import { isSpecialist, isEngineer } from "../logic/specialists.js";
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
@@ -22,6 +36,16 @@ const escapeHTML = (value) => {
   }
   return String(value ?? "");
 };
+
+function mergeHoBResults(primary, extra) {
+  if (!extra) return primary;
+  if (!primary) return extra;
+  primary.notes = [...(primary.notes ?? []), ...(extra.notes ?? [])];
+  primary.tnAdjustments = [...(primary.tnAdjustments ?? []), ...(extra.tnAdjustments ?? [])];
+  primary.damageAdjustments = [...(primary.damageAdjustments ?? []), ...(extra.damageAdjustments ?? [])];
+  primary.damageMultiplier = Number(primary.damageMultiplier || 1) * Number(extra.damageMultiplier || 1);
+  return primary;
+}
 
 async function postStatusLine(actor, key) {
   if (!actor) return;
@@ -103,11 +127,11 @@ function roleBonuses(role, action) {
   }
 }
 
-async function moraleLossFor(defender, attacker, finalDamage) {
+async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
   if (defender.getFlag(FLAG_SCOPE, "unbreakable")) return null;
   const base = finalDamage;
   const extraRoll = await (new Roll("1d20").roll({ async: true }));
-  let total = base + extraRoll.total;
+  let total = base + extraRoll.total + Number(options.moraleBonus ?? 0);
   const extras = [];
   if (attacker.getFlag(FLAG_SCOPE, "fear")) {
     const fearRoll = await (new Roll("1d10").roll({ async: true }));
@@ -127,6 +151,7 @@ async function moraleLossFor(defender, attacker, finalDamage) {
   }
   const moraleMax = Number(defender.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   const morale = Number(defender.getFlag(FLAG_SCOPE, "morale") || 0);
+  total = await adjustMoraleLoss(defender, attacker, { total, baseDamage: finalDamage, bonus: options.moraleBonus ?? 0 });
   const next = clamp(morale - total, 0, moraleMax);
   await defender.setFlag(FLAG_SCOPE, "morale", next);
   if (morale > 0 && next <= 0) {
@@ -137,6 +162,7 @@ async function moraleLossFor(defender, attacker, finalDamage) {
       duration: 99,
       mods: { tags: { routed: true, disorganized: true } }
     }, effect => Boolean(effect?.mods?.tags?.routed));
+    await handleMoraleZero(defender, attacker);
   }
   if (moraleMax > 0 && next / moraleMax < 0.5) {
     await ensureDisorganized(defender, { source: "morale" });
@@ -144,7 +170,7 @@ async function moraleLossFor(defender, attacker, finalDamage) {
   return total;
 }
 
-async function applyDamage(actor, defender, finalDamage) {
+async function applyDamage(actor, defender, finalDamage, options = {}) {
   const hpMax = Number(defender.getFlag(FLAG_SCOPE, "hpMax") || 0);
   const hp = Number(defender.getFlag(FLAG_SCOPE, "hp") || 0);
   const next = clamp(hp - finalDamage, 0, hpMax);
@@ -152,7 +178,7 @@ async function applyDamage(actor, defender, finalDamage) {
   if (hp > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatHPZero");
   }
-  const moraleLoss = await moraleLossFor(defender, actor, finalDamage);
+  const moraleLoss = await moraleLossFor(defender, actor, finalDamage, options);
   await actor.setFlag(FLAG_SCOPE, "lastTargetName", defender.name || "");
   return { moraleLoss };
 }
@@ -174,6 +200,8 @@ export async function doSquadAction(actor, action) {
   const backlineAttack = Boolean(getF(actor, "backlineAttack", false));
   const weaponLabel = weaponKey ?? "—";
   const aggAttack = aggregateForAttack(actor, { action, weapon: weaponKey });
+  const attackerOrigin = getOrigin(actor);
+  const attackerPassives = getPassives(actor);
   const roleBonus = roleBonuses(role, action);
 
   const weaponAcc = await rollMaybe(weapon.accuracyDice);
@@ -208,9 +236,12 @@ export async function doSquadAction(actor, action) {
     }
   }
   effectiveBackline = backlineAttack && !guardContext;
+  tn = await adjustAttackTN(actor, targetActor, { tn, action, isCharge: Boolean(aggAttack.tags?.charged) });
   const roll = await (new Roll("1d100").roll({ async: true }));
   let success = roll.total <= applySpecialistTN(actor, tn, hp, hpMax);
-  const hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
+  let hobResult = await maybeTriggerHoB(actor, { roll: roll.total, success, type: action, target: targetActor });
+  const aestheticHoB = await maybeTriggerAestheticHoB(actor, { roll: roll.total, tn, target: targetActor, type: action });
+  hobResult = mergeHoBResults(hobResult, aestheticHoB);
   const hobNotes = hobResult?.notes ?? [];
   if (hobResult?.tnAdjustments?.length) {
     const delta = hobResult.tnAdjustments.reduce((sum, adj) => sum + Number(adj.total || 0), 0);
@@ -225,13 +256,15 @@ export async function doSquadAction(actor, action) {
     await actor.setFlag(FLAG_SCOPE, "lastTargetName", targetActor.name || "");
   }
 
-  const chip = await (new Roll("1d10").roll({ async: true }));
+  const chipRoll = await (new Roll("1d10").roll({ async: true }));
+  const chipData = await adjustChipDamage(actor, chipRoll, { action });
+  const chipValue = chipData.total;
 
   await applyReloadingCooldown(actor, action, weaponKey, aggAttack.tags);
 
   if (!success) {
     let moraleResult = null;
-    let damage = chip.total;
+    let damage = chipValue;
     if (guardContext) {
       const guardHpRoll = await (new Roll("1d20").roll({ async: true }));
       guardHpBonus = guardHpRoll.total;
@@ -240,6 +273,9 @@ export async function doSquadAction(actor, action) {
     if (targetActor) {
       const res = await applyDamage(actor, targetActor, damage);
       moraleResult = res.moraleLoss;
+      if (damage > 0) {
+        await recordDamageTaken(targetActor, { hpDamage: damage });
+      }
       if (guardContext) {
         const protectedActor = guardContext.protectedActor;
         if (protectedActor) {
@@ -330,7 +366,11 @@ export async function doSquadAction(actor, action) {
     const targetEq = Number(getF(targetActor, "equipmentTier", 0));
     const targetWeapon = getF(targetActor, "weapon", "sword");
     const ignoreTags = effectiveBackline ? ["braced", "antiCharge"] : [];
-    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags: { backlineAttack: effectiveBackline } });
+    const attackerTags = { ...(aggAttack.tags ?? {}), backlineAttack: effectiveBackline };
+    if (attackerOrigin === "monster" && attackerPassives.monsterLurker && action === "melee") {
+      attackerTags.forceFlanked = true;
+    }
+    aggDefense = aggregateForDefense(targetActor, { action, ignoreTags, attackerTags });
     ignoreDefense = !!aggDefense.tags?.noDefense;
 
     if (!ignoreDefense && targetExp > 0) {
@@ -398,15 +438,54 @@ export async function doSquadAction(actor, action) {
       await actor.setFlag(FLAG_SCOPE, "hp", clamp(aHP - counter.total, 0, aHPMax));
       counterSpear = counter.total;
     }
+    const defenseAdjust = await adjustDefenseSoak(targetActor, actor, {
+      defenseOnly,
+      armor,
+      rangedResist,
+      action,
+      defenseTags: aggDefense?.tags
+    });
+    defenseOnly = defenseAdjust.defenseOnly;
+    armor = defenseAdjust.armor;
+    rangedResist = defenseAdjust.rangedResist;
   }
 
   let totalSoak = Math.max(0, defenseOnly) + Math.max(0, armor) + Math.max(0, rangedResist);
-  let finalDamage = Math.max(chip.total, Math.floor(scaled - totalSoak));
+  let finalDamage = Math.max(chipValue, Math.floor(scaled - totalSoak));
   if (damageMultiplier !== 1) {
     finalDamage = Math.max(0, Math.floor(finalDamage * damageMultiplier));
   }
   if (aggAttack.tags?.halfDamage) {
     finalDamage = Math.floor(finalDamage / 2);
+  }
+
+  let moraleBonus = 0;
+  let extraAttacks = 0;
+  if (targetActor) {
+    const attackAdjust = await adjustAttackDamage(actor, targetActor, {
+      action,
+      damageType: action,
+      isMagical: Boolean(aggAttack.tags?.magical),
+      isCharge: Boolean(aggAttack.tags?.charged),
+      hpDamage: finalDamage
+    });
+    finalDamage = attackAdjust.damage;
+    moraleBonus = attackAdjust.moraleBonus ?? 0;
+    extraAttacks = attackAdjust.extraAttacks ?? 0;
+    if (attackAdjust.armorPierceBonus) {
+      finalDamage += attackAdjust.armorPierceBonus;
+    }
+    const incomingAdjust = await adjustIncomingDamage(targetActor, actor, {
+      damage: finalDamage,
+      moraleBonus,
+      action,
+      damageType: action,
+      isMagical: Boolean(aggAttack.tags?.magical),
+      isAoE: Boolean(aggAttack.tags?.aoe),
+      isCharge: Boolean(aggAttack.tags?.charged)
+    });
+    finalDamage = incomingAdjust.damage;
+    moraleBonus = incomingAdjust.moraleBonus;
   }
 
   if (success && targetActor && action === "melee" && effectiveBackline) {
@@ -429,12 +508,21 @@ export async function doSquadAction(actor, action) {
       const shots = Number(aggAttack.tags.multiShot) || 1;
       const per = aggAttack.tags.multiShotHalf ? Math.max(1, Math.floor(finalDamage / 2)) : finalDamage;
       for (let i = 0; i < shots; i++) {
-        const res = await applyDamage(actor, targetActor, per);
+        const res = await applyDamage(actor, targetActor, per, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
         moraleLoss = res.moraleLoss;
       }
     } else {
-      const res = await applyDamage(actor, targetActor, finalDamage);
+      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
       moraleLoss = res.moraleLoss;
+    }
+    await recordDamageTaken(targetActor, { hpDamage: finalDamage });
+  }
+
+  if (targetActor && success && extraAttacks > 0) {
+    for (let i = 0; i < extraAttacks; i++) {
+      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
+      moraleLoss = (moraleLoss || 0) + (res.moraleLoss || 0);
+      await recordDamageTaken(targetActor, { hpDamage: finalDamage });
     }
   }
 
@@ -512,6 +600,10 @@ export async function doSquadAction(actor, action) {
   }
   if (soakNotes.length) {
     soakNotes.push(game.i18n.format("W4SQ.ChatSoakTotal", { total: totalSoak }));
+  }
+
+  if (success && targetActor) {
+    await applyPostAttackEffects({ attacker: actor, defender: targetActor, success: true, action, isMagical: Boolean(aggAttack.tags?.magical) });
   }
 
   await sendActionMessage({

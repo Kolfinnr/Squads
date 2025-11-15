@@ -5,6 +5,7 @@ import { getEffectsDetailed } from "../logic/effects.js";
 import { getCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
+import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor } from "../logic/origins.js";
 
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
@@ -29,6 +30,9 @@ export class SquadActorSheet extends ActorSheet {
     const data = await super.getData(options);
     const f = (key, fallback = null) => this.actor.getFlag(FLAG_SCOPE, key) ?? fallback;
     const role = f("role", "infantry");
+    const squadSystem = foundry.utils.getProperty(this.actor.system ?? this.actor.data?.data, "squad") || {};
+    const origin = squadSystem.origin ?? "";
+    const passiveState = squadSystem.passives ?? {};
     data.squad = {
       hp: f("hp", 100),
       hpMax: f("hpMax", 100),
@@ -47,7 +51,9 @@ export class SquadActorSheet extends ActorSheet {
       playerControlled: f("playerControlled", null),
       isCommander: f("isCommander", false),
       cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
-      lastTargetName: f("lastTargetName", "")
+      lastTargetName: f("lastTargetName", ""),
+      origin,
+      passives: passiveState
     };
     const effectDetails = getEffectsDetailed(this.actor);
     const activeEffects = [];
@@ -81,6 +87,16 @@ export class SquadActorSheet extends ActorSheet {
     data.roles = ROLES;
     data.weapons = WEAPONS;
     data.specialistTypes = SPECIALIST_TYPES;
+    data.originOptions = ORIGIN_KEYS.map(key => ({
+      key,
+      label: game.i18n.localize(getOriginLabelKey(key))
+    }));
+    const originPassiveKeys = getOriginPassivesFor(origin) || [];
+    data.originPassives = originPassiveKeys.map(key => ({
+      key,
+      label: game.i18n.localize(getPassiveLabel(key)),
+      checked: Boolean(passiveState?.[key])
+    }));
     return data;
   }
 
