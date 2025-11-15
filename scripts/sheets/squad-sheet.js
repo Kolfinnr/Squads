@@ -93,11 +93,32 @@ export class SquadActorSheet extends ActorSheet {
       label: game.i18n.localize(getOriginLabelKey(key))
     }));
     const originPassiveKeys = getOriginPassivesFor(origin) || [];
+    const selectedOriginPassives = originPassiveKeys
+      .filter(key => Boolean(passiveState?.[key]))
+      .map(key => ({
+        key,
+        label: game.i18n.localize(getPassiveLabel(key))
+      }));
     data.originPassives = originPassiveKeys.map(key => ({
       key,
       label: game.i18n.localize(getPassiveLabel(key)),
       checked: Boolean(passiveState?.[key])
     }));
+    data.originPassiveSummary = selectedOriginPassives;
+    data.passiveChips = [
+      ...selectedOriginPassives.map(passive => ({
+        key: passive.key,
+        label: passive.label,
+        type: "origin"
+      })),
+      ...passiveEffects.map(effect => ({
+        key: effect.key ?? effect.label,
+        label: effect.label,
+        type: "effect",
+        polarity: effect.polarity,
+        durationLabel: effect.durationLabel
+      }))
+    ];
     return data;
   }
 
