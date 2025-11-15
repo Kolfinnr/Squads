@@ -70,7 +70,6 @@ export async function createAoEFromEffect(opts = {}) {
     type = "firestorm",
     duration,
     data = {},
-    skipPreview = false,
     position = null
   } = opts;
 
@@ -98,30 +97,6 @@ export async function createAoEFromEffect(opts = {}) {
   templateData.flags ??= {};
   templateData.flags[MODULE_ID] ??= {};
   const state = templateData.flags[MODULE_ID][AOE_FLAG] ?? (templateData.flags[MODULE_ID][AOE_FLAG] = {});
-
-  if (!skipPreview) {
-    if (!canvas?.scene) {
-      ui.notifications?.warn?.("No active scene to place this AoE.");
-      return null;
-    }
-    if (canvas.scene.id !== scene.id) {
-      ui.notifications?.warn?.("Switch to the caster's scene to place this AoE.");
-      return null;
-    }
-
-    const previewId =
-      globalThis.foundry?.utils?.randomID?.() ??
-      (typeof randomID === "function" ? randomID() : Math.random().toString(36).slice(2));
-    templateData.flags[MODULE_ID][AOE_FLAG].previewId = previewId;
-
-    const startResult = startAoEPreview(templateData, async doc => {
-      await finalizeTemplate(doc, { ...state, previewId });
-    });
-
-    if (startResult !== false) {
-      return startResult;
-    }
-  }
 
   try {
     const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
@@ -186,88 +161,6 @@ async function finalizeTemplate(templateDoc, state) {
     ...state,
     templateId: templateDoc.id
   });
-}
-
-function startAoEPreview(templateData, finalize) {
-  const previewId = templateData?.flags?.[MODULE_ID]?.[AOE_FLAG]?.previewId;
-  const userId = templateData?.user ?? game.user?.id;
-  const registerHook = () => {
-    const hookId = Hooks.on("createMeasuredTemplate", doc => {
-      if (!doc) return;
-      if (doc.parent?.id !== canvas.scene?.id) return;
-      const docState = doc.getFlag(MODULE_ID, AOE_FLAG);
-      const docPreviewId = docState?.previewId;
-      if (docPreviewId && docPreviewId !== previewId) return;
-      if (!docPreviewId && userId && doc.user?.id !== userId) return;
-      Hooks.off("createMeasuredTemplate", hookId);
-      Promise.resolve(finalize?.(doc)).catch(err => console.error("[W4SQ] AoE finalize failed", err));
-    });
-    return hookId;
-  };
-
-  if (game.measuredTemplate?.createPreview) {
-    const hookId = registerHook();
-    try {
-      const preview = game.measuredTemplate.createPreview({ templateData, user: game.user, scene: canvas.scene });
-      if (typeof preview?.once === "function") {
-        preview.once("destroy", () => Hooks.off("createMeasuredTemplate", hookId));
-      }
-      return preview ?? true;
-    } catch (err) {
-      Hooks.off("createMeasuredTemplate", hookId);
-      console.error("[W4SQ] Failed to start AoE preview", err);
-    }
-  }
-
-  if (canvas?.templates?.activatePreview) {
-    const hookId = registerHook();
-    try {
-      const preview = canvas.templates.activatePreview(templateData);
-      if (typeof preview?.once === "function") {
-        preview.once("destroy", () => Hooks.off("createMeasuredTemplate", hookId));
-      }
-      return preview ?? true;
-    } catch (err) {
-      Hooks.off("createMeasuredTemplate", hookId);
-      console.error("[W4SQ] Failed to start legacy AoE preview", err);
-    }
-  }
-
-  if (canvas?.scene) {
-    const doc = new MeasuredTemplateDocument(templateData, { parent: canvas.scene });
-    const preview = new SquadAoEPreview(doc, finalize);
-    preview.draw();
-    preview.activatePreviewListeners();
-    return preview;
-  }
-
-  ui.notifications?.warn?.("Cannot start AoE preview on this client/version.");
-  return false;
-}
-
-class SquadAoEPreview extends MeasuredTemplate {
-  constructor(document, finalize) {
-    super(document);
-    this._finalize = finalize;
-  }
-
-  async _onLeftClick(event) {
-    event.stopPropagation();
-    try {
-      const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [this.document.toObject()]);
-      const doc = created?.[0];
-      if (doc) await this._finalize?.(doc);
-    } catch (err) {
-      console.error("[W4SQ] AoE preview finalize failed", err);
-    } finally {
-      this.destroy();
-    }
-  }
-
-  _onRightClick(event) {
-    event.stopPropagation();
-    this.destroy();
-  }
 }
 
 async function handleCombatRound(combat) {
