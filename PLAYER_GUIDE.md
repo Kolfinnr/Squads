@@ -27,6 +27,63 @@
 - Specialist maneuvers track individual cooldowns (4 rounds for spells, 2 rounds for engineering actions). The squad sheet lists each specialist ability with its base cooldown and remaining turns alongside the dashboard badges.
 - Mage spells require **Channel Magic** first; failing the channel invokes **Minor Perils** while failed spells trigger **Major Perils**. Engineers risk **Engineering Mishaps** on failed maneuvers.
 
+## Origins & Passives
+- Pick an **Origin** from the Passive Effects column and click **Manage Passives** to toggle the appropriate traits. Only options tied to the chosen origin appear in the dialog.
+- Origin bonuses apply automatically to damage, morale loss, TN checks, and soak. Passive toggles layer additional perks or drawbacks on top of the baseline heritage.
+
+### Human
+- **Origin:** Stoic drilled troops shrug off 5 HP and 5 Morale damage from every source.
+- **Battle Drill:** +10 TN on maneuvers.
+- **Resilient:** A further 5 HP/Morale damage reduction.
+- **Adaptive:** When below half HP, maneuvers gain another +10 TN.
+- **Well Equipped:** +5 armor soak on every hit.
+- **To the Bitter End!:** The first time Morale hits 0, the unit instantly rallies (restores 4d20 Morale, clears Routed/Disorganized) without spending CP.
+
+### Dwarf
+- **Origin:** Magical assaults lose 25% of their HP/Morale impact against dwarfs.
+- **Iron Will:** −20 Morale damage from any source.
+- **Mastercrafted Armor:** +10 armor soak.
+- **Ancestral Grudge:** +20 HP damage when striking Greenskins or Ratmen.
+- **Grudgin’:** Every time the unit takes HP damage it banks +5 TN (up to +20) for future attacks and maneuvers.
+- **Stalwart:** While Braced, gain an extra +10 armor soak.
+
+### Elf
+- **Origin:** Add +10 HP damage to every successful attack.
+- **Elven Grace:** +10 TN on attacks and maneuvers.
+- **Swift:** After suffering HP damage, the next maneuver gains +20 TN.
+- **Superior Reflexes:** Reduce incoming melee damage by 10 and ranged damage by 5.
+- **Elven Weaponry:** Another +10 HP damage on attacks (stacking with the origin bonus).
+- **Aesthetic Perfection:** If the attack roll is under 10% of the TN, treat it as a critical success and trigger Heat of Battle.
+
+### Monster
+- **Origin:** Terrifying blows add +10 Morale damage, while incoming HP/Morale damage is reduced by 20%.
+- **Bulky:** +10 HP damage but −10 attack TN.
+- **Regeneration:** Heals 1d20 + 10 HP at the top of each round.
+- **Thick Hide:** Gain +3d10 + 5 armor soak whenever hit.
+- **Predator Instinct:** Targets under half Morale suffer +30 extra Morale damage, but the monster takes +20 HP damage from every hit.
+- **Lurker:** Treat all targets as Flanked for advantage on defenses.
+- **Multiple Appendages:** Make two melee attacks each turn, add +1d10 chip damage, and suffer −20 attack TN.
+- **Horror Incarnate:** +40 Morale damage per strike, −20 attack TN.
+- **Colossal:** +30 HP damage dealt, but ranged attacks deal +30 HP damage back.
+- **Devourer:** Devouring allies (same side) restores 3d10 + 20 HP.
+- **Monstrous Charge:** Charge attacks add an extra 1d20 damage, but the monster’s attack TN drops by 10 and incoming damage increases by 30.
+
+### Greenskin
+- **Origin:** As long as HP exceeds 50%, add +10 HP damage to attacks.
+- **Surge:** Every fourth round the unit surges, gaining +20 HP damage and +10 attack TN for that round.
+- **Mob Mentality:** If the squad suffers ≥50% HP damage in a round, next round’s attacks deal +4d10 + 10 Morale damage; while above half HP incoming Morale damage is halved.
+- **Gobbos:** Rowdy mobs take +20 incoming HP damage and suffer −10 attack TN.
+- **Big Choppas:** Ignore an additional 10 points of armor soak.
+- **Unstoppable Wave:** Charges inflict +40 Morale damage, at the cost of a permanent −20 attack TN penalty.
+
+### Ratmen
+- **Origin:** Skittish fighters take +5 Morale damage from all sources and gain +10 TN on Flank maneuvers.
+- **Coward:** Incoming Morale damage increases by 20; if Flanked they also take +20 HP damage.
+- **Poisoner:** Successful attacks impose −20 TN on the target for 2 rounds.
+- **Musk of Fear:** When the army is healthy (>50% HP), reduce incoming Morale damage by 25%; if the army falters, increase it by 50%.
+- **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for 2 rounds.
+- **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (+10 Morale damage taken, −5 TN).
+
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
 - **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage in a roaming 4-yard blaze that pulses once per round for 3 rounds.
