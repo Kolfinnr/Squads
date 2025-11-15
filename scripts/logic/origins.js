@@ -103,13 +103,18 @@ const PASSIVE_LABELS = {
 
 export function getOrigin(actor) {
   if (!actor) return null;
+  const flagOrigin = actor.getFlag?.(FLAG_SCOPE, "origin");
+  if (typeof flagOrigin === "string" && ORIGINS.includes(flagOrigin)) return flagOrigin;
   const origin = foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.origin");
   if (typeof origin === "string" && ORIGINS.includes(origin)) return origin;
   return null;
 }
 
 export function getPassives(actor) {
-  const source = foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {};
+  const flagPassives = actor.getFlag?.(FLAG_SCOPE, "passives");
+  const source = (flagPassives && typeof flagPassives === "object")
+    ? flagPassives
+    : (foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {});
   const result = {};
   for (const key of ALL_PASSIVE_KEYS) {
     result[key] = Boolean(source[key]);

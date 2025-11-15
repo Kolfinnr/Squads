@@ -95,7 +95,7 @@
           <h3>{{localize "W4SQ.PassiveEffects"}}</h3>
           <div class="origin-select">
             <label for="w4sq-origin-select">{{localize "W4SQ.Origin"}}</label>
-            <select id="w4sq-origin-select" name="system.squad.origin" data-nullable="true">
+            <select id="w4sq-origin-select" name="flags.wfrp4e-squads.origin" data-nullable="true">
               <option value="">{{localize "W4SQ.OriginNone"}}</option>
               {{#each originOptions as |opt|}}
                 <option value="{{opt.key}}" {{#if (eq ../squad.origin opt.key)}}selected{{/if}}>{{opt.label}}</option>
@@ -107,7 +107,7 @@
             {{#if originPassives.length}}
               <div class="origin-passive-list">
                 {{#each originPassives as |entry|}}
-                  <label><input type="checkbox" data-dtype="Boolean" name="system.squad.passives.{{entry.key}}" {{checked entry.checked}}/> {{localize entry.label}}</label>
+                  <label><input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.passives.{{entry.key}}" {{checked entry.checked}}/> {{localize entry.label}}</label>
                 {{/each}}
               </div>
             {{else}}

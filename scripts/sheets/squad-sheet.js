@@ -31,8 +31,9 @@ export class SquadActorSheet extends ActorSheet {
     const f = (key, fallback = null) => this.actor.getFlag(FLAG_SCOPE, key) ?? fallback;
     const role = f("role", "infantry");
     const squadSystem = foundry.utils.getProperty(this.actor.system ?? this.actor.data?.data, "squad") || {};
-    const origin = squadSystem.origin ?? "";
-    const passiveState = squadSystem.passives ?? {};
+    const originFlag = f("origin", null);
+    const origin = typeof originFlag === "string" ? originFlag : (squadSystem.origin ?? "");
+    const passiveState = foundry.utils.duplicate(f("passives", squadSystem.passives ?? {})) || {};
     data.squad = {
       hp: f("hp", 100),
       hpMax: f("hpMax", 100),
