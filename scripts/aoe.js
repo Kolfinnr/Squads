@@ -190,66 +190,79 @@ async function finalizeTemplate(templateDoc, state) {
 
 function startAoEPreview(templateData, finalize) {
   const previewId = templateData?.flags?.[MODULE_ID]?.[AOE_FLAG]?.previewId;
-  let hookId = null;
-  const cleanup = () => {
-    if (hookId !== null) Hooks.off("createMeasuredTemplate", hookId);
-  };
-
-  const listener = doc => {
-    const docState = doc?.getFlag(MODULE_ID, AOE_FLAG);
-    if (!docState) return;
-    if (docState.previewId !== previewId) return;
-    cleanup();
-    Promise.resolve(finalize?.(doc)).catch(err => console.error("[W4SQ] AoE finalize failed", err));
+  const registerHook = () => {
+    const hookId = Hooks.on("createMeasuredTemplate", doc => {
+      const docState = doc?.getFlag(MODULE_ID, AOE_FLAG);
+      if (!docState || docState.previewId !== previewId) return;
+      Hooks.off("createMeasuredTemplate", hookId);
+      Promise.resolve(finalize?.(doc)).catch(err => console.error("[W4SQ] AoE finalize failed", err));
+    });
+    return hookId;
   };
 
   if (game.measuredTemplate?.createPreview) {
-    hookId = Hooks.on("createMeasuredTemplate", listener);
-    let preview;
+    const hookId = registerHook();
     try {
-      preview = game.measuredTemplate.createPreview({ templateData, user: game.user });
+      const preview = game.measuredTemplate.createPreview({ templateData, user: game.user, scene: canvas.scene });
+      if (typeof preview?.once === "function") {
+        preview.once("destroy", () => Hooks.off("createMeasuredTemplate", hookId));
+      }
+      return preview ?? true;
     } catch (err) {
-      cleanup();
+      Hooks.off("createMeasuredTemplate", hookId);
       console.error("[W4SQ] Failed to start AoE preview", err);
-      return false;
     }
-    if (typeof preview?.catch === "function") {
-      preview.catch(err => {
-        cleanup();
-        console.error("[W4SQ] AoE preview error", err);
-      });
-    }
-    if (typeof preview?.once === "function") {
-      preview.once("destroy", cleanup);
-    }
-    return preview ?? true;
   }
 
   if (canvas?.templates?.activatePreview) {
-    hookId = Hooks.on("createMeasuredTemplate", listener);
-    let preview;
+    const hookId = registerHook();
     try {
-      preview = canvas.templates.activatePreview(templateData);
+      const preview = canvas.templates.activatePreview(templateData);
+      if (typeof preview?.once === "function") {
+        preview.once("destroy", () => Hooks.off("createMeasuredTemplate", hookId));
+      }
+      return preview ?? true;
     } catch (err) {
-      cleanup();
+      Hooks.off("createMeasuredTemplate", hookId);
       console.error("[W4SQ] Failed to start legacy AoE preview", err);
-      return false;
     }
-    if (typeof preview?.catch === "function") {
-      preview.catch(err => {
-        cleanup();
-        console.error("[W4SQ] Legacy AoE preview error", err);
-      });
-    }
-    if (typeof preview?.once === "function") {
-      preview.once("destroy", cleanup);
-    }
-    return preview ?? true;
   }
 
-  cleanup();
+  if (canvas?.scene) {
+    const doc = new MeasuredTemplateDocument(templateData, { parent: canvas.scene });
+    const preview = new SquadAoEPreview(doc, finalize);
+    preview.draw();
+    preview.activatePreviewListeners();
+    return preview;
+  }
+
   ui.notifications?.warn?.("Cannot start AoE preview on this client/version.");
   return false;
+}
+
+class SquadAoEPreview extends MeasuredTemplate {
+  constructor(document, finalize) {
+    super(document);
+    this._finalize = finalize;
+  }
+
+  async _onLeftClick(event) {
+    event.stopPropagation();
+    try {
+      const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [this.document.toObject()]);
+      const doc = created?.[0];
+      if (doc) await this._finalize?.(doc);
+    } catch (err) {
+      console.error("[W4SQ] AoE preview finalize failed", err);
+    } finally {
+      this.destroy();
+    }
+  }
+
+  _onRightClick(event) {
+    event.stopPropagation();
+    this.destroy();
+  }
 }
 
 async function handleCombatRound(combat) {
