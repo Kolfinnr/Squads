@@ -249,6 +249,7 @@ function hasUndeadMaster(actor) {
     if (getOrigin(candidate) !== "undead") continue;
     const passives = getPassives(candidate);
     if (isUndeadPuppet(candidate, passives)) continue;
+    if (!sameSide(actor, candidate)) continue;
     if (getNumberFlag(candidate, "morale") > 0) return true;
   }
   return false;
@@ -702,8 +703,17 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   }
   if (origin === "undead") {
     moraleBonus = clampNonNegative(moraleBonus - 10);
-    if (passives.undeadPuppet && hasUndeadMaster(defender)) {
-      moraleBonus = clampNonNegative(moraleBonus - 10);
+    if (passives.undeadPuppet) {
+      const extra = await new Roll("20+3d10").evaluate({});
+      damage += extra.total;
+      moraleBonus += extra.total;
+      await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadPuppetFragile", {
+        name: safeName(defender),
+        amount: extra.total
+      });
+      if (hasUndeadMaster(defender)) {
+        moraleBonus = clampNonNegative(moraleBonus - 10);
+      }
     }
     if (passives.undeadEthereal && !isMagical) {
       damage = Math.floor(damage * 0.5);
@@ -793,7 +803,7 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
       const existing = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorrupted);
       const stacks = Math.min(5, Number(existing?.mods?.tags?.chaosCorruptedStacks || 0) + 1);
       await ensureEffect(defender, {
-        key: existing?.key || randomID?.() ?? `chaos-corrupt-${Date.now()}`,
+        key: existing?.key || (randomID?.() ?? `chaos-corrupt-${Date.now()}`),
         label: game.i18n.localize("W4SQ.PassiveChaosCorruptive"),
         duration: 2,
         mods: {
@@ -985,6 +995,18 @@ export async function handleTurnTick(actor, context = {}) {
   const origin = getOrigin(actor);
   const passives = getPassives(actor);
   const { round } = getRoundSignature();
+
+  if (origin === "undead" && getNumberFlag(actor, "morale") <= 0) {
+    const crumble = await new Roll("10+2d10").evaluate({});
+    const hp = getNumberFlag(actor, "hp");
+    if (crumble.total > 0 && hp > 0) {
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - crumble.total));
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgUndeadCrumbling", {
+        name: safeName(actor),
+        amount: crumble.total
+      });
+    }
+  }
 
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
     const roll = await new Roll("1d20+10").evaluate({});
