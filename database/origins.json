@@ -1,0 +1,20 @@
+{
+  "human": { "label": "Human", "originPassive": "human_origin", "selectablePassives": [] },
+  "dwarf": { "label": "Dwarf", "originPassive": "dwarf_origin", "selectablePassives": [] },
+  "elf": { "label": "Elf", "originPassive": "elf_origin", "selectablePassives": [] },
+  "monster": { "label": "Monster", "originPassive": "monster_origin", "selectablePassives": [] },
+  "greenskin": { "label": "Greenskin", "originPassive": "greenskin_origin", "selectablePassives": [] },
+  "ratmen": { "label": "Ratmen", "originPassive": "ratmen_origin", "selectablePassives": [] },
+  "undead": { "label": "Undead", "originPassive": "undead_origin", "selectablePassives": [] },
+  "chaos": {
+    "label": "Chaos-Tainted",
+    "originPassive": "chaos_origin",
+    "selectablePassives": [
+      "chaos_mutation",
+      "chaos_daemonic",
+      "chaos_corruptive",
+      "chaos_frenzy",
+      "chaos_forged"
+    ]
+  }
+}
