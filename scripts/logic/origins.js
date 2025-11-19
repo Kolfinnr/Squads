@@ -1,10 +1,19 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, removeEffectByKey, ensureEffect, actorHasTag, getEffects, removeDisorganized } from "./effects.js";
+import {
+  applyChaosMutationAttack,
+  applyChaosMutationDefense,
+  applyChaosDamageTaken,
+  handleChaosPostHit,
+  ensureChaosMutation,
+  applyChaosRegeneration,
+  mutationLabel
+} from "../passives/chaos.js";
 import { maybeTriggerHoB } from "./hob.js";
 
 const { randomID } = foundry.utils;
 
-const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen", "undead"];
+const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen", "undead", "chaos"];
 
 const ORIGIN_PASSIVES = {
   human: [
@@ -60,6 +69,13 @@ const ORIGIN_PASSIVES = {
     "undeadRegeneration",
     "undeadEthereal",
     "undeadMarchOfTheDead"
+  ],
+  chaos: [
+    "chaosMutation",
+    "chaosDaemonic",
+    "chaosCorruptive",
+    "chaosFrenzy",
+    "chaosForged"
   ]
 };
 
@@ -111,7 +127,13 @@ const PASSIVE_LABELS = {
   undeadLifeDrain: "W4SQ.PassiveUndeadLifeDrain",
   undeadRegeneration: "W4SQ.PassiveUndeadRegeneration",
   undeadEthereal: "W4SQ.PassiveUndeadEthereal",
-  undeadMarchOfTheDead: "W4SQ.PassiveUndeadMarchOfTheDead"
+  undeadMarchOfTheDead: "W4SQ.PassiveUndeadMarchOfTheDead",
+
+  chaosMutation: "W4SQ.PassiveChaosMutation",
+  chaosDaemonic: "W4SQ.PassiveChaosDaemonic",
+  chaosCorruptive: "W4SQ.PassiveChaosCorruptive",
+  chaosFrenzy: "W4SQ.PassiveChaosFrenzy",
+  chaosForged: "W4SQ.PassiveChaosForged"
 };
 
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
@@ -169,6 +191,7 @@ export function getOriginLabelKey(origin) {
     case "greenskin": return "W4SQ.OriginGreenskin";
     case "ratmen": return "W4SQ.OriginRatmen";
     case "undead": return "W4SQ.OriginUndead";
+    case "chaos": return "W4SQ.OriginChaos";
     default: return "";
   }
 }
@@ -344,6 +367,11 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   if (origin === "monster" && passives.monsterMultipleAppendages) add(-20);
   if (origin === "monster" && passives.monsterMonstrousCharge) add(-10);
   if (origin === "elf" && passives.elfElvenGrace) add(10);
+  if (origin === "chaos" && passives.chaosFrenzy) {
+    const lostRatio = 1 - Math.max(0, Math.min(1, ratio));
+    const steps = Math.max(0, Math.floor(lostRatio / 0.1));
+    add(steps * (7 + 5));
+  }
   if (origin === "dwarf" && passives.dwarfGrudgin) {
     const ticks = Number(actor.getFlag(FLAG_SCOPE, "dwarfGrudgeTicks") || 0);
     add(Math.min(4, Math.max(0, ticks)) * 5);
@@ -363,6 +391,11 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     if (origin === "human" && passives.humanBattleDrill) add(10);
     if (origin === "human" && passives.humanAdaptive && ratio < 0.5) add(10);
     if (origin === "elf" && passives.elfElvenGrace) add(10);
+    if (origin === "chaos" && passives.chaosFrenzy) {
+      const lostRatio = 1 - Math.max(0, Math.min(1, ratio));
+      const steps = Math.max(0, Math.floor(lostRatio / 0.1));
+      add(steps * (7 + 5));
+    }
     if (origin === "dwarf" && passives.dwarfGrudgin) {
       const ticks = Number(actor.getFlag(FLAG_SCOPE, "dwarfGrudgeTicks") || 0);
       add(Math.min(4, Math.max(0, ticks)) * 5);
@@ -376,6 +409,12 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     if (origin === "ratmen" && maneuverKey === "flank") {
       add(10);
     }
+  }
+
+  if (origin === "chaos" && passives.chaosMutation) {
+    await ensureChaosMutation(actor);
+    const adjusted = await applyChaosMutationAttack(actor, { attackTN: next });
+    if (Number.isFinite(adjusted?.attackTN)) next = adjusted.attackTN;
   }
 
   return next;
@@ -418,6 +457,9 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
   if (origin === "dwarf" && passives.dwarfStalwart && defenderHasBraced(defenseTags)) {
     armor += 10;
   }
+  if (origin === "chaos" && passives.chaosForged) {
+    armor += 10;
+  }
   if (origin === "monster" && passives.monsterThickHide) {
     const roll = await new Roll("3d10+5").evaluate({});
     armor += roll.total;
@@ -456,6 +498,36 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   let moraleBonus = 0;
   let armorPierceBonus = 0;
   let extraAttacks = 0;
+
+  if (origin === "chaos") {
+    await ensureChaosMutation(actor);
+    damage += 10;
+    moraleBonus += 10;
+    if (passives.chaosDaemonic) {
+      damage += 5;
+      moraleBonus += 20;
+    }
+    if (passives.chaosForged) {
+      moraleBonus += 10;
+    }
+    if (passives.chaosMutation) {
+      const adjusted = await applyChaosMutationAttack(actor, {});
+      if (Number.isFinite(adjusted?.damageBonus)) damage += adjusted.damageBonus;
+      if (Number.isFinite(adjusted?.armorPierceBonus)) armorPierceBonus += adjusted.armorPierceBonus;
+      if (adjusted?.applyFlanked) actorHasTag(defender, "flanked") || await ensureEffect(defender, {
+        key: randomID?.() ?? `chaos-flank-${Date.now()}`,
+        label: game.i18n.localize("W4SQ.MutationDancingShadows"),
+        duration: 2,
+        mods: { tags: { flanked: true } }
+      }, eff => Boolean(eff?.mods?.tags?.flanked));
+      if (Number.isFinite(adjusted?.damageVsFlanked) && actorHasTag(defender, "flanked")) {
+        damage += adjusted.damageVsFlanked;
+      }
+      if (Number.isFinite(adjusted?.chargeMorale) && isCharge) {
+        moraleBonus += adjusted.chargeMorale;
+      }
+    }
+  }
 
   if (origin === "elf") {
     damage += 10;
@@ -606,6 +678,18 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
     damage = Math.floor(damage * 0.75);
     moraleBonus = Math.floor(moraleBonus * 0.75);
   }
+  if (origin === "chaos") {
+    if (passives.chaosMutation) {
+      const adjusted = applyChaosMutationDefense(defender, { damage, moraleBonus });
+      if (Number.isFinite(adjusted?.incomingMultiplier)) {
+        damage = Math.floor(damage * adjusted.incomingMultiplier);
+        moraleBonus = Math.floor(moraleBonus * adjusted.incomingMultiplier);
+      }
+      if (Number.isFinite(adjusted?.armorBonus)) {
+        damage = Math.max(0, damage - adjusted.armorBonus);
+      }
+    }
+  }
   if (origin === "dwarf" && passives.dwarfIronWill) {
     moraleBonus = clampNonNegative(moraleBonus - 20);
   }
@@ -670,6 +754,11 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   if (attackerOrigin === "monster" && attackerPassives.monsterHorrorIncarnate) {
     moraleBonus += 40;
   }
+  const corrupted = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorruptedStacks);
+  if (corrupted) {
+    const stacks = Number(corrupted.mods.tags.chaosCorruptedStacks) || 0;
+    moraleBonus += stacks * 5;
+  }
   if (actorHasTag(defender, "overwhelmed")) {
     moraleBonus += 10;
   }
@@ -697,6 +786,24 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
         name: safeName(attacker),
         target: safeName(defender)
       });
+    }
+  }
+  if (origin === "chaos") {
+    if (passives.chaosCorruptive) {
+      const existing = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorrupted);
+      const stacks = Math.min(5, Number(existing?.mods?.tags?.chaosCorruptedStacks || 0) + 1);
+      await ensureEffect(defender, {
+        key: existing?.key || randomID?.() ?? `chaos-corrupt-${Date.now()}`,
+        label: game.i18n.localize("W4SQ.PassiveChaosCorruptive"),
+        duration: 2,
+        mods: {
+          tags: { chaosCorrupted: true, chaosCorruptedStacks: stacks },
+          moraleDice: "+0"
+        }
+      }, eff => Boolean(eff?.mods?.tags?.chaosCorrupted));
+    }
+    if (passives.chaosMutation) {
+      await handleChaosPostHit(attacker, defender, { success, hpDamage });
     }
   }
   if (origin === "ratmen" && passives.ratNumerous) {
@@ -763,6 +870,13 @@ export async function recordDamageTaken(defender, { hpDamage = 0 } = {}) {
     info.value = (info.value || 0) + hpDamage;
     await defender.setFlag(FLAG_SCOPE, "greenMobDamage", info);
   }
+  if (origin === "chaos" && passives.chaosMutation) {
+    const mutation = defender.getFlag(FLAG_SCOPE, "chaosMutation");
+    if (mutation === "ritualistic_sacrifice") {
+      const stacks = Number(defender.getFlag(FLAG_SCOPE, "chaosRitualStacks") || 0);
+      await defender.setFlag(FLAG_SCOPE, "chaosRitualStacks", Math.min(5, stacks + 1));
+    }
+  }
   if (origin === "undead" && passives.undeadMarchOfTheDead) {
     const morale = getNumberFlag(defender, "morale");
     if (morale > 0) {
@@ -805,6 +919,9 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
     next = Math.max(0, next - 5);
     if (passives.humanResilient) next = Math.max(0, next - 5);
   }
+  if (origin === "chaos") {
+    next = Math.max(0, next - 10);
+  }
   if (origin === "undead") {
     next = Math.max(0, next - 10);
     if (passives.undeadPuppet && hasUndeadMaster(defender)) {
@@ -834,6 +951,14 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
 export async function handleMoraleZero(defender, attacker) {
   const origin = getOrigin(defender);
   const passives = getPassives(defender);
+  if (origin === "chaos" && passives.chaosDaemonic) {
+    await ensureEffect(defender, {
+      key: "chaos-banishing",
+      label: game.i18n.localize("W4SQ.PassiveChaosDaemonic"),
+      duration: 99,
+      mods: { tags: { chaosBanishing: true } }
+    }, eff => Boolean(eff?.mods?.tags?.chaosBanishing));
+  }
   if (origin !== "human" || !passives.humanToTheBitterEnd) return;
   if (await defender.getFlag(FLAG_SCOPE, "usedBitterEnd")) return;
 
@@ -882,6 +1007,21 @@ export async function handleTurnTick(actor, context = {}) {
         name: safeName(actor),
         amount: applied
       });
+    }
+  }
+  if (origin === "chaos" && passives.chaosMutation) {
+    const regen = await applyChaosRegeneration(actor);
+    if (regen) {
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgChaosRegeneration", { name: safeName(actor), amount: regen });
+    }
+  }
+  if (origin === "chaos" && passives.chaosDaemonic) {
+    const banishing = getEffects(actor).find(eff => eff?.mods?.tags?.chaosBanishing);
+    if (banishing) {
+      const roll = await new Roll("5+3d10").evaluate({});
+      const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - roll.total));
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgChaosBanishing", { name: safeName(actor), amount: roll.total });
     }
   }
   if (origin === "greenskin" && passives.greenSurge) {
