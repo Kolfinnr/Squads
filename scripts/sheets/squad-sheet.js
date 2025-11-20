@@ -5,7 +5,8 @@ import { getEffectsDetailed } from "../logic/effects.js";
 import { getCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
-import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor } from "../logic/origins.js";
+import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor, hasUndeadMaster } from "../logic/origins.js";
+import { getChaosMutationFlags, mutationLabel } from "../passives/chaos.js";
 
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
@@ -93,6 +94,25 @@ export class SquadActorSheet extends ActorSheet {
       label: game.i18n.localize(getOriginLabelKey(key))
     }));
     const originPassiveKeys = getOriginPassivesFor(origin) || [];
+    const chaosMutation = origin === "chaos" ? getChaosMutationFlags(this.actor) : null;
+    const chaosMutationChip = chaosMutation?.mutation
+      ? (() => {
+          const details = [
+            chaosMutation.gazeStacks
+              ? game.i18n.format("W4SQ.MutationGazeStacks", { stacks: chaosMutation.gazeStacks })
+              : null,
+            chaosMutation.ritualStacks
+              ? game.i18n.format("W4SQ.MutationRitualStacks", { stacks: chaosMutation.ritualStacks })
+              : null
+          ].filter(Boolean);
+          return {
+            key: chaosMutation.mutation,
+            label: game.i18n.localize(mutationLabel(chaosMutation.mutation)),
+            type: "mutation",
+            details: details.length ? details : null
+          };
+        })()
+      : null;
     const selectedOriginPassives = originPassiveKeys
       .filter(key => Boolean(passiveState?.[key]))
       .map(key => ({
@@ -106,6 +126,7 @@ export class SquadActorSheet extends ActorSheet {
     }));
     data.originPassiveSummary = selectedOriginPassives;
     data.passiveChips = [
+      ...(chaosMutationChip ? [chaosMutationChip] : []),
       ...selectedOriginPassives.map(passive => ({
         key: passive.key,
         label: passive.label,
@@ -119,6 +140,18 @@ export class SquadActorSheet extends ActorSheet {
         durationLabel: effect.durationLabel
       }))
     ];
+    data.chaosMutation = chaosMutationChip;
+    const puppetStatus = origin === "undead" && passiveState?.undeadPuppet
+      ? { hasMaster: hasUndeadMaster(this.actor) }
+      : null;
+    if (puppetStatus) {
+      activeEffects.push({
+        key: "undead-master-presence",
+        label: game.i18n.localize(puppetStatus.hasMaster ? "W4SQ.ActiveUndeadMastersPresent" : "W4SQ.ActiveUndeadMastersMissing"),
+        durationLabel: game.i18n.localize("W4SQ.PassiveEffectDuration")
+      });
+    }
+    data.puppetStatus = puppetStatus;
     return data;
   }
 

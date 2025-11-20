@@ -13,6 +13,12 @@
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
 - **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
 
+### Attack Resolution at a Glance
+- **Target Number (TN):** Starts at 40 and rises by +7 per Experience tier and +5 per Equipment tier, then applies weapon accuracy, role bonuses, effect dice, and any hybrid-role penalty. Morale below 30% reduces TN by 10 and squads at 0 HP take −20. Specialists cap their effective TN at 90 and scale it to current HP%.【F:scripts/features/actions.js†L207-L246】
+- **Hit Check:** A d100 roll must fall at or under the final TN. Heat of Battle or aesthetic triggers can further adjust TN mid-roll before the check resolves.【F:scripts/features/actions.js†L226-L244】
+- **Damage:** Successful attacks roll 1d20 plus Experience d10s, weapon and role dice, and effect dice, then scale the total by current HP% (to a 20% floor). Armor, defense, and resistance soak reduce the blow before post-attack effects apply.【F:scripts/features/actions.js†L292-L356】【F:scripts/features/actions.js†L379-L439】
+- **Chip Damage on Miss:** Failed rolls still deal 1d10 chip damage (plus any guard strain) and can inflict morale loss on the target, keeping pressure up even on bad rolls.【F:scripts/features/actions.js†L246-L291】
+
 ### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
 - A **Maneuver** checkbox beside the orders column is a reminder for players planning to perform a maneuver that round.
@@ -90,7 +96,15 @@
 - **Life Drain:** Successful attacks heal the unit for 50% of the final HP damage dealt (rounded down), unless the target is also a Puppet.
 - **Regeneration:** At the end of each turn the unit restores 2d10 + 10 HP, even while Unbound.
 - **Ethereal:** Non-magical attacks deal half damage after soak, every strike adds +20 Morale damage, and 25% of HP damage ignores armor soak.
+- **Crumbling:** When Morale hits 0, Undead do not route; they instead suffer 3d10 + 20 HP damage at the start of each turn.
 - **March of the Dead:** While Morale > 0, every damaging hit inflicts *Overwhelmed* on the victim, and every 100 HP lost lets the unit roll 1d2 to raise 30 + 3d10 HP back into the formation (fails on a 2). The effect shuts down once the unit becomes Unbound.
+
+### Chaos
+- **Origin:** Chaotic warbands deal +10 HP damage and +10 Morale damage on every attack and shrug off 10 Morale loss. A random mutation is assigned the first time they strike, unlocking bespoke bonuses such as armor spikes, armor-piercing claws, flanking shadowplay, or regeneration.【F:scripts/logic/origins.js†L503-L534】【F:scripts/logic/origins.js†L928-L958】【F:scripts/passives/chaos.js†L1-L109】
+- **Daemonic:** Adds another +5 HP and +20 Morale damage. When the unit’s Morale hits 0 it gains a banishing tag that bleeds 5 + 3d10 HP at the start of each turn until removed.【F:scripts/logic/origins.js†L503-L511】【F:scripts/logic/origins.js†L961-L1047】
+- **Forged:** Grants +10 Morale damage on attacks and +10 armor soak on defense, making the unit harder to crack.【F:scripts/logic/origins.js†L503-L513】【F:scripts/logic/origins.js†L445-L463】
+- **Frenzy:** Attack and maneuver TN rise as the squad loses HP (roughly +12 per 10% of HP missing), encouraging reckless assaults when bloodied.【F:scripts/logic/origins.js†L349-L375】
+- **Corruptive:** Successful hits stack *Chaos Corrupted* on enemies, ramping Morale damage by up to 5 stacks over time.【F:scripts/logic/origins.js†L801-L814】
 
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
