@@ -115,6 +115,12 @@
   border: 1px solid transparent;
 }
 
+.w4sq .effect-chip .chip-detail {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--color-text-light-5, #555);
+}
+
 .w4sq .effect-chip.positive {
   background: rgba(76, 175, 80, 0.2);
   border-color: rgba(76, 175, 80, 0.35);
@@ -190,6 +196,51 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   padding: 0.5rem 0;
+}
+
+.w4sq.sheet .chaos-mutation {
+  margin-top: 0.75rem;
+}
+
+.w4sq.sheet .effect-chip.passive.mutation {
+  cursor: pointer;
+}
+
+.w4sq.sheet .mutation-details {
+  margin: 0.35rem 0 0 1rem;
+  padding: 0;
+  list-style: disc;
+}
+
+.w4sq-mutation-menu {
+  position: absolute;
+  background: #1e1e1e;
+  color: #f0f0f0;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 0.5rem;
+  min-width: 180px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.w4sq-mutation-menu .hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+  color: #d0d0d0;
+}
+
+.w4sq-mutation-menu .mutation-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.w4sq-mutation-menu .mutation-menu-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
 }
 
 .w4sq.sheet .status-grid {
