@@ -6,7 +6,7 @@ import { getCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
 import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor, hasUndeadMaster } from "../logic/origins.js";
-import { getChaosMutationFlags, mutationLabel } from "../passives/chaos.js";
+import { getChaosMutationFlags, mutationLabel, mutationOptions } from "../passives/chaos.js";
 
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
@@ -95,21 +95,24 @@ export class SquadActorSheet extends ActorSheet {
     }));
     const originPassiveKeys = getOriginPassivesFor(origin) || [];
     const chaosMutation = origin === "chaos" ? getChaosMutationFlags(this.actor) : null;
-    const chaosMutationChip = chaosMutation?.mutation
+    const mutationLabelKey = chaosMutation?.mutation ? mutationLabel(chaosMutation.mutation) : "W4SQ.MutationUnset";
+    const chaosMutationChip = origin === "chaos"
       ? (() => {
-          const details = [
-            chaosMutation.gazeStacks
-              ? game.i18n.format("W4SQ.MutationGazeStacks", { stacks: chaosMutation.gazeStacks })
-              : null,
-            chaosMutation.ritualStacks
-              ? game.i18n.format("W4SQ.MutationRitualStacks", { stacks: chaosMutation.ritualStacks })
-              : null
-          ].filter(Boolean);
+          const details = chaosMutation?.mutation
+            ? [
+                chaosMutation.gazeStacks
+                  ? game.i18n.format("W4SQ.MutationGazeStacks", { stacks: chaosMutation.gazeStacks })
+                  : null,
+                chaosMutation.ritualStacks
+                  ? game.i18n.format("W4SQ.MutationRitualStacks", { stacks: chaosMutation.ritualStacks })
+                  : null
+              ].filter(Boolean)
+            : null;
           return {
-            key: chaosMutation.mutation,
-            label: game.i18n.localize(mutationLabel(chaosMutation.mutation)),
+            key: chaosMutation?.mutation || "chaos-mutation",
+            label: game.i18n.localize(mutationLabelKey),
             type: "mutation",
-            details: details.length ? details : null
+            details
           };
         })()
       : null;
@@ -202,6 +205,10 @@ export class SquadActorSheet extends ActorSheet {
       ev.preventDefault();
       this._openPassivesDialog();
     });
+    html.find(".effect-chip.passive.mutation").on("click", ev => {
+      ev.preventDefault();
+      this._toggleMutationMenu(ev.currentTarget);
+    });
   }
 
   _bindSystemInputs(root) {
@@ -291,5 +298,100 @@ export class SquadActorSheet extends ActorSheet {
     });
 
     dialog.render(true);
+  }
+
+  async close(options) {
+    this._closeMutationMenu();
+    return super.close(options);
+  }
+
+  _toggleMutationMenu(anchor) {
+    const node = anchor instanceof HTMLElement ? anchor : anchor?.currentTarget;
+    if (!node) return;
+    if (this._activeMutationMenu?.anchor === node) {
+      this._closeMutationMenu();
+      return;
+    }
+    this._openMutationMenu(node);
+  }
+
+  _closeMutationMenu() {
+    if (this._activeMutationMenu?.menu) {
+      this._activeMutationMenu.menu.remove();
+    }
+    if (this._activeMutationMenu?.handler) {
+      document.removeEventListener("click", this._activeMutationMenu.handler, true);
+    }
+    this._activeMutationMenu = null;
+  }
+
+  async _selectMutation(key) {
+    const update = key ? { mutation: key } : { mutation: null };
+    try {
+      if (update.mutation) {
+        await this.actor.setFlag(FLAG_SCOPE, "chaosMutation", update.mutation);
+      } else {
+        await this.actor.unsetFlag(FLAG_SCOPE, "chaosMutation");
+      }
+      await this.actor.unsetFlag(FLAG_SCOPE, "chaosGazeStacks");
+      await this.actor.unsetFlag(FLAG_SCOPE, "chaosRitualStacks");
+      await this.actor.unsetFlag(FLAG_SCOPE, "chaosWarpedBonus");
+      await this.actor.unsetFlag(FLAG_SCOPE, "chaosShapeTargets");
+      this.render(false);
+    } catch (err) {
+      console.error("wfrp4e-squads | Failed to set mutation", err);
+    } finally {
+      this._closeMutationMenu();
+    }
+  }
+
+  _openMutationMenu(anchor) {
+    const container = document.createElement("div");
+    container.classList.add("w4sq-mutation-menu");
+
+    const hint = document.createElement("p");
+    hint.classList.add("hint");
+    hint.textContent = game.i18n.localize("W4SQ.MutationMenuHint");
+    container.appendChild(hint);
+
+    const list = document.createElement("div");
+    list.classList.add("mutation-menu-list");
+
+    const current = this.actor.getFlag(FLAG_SCOPE, "chaosMutation") || "";
+    const createRow = (value, label) => {
+      const row = document.createElement("label");
+      row.classList.add("mutation-menu-entry");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "chaos-mutation";
+      input.value = value;
+      input.checked = value === current;
+      input.addEventListener("change", () => this._selectMutation(value));
+      const text = document.createElement("span");
+      text.textContent = game.i18n.localize(label);
+      row.append(input, text);
+      list.appendChild(row);
+    };
+
+    createRow("", "W4SQ.MutationUnset");
+    for (const opt of mutationOptions()) {
+      createRow(opt.key, opt.label);
+    }
+
+    container.appendChild(list);
+
+    document.body.appendChild(container);
+    const rect = anchor.getBoundingClientRect();
+    container.style.left = `${rect.left + window.scrollX}px`;
+    container.style.top = `${rect.bottom + window.scrollY + 4}px`;
+
+    const closeHandler = ev => {
+      if (!container.contains(ev.target) && ev.target !== anchor) {
+        this._closeMutationMenu();
+      }
+    };
+
+    document.addEventListener("click", closeHandler, true);
+    this._activeMutationMenu = { menu: container, handler: closeHandler, anchor };
   }
 }

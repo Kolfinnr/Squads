@@ -24,6 +24,13 @@ export function mutationLabel(key) {
   return MUTATION_LABELS[key] || key;
 }
 
+export function mutationOptions() {
+  return Object.keys(MUTATION_LABELS).map(key => ({
+    key,
+    label: mutationLabel(key)
+  }));
+}
+
 export async function ensureChaosMutation(actor, tableData) {
   if (!actor) return null;
   const existing = getMutation(actor);
