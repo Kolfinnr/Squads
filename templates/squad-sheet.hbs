@@ -130,15 +130,6 @@
               {{/if}}
             </div>
           {{/if}}
-          {{#if puppetStatus}}
-            <div class="puppet-status {{#if puppetStatus.hasMaster}}ok{{else}}warn{{/if}}">
-              {{#if puppetStatus.hasMaster}}
-                <p>{{localize "W4SQ.UndeadPuppetMasterFound"}}</p>
-              {{else}}
-                <p>{{localize "W4SQ.UndeadPuppetMasterMissing"}}</p>
-              {{/if}}
-            </div>
-          {{/if}}
         </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>

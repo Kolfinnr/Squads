@@ -141,9 +141,17 @@ export class SquadActorSheet extends ActorSheet {
       }))
     ];
     data.chaosMutation = chaosMutationChip;
-    data.puppetStatus = origin === "undead" && passiveState?.undeadPuppet
+    const puppetStatus = origin === "undead" && passiveState?.undeadPuppet
       ? { hasMaster: hasUndeadMaster(this.actor) }
       : null;
+    if (puppetStatus) {
+      activeEffects.push({
+        key: "undead-master-presence",
+        label: game.i18n.localize(puppetStatus.hasMaster ? "W4SQ.ActiveUndeadMastersPresent" : "W4SQ.ActiveUndeadMastersMissing"),
+        durationLabel: game.i18n.localize("W4SQ.PassiveEffectDuration")
+      });
+    }
+    data.puppetStatus = puppetStatus;
     return data;
   }
 

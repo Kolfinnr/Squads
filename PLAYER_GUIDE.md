@@ -96,6 +96,7 @@
 - **Life Drain:** Successful attacks heal the unit for 50% of the final HP damage dealt (rounded down), unless the target is also a Puppet.
 - **Regeneration:** At the end of each turn the unit restores 2d10 + 10 HP, even while Unbound.
 - **Ethereal:** Non-magical attacks deal half damage after soak, every strike adds +20 Morale damage, and 25% of HP damage ignores armor soak.
+- **Crumbling:** When Morale hits 0, Undead do not route; they instead suffer 3d10 + 20 HP damage at the start of each turn.
 - **March of the Dead:** While Morale > 0, every damaging hit inflicts *Overwhelmed* on the victim, and every 100 HP lost lets the unit roll 1d2 to raise 30 + 3d10 HP back into the formation (fails on a 2). The effect shuts down once the unit becomes Unbound.
 
 ### Chaos

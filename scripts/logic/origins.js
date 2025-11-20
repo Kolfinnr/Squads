@@ -716,7 +716,15 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
       }
     }
     if (passives.undeadEthereal && !isMagical) {
+      const preEthereal = damage;
       damage = Math.floor(damage * 0.5);
+      const blocked = clampNonNegative(preEthereal - damage);
+      if (blocked > 0) {
+        await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadEtherealBlocked", {
+          name: safeName(defender),
+          amount: blocked
+        });
+      }
     }
   }
   if (origin === "monster") {
@@ -997,7 +1005,7 @@ export async function handleTurnTick(actor, context = {}) {
   const { round } = getRoundSignature();
 
   if (origin === "undead" && getNumberFlag(actor, "morale") <= 0) {
-    const crumble = await new Roll("10+2d10").evaluate({});
+    const crumble = await new Roll("3d10+20").evaluate({});
     const hp = getNumberFlag(actor, "hp");
     if (crumble.total > 0 && hp > 0) {
       await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - crumble.total));
