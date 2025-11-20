@@ -42,7 +42,7 @@ export async function ensureChaosMutation(actor, tableData) {
   return result;
 }
 
-export function applyChaosMutationAttack(actor, context = {}) {
+export async function applyChaosMutationAttack(actor, context = {}) {
   const mutation = getMutation(actor);
   if (!mutation) return context;
   const next = { ...context };

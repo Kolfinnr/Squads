@@ -231,7 +231,7 @@
   "W4SQ.PassiveMsgRatPoisoner": "Poisoner tricks — {name} coat their blades, leaving {target} at −20 TN for 2 rounds.",
   "W4SQ.PassiveMsgRatTreacherous": "Treacherous scheming! {name} turn on {target}, gaining +40 TN and +{amount} damage for 2 rounds.",
   "W4SQ.PassiveMsgUndeadPuppetMaster": "A master's will courses through {name}'s puppet ranks, steadying their blows.",
-  "W4SQ.PassiveMsgUndeadPuppetFragile": "{name}'s ranks shudder under blows, taking an extra {amount} damage.",
+  "W4SQ.PassiveMsgUndeadPuppetFragile": "{name}'s puppet ranks shudder under blows, taking an extra {amount} damage.",
   "W4SQ.PassiveMsgUndeadLifeDrain": "{name} siphons {amount} vitality from {target} to refill the ranks.",
   "W4SQ.PassiveMsgUndeadRegeneration": "Grave energies knit {name} back together for {amount} HP.",
   "W4SQ.PassiveMsgUndeadEtherealBlocked": "Ethereal forms blunt {amount} of the incoming strike against {name}.",
