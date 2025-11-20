@@ -242,7 +242,7 @@ function sceneActors() {
   return [...set];
 }
 
-function hasUndeadMaster(actor) {
+export function hasUndeadMaster(actor) {
   const actors = sceneActors();
   for (const candidate of actors) {
     if (!candidate || candidate === actor) continue;
@@ -255,7 +255,7 @@ function hasUndeadMaster(actor) {
   return false;
 }
 
-function isUndeadPuppet(actor, passives = null) {
+export function isUndeadPuppet(actor, passives = null) {
   if (!actor) return false;
   if (getOrigin(actor) !== "undead") return false;
   const p = passives ?? getPassives(actor);
