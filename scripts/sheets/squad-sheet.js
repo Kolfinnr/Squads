@@ -98,7 +98,7 @@ export class SquadActorSheet extends ActorSheet {
     const mutationLabelKey = chaosMutation?.mutation ? mutationLabel(chaosMutation.mutation) : "W4SQ.MutationUnset";
     const chaosMutationChip = origin === "chaos"
       ? (() => {
-          const details = chaosMutation?.mutation
+          const detailLines = chaosMutation?.mutation
             ? [
                 chaosMutation.gazeStacks
                   ? game.i18n.format("W4SQ.MutationGazeStacks", { stacks: chaosMutation.gazeStacks })
@@ -107,12 +107,17 @@ export class SquadActorSheet extends ActorSheet {
                   ? game.i18n.format("W4SQ.MutationRitualStacks", { stacks: chaosMutation.ritualStacks })
                   : null
               ].filter(Boolean)
-            : null;
+            : [];
+          const tooltip = chaosMutation?.mutation
+            ? [game.i18n.localize(mutationLabelKey), ...detailLines].join(" • ")
+            : game.i18n.localize("W4SQ.MutationShieldEmpty");
           return {
             key: chaosMutation?.mutation || "chaos-mutation",
             label: game.i18n.localize(mutationLabelKey),
             type: "mutation",
-            details
+            shield: true,
+            shieldTooltip: tooltip,
+            details: null
           };
         })()
       : null;
@@ -143,7 +148,6 @@ export class SquadActorSheet extends ActorSheet {
         durationLabel: effect.durationLabel
       }))
     ];
-    data.chaosMutation = chaosMutationChip;
     const puppetStatus = origin === "undead" && passiveState?.undeadPuppet
       ? { hasMaster: hasUndeadMaster(this.actor) }
       : null;

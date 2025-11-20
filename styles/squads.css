@@ -131,6 +131,23 @@
   border-color: rgba(198, 40, 40, 0.35);
 }
 
+.w4sq .effect-chip.shield {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: linear-gradient(90deg, rgba(125, 125, 125, 0.15), rgba(125, 125, 125, 0.3));
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.w4sq .chip-shield {
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 0.05rem 0.3rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
 .w4sq .effect-list {
   display: flex;
   flex-direction: column;

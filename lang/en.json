@@ -195,6 +195,7 @@
   "W4SQ.MutationGazeStacks": "Gaze stacks: {stacks}",
   "W4SQ.MutationRitualStacks": "Ritual stacks: {stacks}",
   "W4SQ.MutationUnset": "No Mutation",
+  "W4SQ.MutationShieldEmpty": "Select a mutation to show its details.",
   "W4SQ.PassiveChaosDaemonic": "Daemonic",
   "W4SQ.PassiveChaosCorruptive": "Corruptive",
   "W4SQ.PassiveChaosFrenzy": "Frenzy",
