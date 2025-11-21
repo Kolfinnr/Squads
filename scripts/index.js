@@ -244,6 +244,7 @@ Hooks.on("updateCombat", (combat, changed) => {
 });
 
 Hooks.on("renderTokenHUD", (hud, html) => {
+  const root = html?.jquery ? html : $(html);
   const token = canvas?.tokens?.get(hud.object.id);
   const actor = token?.actor;
   if (!isSquadActor(actor)) return;
@@ -254,7 +255,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
-  html.find(".left").append(btn);
+  root?.find?.(".left")?.append?.(btn);
 });
 
 function canSeeSquad(token) {

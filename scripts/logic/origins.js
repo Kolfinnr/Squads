@@ -209,7 +209,7 @@ export function buildDefaultPassives(origin) {
   }
   if (origin && ORIGIN_PASSIVES[origin]) {
     for (const key of ORIGIN_PASSIVES[origin]) {
-      passives[key] = Boolean(passives[key]);
+      passives[key] = true;
     }
   }
   return passives;
