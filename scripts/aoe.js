@@ -538,7 +538,7 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {
       if (moraleTotal > 0) inflicted = true;
       const result = await adjustActorFlag(actor, "morale", -moraleTotal, "moraleMax");
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-      if (moraleMax > 0 && result.after / moraleMax < 0.5) {
+      if (moraleMax > 0 && result.after / moraleMax < 0.25) {
         await ensureDisorganized(actor, { source: "morale" });
       }
       if (result.before > 0 && result.after <= 0) {

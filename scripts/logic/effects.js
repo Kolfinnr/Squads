@@ -122,7 +122,7 @@ async function handleSpecialEffect(actor, effect) {
     await applyFlagDelta(actor, "hp", -hpRoll.total, "hpMax");
     const moraleResult = await applyFlagDelta(actor, "morale", -moraleRoll.total, "moraleMax");
     const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-    if (moraleMax > 0 && moraleResult.after / moraleMax < 0.5) {
+    if (moraleMax > 0 && moraleResult.after / moraleMax < 0.25) {
       await ensureDisorganized(actor, { source: "zone" });
     }
     await postZoneMessage(actor, "W4SQ.ChatFirestormPulse", {
@@ -207,6 +207,12 @@ export async function ensureEffect(actor, effect, predicate) {
 export async function removeEffectByKey(actor, key) {
   const list = getEffects(actor).filter(e => e.key !== key);
   await actor.setFlag(FLAG_SCOPE, "effects", list);
+}
+
+export async function removeEffectsByTag(actor, tag) {
+  if (!actor || !tag) return;
+  const remaining = getEffects(actor).filter(effect => !effectHasTag(effect, tag));
+  await actor.setFlag(FLAG_SCOPE, "effects", remaining);
 }
 
 export async function clearNegative(actor) {
