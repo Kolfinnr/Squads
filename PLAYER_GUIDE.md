@@ -19,6 +19,12 @@
 - **Damage:** Successful attacks roll 1d20 plus Experience d10s, weapon and role dice, and effect dice, then scale the total by current HP% (to a 20% floor). Armor, defense, and resistance soak reduce the blow before post-attack effects apply.【F:scripts/features/actions.js†L292-L356】【F:scripts/features/actions.js†L379-L439】
 - **Chip Damage on Miss:** Failed rolls still deal 1d10 chip damage (plus any guard strain) and can inflict morale loss on the target, keeping pressure up even on bad rolls.【F:scripts/features/actions.js†L246-L291】
 
+### Attack Resolution at a Glance
+- **Target Number (TN):** Starts at 40 and rises by +7 per Experience tier and +5 per Equipment tier, then applies weapon accuracy, role bonuses, effect dice, and any hybrid-role penalty. Morale below 30% reduces TN by 10 and squads at 0 HP take −20. Specialists cap their effective TN at 90 and scale it to current HP%.【F:scripts/features/actions.js†L207-L246】
+- **Hit Check:** A d100 roll must fall at or under the final TN. Heat of Battle or aesthetic triggers can further adjust TN mid-roll before the check resolves.【F:scripts/features/actions.js†L226-L244】
+- **Damage:** Successful attacks roll 1d20 plus Experience d10s, weapon and role dice, and effect dice, then scale the total by current HP% (to a 20% floor). Armor, defense, and resistance soak reduce the blow before post-attack effects apply.【F:scripts/features/actions.js†L292-L356】【F:scripts/features/actions.js†L379-L439】
+- **Chip Damage on Miss:** Failed rolls still deal 1d10 chip damage (plus any guard strain) and can inflict morale loss on the target, keeping pressure up even on bad rolls.【F:scripts/features/actions.js†L246-L291】
+
 ### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
 - A **Maneuver** checkbox beside the orders column is a reminder for players planning to perform a maneuver that round.
