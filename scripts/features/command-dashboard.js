@@ -4,9 +4,9 @@ import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorgani
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 
-const ApplicationV2 = foundry.applications?.api?.ApplicationV2
-  ?? foundry.applications?.Application
-  ?? globalThis.Application;
+const ApplicationV2 = foundry.applications?.Application
+  ?? globalThis.Application
+  ?? foundry.applications?.api?.ApplicationV2;
 
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 

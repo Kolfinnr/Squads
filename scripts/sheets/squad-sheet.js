@@ -8,9 +8,9 @@ import { openCommandDashboard } from "../features/command-dashboard.js";
 import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor, hasUndeadMaster, getPassives } from "../logic/origins.js";
 import { getChaosMutationFlags, mutationLabel, mutationOptions } from "../passives/chaos.js";
 
-const ActorSheetV2 = foundry.appv2?.sheets?.ActorSheet
+const ActorSheetV2 = globalThis.ActorSheet
   ?? foundry.applications?.sheets?.ActorSheet
-  ?? globalThis.ActorSheet;
+  ?? foundry.appv2?.sheets?.ActorSheet;
 
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
