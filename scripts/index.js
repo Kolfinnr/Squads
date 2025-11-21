@@ -1,7 +1,7 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects, ensureDisorganized } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized, removeEffectsByTag } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
@@ -28,8 +28,17 @@ async function enforceMoraleState(actor) {
   const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   if (!moraleMax) return;
   const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
-  if (moraleMax > 0 && morale / moraleMax < 0.5) {
+  if (moraleMax > 0 && morale / moraleMax < 0.25) {
     await ensureDisorganized(actor, { source: "morale" });
+  }
+}
+
+async function clearCorruption(combat) {
+  if (!combat) return;
+  for (const combatant of combat.combatants ?? []) {
+    const actor = combatant?.actor;
+    if (!actor) continue;
+    await removeEffectsByTag(actor, "chaosCorrupted");
   }
 }
 
@@ -285,11 +294,13 @@ Hooks.on("renderApplication", app => {
   shouldSilenceHoB(app);
 });
 
-Hooks.on("deleteCombat", combat => {
+Hooks.on("deleteCombat", async combat => {
   resetProcessedTurn(combat);
   W4SQCommandApp.closeAll();
+  await clearCorruption(combat);
 });
 
-Hooks.on("combatEnd", combat => {
+Hooks.on("combatEnd", async combat => {
   resetProcessedTurn(combat);
+  await clearCorruption(combat);
 });

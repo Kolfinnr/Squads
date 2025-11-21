@@ -156,15 +156,24 @@ async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
   await defender.setFlag(FLAG_SCOPE, "morale", next);
   if (morale > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatMoraleZero");
-    await ensureEffect(defender, {
-      key: "routed",
-      label: game.i18n.localize("W4SQ.EffectRouted"),
-      duration: 99,
-      mods: { tags: { routed: true, disorganized: true } }
-    }, effect => Boolean(effect?.mods?.tags?.routed));
+    if (getOrigin(defender) === "undead") {
+      await ensureEffect(defender, {
+        key: "crumbling",
+        label: game.i18n.localize("W4SQ.EffectCrumbling"),
+        duration: 99,
+        mods: { tags: { crumbling: true } }
+      }, effect => Boolean(effect?.mods?.tags?.crumbling));
+    } else {
+      await ensureEffect(defender, {
+        key: "routed",
+        label: game.i18n.localize("W4SQ.EffectRouted"),
+        duration: 99,
+        mods: { tags: { routed: true, disorganized: true } }
+      }, effect => Boolean(effect?.mods?.tags?.routed));
+    }
     await handleMoraleZero(defender, attacker);
   }
-  if (moraleMax > 0 && next / moraleMax < 0.5) {
+  if (moraleMax > 0 && next / moraleMax < 0.25) {
     await ensureDisorganized(defender, { source: "morale" });
   }
   return total;
@@ -179,6 +188,14 @@ async function applyDamage(actor, defender, finalDamage, options = {}) {
     await postStatusLine(defender, "W4SQ.ChatHPZero");
   }
   const applied = Math.max(0, hp - next);
+  if (options.isMagical && applied > 0) {
+    const name = escapeHTML(defender.name || game.i18n.localize("W4SQ.UnknownSquad"));
+    const formatted = game.i18n.format("W4SQ.ChatMageSpellDamage", { target: name, amount: applied });
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<p>${formatted}</p>`
+    });
+  }
   const moraleLoss = await moraleLossFor(defender, actor, finalDamage, options);
   await actor.setFlag(FLAG_SCOPE, "lastTargetName", defender.name || "");
   return { moraleLoss, hpDamage: applied };
@@ -295,7 +312,7 @@ export async function doSquadAction(actor, action) {
           const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
           await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
           moraleResult = (moraleResult || 0) + guardMoraleBonus;
-          if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+          if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
             await ensureDisorganized(targetActor, { source: "guard" });
           }
         }
@@ -551,7 +568,7 @@ export async function doSquadAction(actor, action) {
       const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
       await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
       moraleLoss = (moraleLoss || 0) + guardMoraleBonus;
-      if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+      if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
         await ensureDisorganized(targetActor, { source: "guard" });
       }
     }
@@ -563,7 +580,7 @@ export async function doSquadAction(actor, action) {
     const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
     await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
     moraleLoss = (moraleLoss || 0) + backlineMoraleBonus;
-    if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+    if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
       await ensureDisorganized(targetActor, { source: "backline" });
     }
   }
