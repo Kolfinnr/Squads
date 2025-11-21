@@ -169,9 +169,15 @@ export function getPassives(actor) {
   const source = (flagPassives && typeof flagPassives === "object")
     ? flagPassives
     : (foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {});
+  const origin = getOrigin(actor);
+  const defaults = new Set(ORIGIN_PASSIVES[origin] ?? []);
   const result = {};
   for (const key of ALL_PASSIVE_KEYS) {
-    result[key] = Boolean(source[key]);
+    if (key in source) {
+      result[key] = Boolean(source[key]);
+    } else {
+      result[key] = defaults.has(key);
+    }
   }
   return result;
 }
@@ -203,7 +209,7 @@ export function buildDefaultPassives(origin) {
   }
   if (origin && ORIGIN_PASSIVES[origin]) {
     for (const key of ORIGIN_PASSIVES[origin]) {
-      passives[key] = Boolean(passives[key]);
+      passives[key] = true;
     }
   }
   return passives;
@@ -242,7 +248,7 @@ function sceneActors() {
   return [...set];
 }
 
-function hasUndeadMaster(actor) {
+export function hasUndeadMaster(actor) {
   const actors = sceneActors();
   for (const candidate of actors) {
     if (!candidate || candidate === actor) continue;
@@ -255,7 +261,7 @@ function hasUndeadMaster(actor) {
   return false;
 }
 
-function isUndeadPuppet(actor, passives = null) {
+export function isUndeadPuppet(actor, passives = null) {
   if (!actor) return false;
   if (getOrigin(actor) !== "undead") return false;
   const p = passives ?? getPassives(actor);
@@ -716,7 +722,15 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
       }
     }
     if (passives.undeadEthereal && !isMagical) {
+      const preEthereal = damage;
       damage = Math.floor(damage * 0.5);
+      const blocked = clampNonNegative(preEthereal - damage);
+      if (blocked > 0) {
+        await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadEtherealBlocked", {
+          name: safeName(defender),
+          amount: blocked
+        });
+      }
     }
   }
   if (origin === "monster") {
@@ -802,15 +816,28 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
     if (passives.chaosCorruptive) {
       const existing = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorrupted);
       const stacks = Math.min(5, Number(existing?.mods?.tags?.chaosCorruptedStacks || 0) + 1);
-      await ensureEffect(defender, {
+      const label = game.i18n.format("W4SQ.PassiveChaosCorruptiveStacks", { stacks });
+      const effect = {
         key: existing?.key || (randomID?.() ?? `chaos-corrupt-${Date.now()}`),
-        label: game.i18n.localize("W4SQ.PassiveChaosCorruptive"),
-        duration: 2,
+        label,
+        duration: 99,
         mods: {
           tags: { chaosCorrupted: true, chaosCorruptedStacks: stacks },
           moraleDice: "+0"
         }
-      }, eff => Boolean(eff?.mods?.tags?.chaosCorrupted));
+      };
+      const nextEffects = getEffects(defender).filter(eff => !eff?.mods?.tags?.chaosCorrupted);
+      nextEffects.push(effect);
+      await defender.setFlag(FLAG_SCOPE, "effects", nextEffects);
+      if ((!existing && stacks >= 5) || (existing && Number(existing?.mods?.tags?.chaosCorruptedStacks ?? 0) < 5 && stacks >= 5)) {
+        if (Math.random() < 0.1) {
+          const mutation = await ensureChaosMutation(defender);
+          await sendPassiveMessage(attacker, "W4SQ.ChatCorruptionMutation", {
+            name: safeName(defender),
+            mutation: game.i18n.localize(mutationLabel(mutation))
+          });
+        }
+      }
     }
     if (passives.chaosMutation) {
       await handleChaosPostHit(attacker, defender, { success, hpDamage });
@@ -997,7 +1024,7 @@ export async function handleTurnTick(actor, context = {}) {
   const { round } = getRoundSignature();
 
   if (origin === "undead" && getNumberFlag(actor, "morale") <= 0) {
-    const crumble = await new Roll("10+2d10").evaluate({});
+    const crumble = await new Roll("3d10+20").evaluate({});
     const hp = getNumberFlag(actor, "hp");
     if (crumble.total > 0 && hp > 0) {
       await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - crumble.total));

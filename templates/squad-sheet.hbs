@@ -104,7 +104,16 @@
             {{#if passiveChips.length}}
               <div class="effect-list">
                 {{#each passiveChips as |chip|}}
-                  <span class="effect-chip passive {{chip.type}}">{{chip.label}}{{#if chip.durationLabel}} ({{chip.durationLabel}}){{/if}}</span>
+                  <span class="effect-chip passive {{chip.type}} {{#if chip.shield}}shield{{/if}}" title="{{chip.shieldTooltip}}">{{chip.label}}{{#if chip.durationLabel}} ({{chip.durationLabel}}){{/if}}
+                    {{#if chip.shield}}
+                      <span class="chip-shield" aria-label="{{chip.shieldTooltip}}">🛡</span>
+                    {{/if}}
+                    {{#if chip.details}}
+                      {{#each chip.details as |detail|}}
+                        <span class="chip-detail">{{detail}}</span>
+                      {{/each}}
+                    {{/if}}
+                  </span>
                 {{/each}}
               </div>
             {{else}}
