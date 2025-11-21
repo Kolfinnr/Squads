@@ -120,6 +120,19 @@
               <p>{{localize "W4SQ.None"}}</p>
             {{/if}}
           </div>
+          {{#if chaosMutation}}
+            <div class="chaos-mutation">
+              <h4>{{localize "W4SQ.MutationLabel"}}</h4>
+              <p class="mutation-label">{{chaosMutation.label}}</p>
+              {{#if chaosMutation.details}}
+                <ul class="mutation-details">
+                  {{#each chaosMutation.details as |detail|}}
+                    <li>{{detail}}</li>
+                  {{/each}}
+                </ul>
+              {{/if}}
+            </div>
+          {{/if}}
         </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>
