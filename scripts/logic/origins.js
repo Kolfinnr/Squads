@@ -169,9 +169,15 @@ export function getPassives(actor) {
   const source = (flagPassives && typeof flagPassives === "object")
     ? flagPassives
     : (foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {});
+  const origin = getOrigin(actor);
+  const defaults = new Set(ORIGIN_PASSIVES[origin] ?? []);
   const result = {};
   for (const key of ALL_PASSIVE_KEYS) {
-    result[key] = Boolean(source[key]);
+    if (key in source) {
+      result[key] = Boolean(source[key]);
+    } else {
+      result[key] = defaults.has(key);
+    }
   }
   return result;
 }
@@ -810,15 +816,28 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
     if (passives.chaosCorruptive) {
       const existing = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorrupted);
       const stacks = Math.min(5, Number(existing?.mods?.tags?.chaosCorruptedStacks || 0) + 1);
-      await ensureEffect(defender, {
+      const label = game.i18n.format("W4SQ.PassiveChaosCorruptiveStacks", { stacks });
+      const effect = {
         key: existing?.key || (randomID?.() ?? `chaos-corrupt-${Date.now()}`),
-        label: game.i18n.localize("W4SQ.PassiveChaosCorruptive"),
-        duration: 2,
+        label,
+        duration: 99,
         mods: {
           tags: { chaosCorrupted: true, chaosCorruptedStacks: stacks },
           moraleDice: "+0"
         }
-      }, eff => Boolean(eff?.mods?.tags?.chaosCorrupted));
+      };
+      const nextEffects = getEffects(defender).filter(eff => !eff?.mods?.tags?.chaosCorrupted);
+      nextEffects.push(effect);
+      await defender.setFlag(FLAG_SCOPE, "effects", nextEffects);
+      if ((!existing && stacks >= 5) || (existing && Number(existing?.mods?.tags?.chaosCorruptedStacks ?? 0) < 5 && stacks >= 5)) {
+        if (Math.random() < 0.1) {
+          const mutation = await ensureChaosMutation(defender);
+          await sendPassiveMessage(attacker, "W4SQ.ChatCorruptionMutation", {
+            name: safeName(defender),
+            mutation: game.i18n.localize(mutationLabel(mutation))
+          });
+        }
+      }
     }
     if (passives.chaosMutation) {
       await handleChaosPostHit(attacker, defender, { success, hpDamage });

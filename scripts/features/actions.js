@@ -173,7 +173,7 @@ async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
     }
     await handleMoraleZero(defender, attacker);
   }
-  if (moraleMax > 0 && next / moraleMax < 0.5) {
+  if (moraleMax > 0 && next / moraleMax < 0.25) {
     await ensureDisorganized(defender, { source: "morale" });
   }
   return total;
@@ -312,7 +312,7 @@ export async function doSquadAction(actor, action) {
           const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
           await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
           moraleResult = (moraleResult || 0) + guardMoraleBonus;
-          if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+          if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
             await ensureDisorganized(targetActor, { source: "guard" });
           }
         }
@@ -568,7 +568,7 @@ export async function doSquadAction(actor, action) {
       const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
       await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
       moraleLoss = (moraleLoss || 0) + guardMoraleBonus;
-      if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+      if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
         await ensureDisorganized(targetActor, { source: "guard" });
       }
     }
@@ -580,7 +580,7 @@ export async function doSquadAction(actor, action) {
     const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
     await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
     moraleLoss = (moraleLoss || 0) + backlineMoraleBonus;
-    if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+    if (moraleMax > 0 && nextMorale / moraleMax < 0.25) {
       await ensureDisorganized(targetActor, { source: "backline" });
     }
   }

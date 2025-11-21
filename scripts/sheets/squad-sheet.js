@@ -68,6 +68,11 @@ export class SquadActorSheet extends ActorSheet {
           ? game.i18n.localize("W4SQ.PassiveEffectDuration")
           : formatTurns(effect.duration ?? 0)
       };
+      const corruptedStacks = effect?.mods?.tags?.chaosCorruptedStacks;
+      if (corruptedStacks) {
+        entry.label = game.i18n.format("W4SQ.PassiveChaosCorruptiveStacks", { stacks: corruptedStacks });
+        entry.durationLabel = game.i18n.localize("W4SQ.DurationEndOfCombat");
+      }
       if (isPassive) passiveEffects.push(entry);
       else activeEffects.push(entry);
     }
