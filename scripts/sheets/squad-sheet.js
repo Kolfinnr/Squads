@@ -8,13 +8,17 @@ import { openCommandDashboard } from "../features/command-dashboard.js";
 import { ORIGIN_KEYS, getOriginLabelKey, getPassiveLabel, getOriginPassivesFor, hasUndeadMaster, getPassives } from "../logic/origins.js";
 import { getChaosMutationFlags, mutationLabel, mutationOptions } from "../passives/chaos.js";
 
+const ActorSheetV2 = foundry.appv2?.sheets?.ActorSheet
+  ?? foundry.applications?.sheets?.ActorSheet
+  ?? globalThis.ActorSheet;
+
 function formatTurns(value) {
   const turns = Math.max(0, Number(value || 0));
   if (turns === 1) return game.i18n.localize("W4SQ.TurnSingle");
   return game.i18n.format("W4SQ.TurnPlural", { value: turns });
 }
 
-export class SquadActorSheet extends ActorSheet {
+export class SquadActorSheet extends ActorSheetV2 {
   static get defaultOptions() {
     const opts = super.defaultOptions;
     opts.classes = ["w4sq", "sheet", "actor"];
