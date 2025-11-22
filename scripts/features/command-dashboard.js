@@ -1,6 +1,14 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
-import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
+import {
+  addEffect,
+  attachGuard,
+  getEffects,
+  getEffectsDetailed,
+  removeDisorganized,
+  actorHasTag,
+  summarizeEffect
+} from "../logic/effects.js";
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 
@@ -255,7 +263,8 @@ export class W4SQCommandApp extends Application {
         : null;
       const effects = getEffectsDetailed(actor).map(effect => ({
         ...effect,
-        durationLabel: formatTurns(effect.duration ?? 0)
+        durationLabel: formatTurns(effect.duration ?? 0),
+        summary: summarizeEffect(effect)
       }));
       const specialistExtras = [];
       if (role === "specialist") {
@@ -305,6 +314,39 @@ export class W4SQCommandApp extends Application {
         isSelected: this.selectedSquadId === token.id
       };
     });
+  }
+
+  _getStrengthTotals() {
+    const tokens = collectActiveTokens().filter(canSee);
+    const totals = {
+      allied: { current: 0, max: 0 },
+      hostile: { current: 0, max: 0 }
+    };
+
+    for (const token of tokens) {
+      const actor = token.actor;
+      if (!actor) continue;
+      const disposition = getDisposition(token);
+      const bucket =
+        disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY
+          ? totals.allied
+          : disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
+          ? totals.hostile
+          : null;
+      if (!bucket) continue;
+      bucket.current += Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      bucket.max += Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+    }
+
+    const totalCurrent = totals.allied.current + totals.hostile.current;
+    const alliedPct = totalCurrent > 0 ? Math.round((totals.allied.current / totalCurrent) * 100) : 50;
+
+    return {
+      ...totals,
+      totalCurrent,
+      alliedPct,
+      hostilePct: 100 - alliedPct
+    };
   }
 
   async getData() {
@@ -372,12 +414,53 @@ export class W4SQCommandApp extends Application {
         value: opt.value,
         label: game.i18n.localize(opt.label)
       })),
-      dispositionLabel: dispositionLabel(this.disposition)
+      dispositionLabel: dispositionLabel(this.disposition),
+      strength: this._getStrengthTotals()
     };
   }
 
   activateListeners(html) {
     super.activateListeners(html);
+    html.find('.effect-chip[data-summary]').on("click", ev => {
+      const chip = ev.currentTarget;
+      const { summary } = chip.dataset;
+      if (!summary) return;
+      const container = chip.closest(".effect-list");
+      if (!container) return;
+
+      const existing = container.querySelector(".effect-summary-popup");
+      if (existing?.dataset?.source === summary) {
+        existing.remove();
+        return;
+      }
+      existing?.remove();
+
+      const label = chip.dataset.label || game.i18n.localize("W4SQ.ActiveEffects");
+      const closeLabel = game.i18n.localize("Close");
+      const popup = document.createElement("div");
+      popup.classList.add("effect-summary-popup");
+      popup.dataset.source = summary;
+
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.classList.add("close");
+      closeBtn.setAttribute("aria-label", closeLabel);
+      closeBtn.textContent = "\u00d7";
+
+      const labelEl = document.createElement("p");
+      labelEl.classList.add("label");
+      labelEl.textContent = label;
+
+      const summaryEl = document.createElement("p");
+      summaryEl.classList.add("summary");
+      summaryEl.textContent = summary;
+
+      closeBtn.addEventListener("click", () => popup.remove());
+
+      popup.append(closeBtn, labelEl, summaryEl);
+      container.appendChild(popup);
+    });
+
     html.find('[data-action="select"]').on("click", ev => {
       const id = ev.currentTarget.dataset.id;
       this.selectedSquadId = id;
