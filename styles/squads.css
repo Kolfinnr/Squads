@@ -115,6 +115,10 @@
   border: 1px solid transparent;
 }
 
+.w4sq .effect-chip[data-summary] {
+  cursor: pointer;
+}
+
 .w4sq .effect-chip.positive {
   background: rgba(76, 175, 80, 0.2);
   border-color: rgba(76, 175, 80, 0.35);
@@ -129,6 +133,42 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  position: relative;
+}
+
+.w4sq .effect-summary-popup {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  background: rgba(30, 30, 30, 0.95);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem 0.6rem;
+  width: 18rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+.w4sq .effect-summary-popup .close {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.3rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.w4sq .effect-summary-popup .label {
+  margin: 0 1.2rem 0.1rem 0;
+  font-weight: bold;
+}
+
+.w4sq .effect-summary-popup .summary {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.2;
 }
 
 .w4sq .order-controls {
@@ -261,11 +301,74 @@
   padding-bottom: 0.5rem;
 }
 
+.w4sq-command header .header-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.w4sq-command header .header-main {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
 .w4sq-command .cp-bar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.w4sq-command .strength-summary {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  text-align: right;
+}
+
+.w4sq-command .strength-summary .strength-title {
+  margin: 0;
+  font-weight: bold;
+}
+
+.w4sq-command .strength-summary .strength-values {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.9rem;
+}
+
+.w4sq-command .strength-summary .strength-entry.allied {
+  color: #2e7d32;
+}
+
+.w4sq-command .strength-summary .strength-entry.hostile {
+  color: #c62828;
+}
+
+.w4sq-command .strength-bar {
+  position: relative;
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.w4sq-command .strength-bar .segment {
+  display: block;
+  height: 100%;
+}
+
+.w4sq-command .strength-bar .segment.allied {
+  background: linear-gradient(90deg, #81c784, #2e7d32);
+}
+
+.w4sq-command .strength-bar .segment.hostile {
+  background: linear-gradient(90deg, #f44336, #c62828);
 }
 
 .w4sq-command header .group-label {

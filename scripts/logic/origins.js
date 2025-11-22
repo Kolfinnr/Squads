@@ -300,13 +300,10 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive"));
     if (surgeActive) add(10);
   }
-  if (passives.ratTreacherous) {
-    const buff = actor.getFlag(FLAG_SCOPE, "ratTreacherousBuff");
-    if (buff?.remaining > 0) add(40);
-  }
-  if (origin === "ratmen" && passives.ratTreacherous && opponent && sameSide(actor, opponent)) {
-    add(40);
-  }
+  const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
+  const treacherousTrigger = treacherousActive && opponent && sameSide(actor, opponent);
+  const treacherousBuffed = treacherousActive && (actorHasTag(actor, "ratTreacherousBuff") || treacherousTrigger);
+  if (treacherousBuffed) add(20);
   if (isManeuver) {
     if (origin === "human" && passives.humanBattleDrill) add(10);
     if (origin === "human" && passives.humanAdaptive && ratio < 0.5) add(10);
@@ -465,17 +462,10 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
       });
     }
   }
-  if (origin === "ratmen" && passives.ratTreacherous) {
-    const buff = actor.getFlag(FLAG_SCOPE, "ratTreacherousBuff");
-    if (buff?.remaining > 0) damage += 10;
-  }
-  if (origin === "ratmen" && passives.ratTreacherous && defender && sameSide(actor, defender)) {
-    await actor.setFlag(FLAG_SCOPE, "ratTreacherousBuff", {
-      remaining: 2,
-      round: getRoundSignature().round
-    });
-    damage += 10;
-  }
+  const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
+  const treacherousTrigger = treacherousActive && defender && sameSide(actor, defender);
+  const treacherousBuffed = treacherousActive && (actorHasTag(actor, "ratTreacherousBuff") || treacherousTrigger);
+  if (treacherousBuffed) damage += 10;
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10; // overwhelmed baseline
   }
@@ -500,7 +490,13 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10;
   }
-  if (origin === "ratmen" && passives.ratTreacherous && defender && sameSide(actor, defender)) {
+  if (treacherousTrigger) {
+    await ensureEffect(actor, {
+      key: randomID?.() ?? `rat-treachery-${Date.now()}`,
+      label: game.i18n.localize("W4SQ.PassiveRatTreacherous"),
+      duration: 2,
+      mods: { tags: { ratTreacherousBuff: true }, tnDice: "+20", dmgDice: "+10" }
+    }, eff => Boolean(eff?.mods?.tags?.ratTreacherousBuff));
     await sendPassiveMessage(actor, "W4SQ.PassiveMsgRatTreacherous", {
       name: actorName,
       target: defenderName,
@@ -618,9 +614,9 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
   if (origin === "ratmen" && passives.ratNumerous) {
     await ensureEffect(defender, {
       key: randomID?.() ?? `rat-overwhelm-${Date.now()}`,
-      label: game.i18n.localize("W4SQ.PassiveRatNumerous"),
+      label: game.i18n.localize("W4SQ.EffectOverwhelmed"),
       duration: 2,
-      mods: { tags: { overwhelmed: true }, tnDice: "-5", dmgDice: "+0", defPenaltyDice: "0" }
+      mods: { tags: { overwhelmed: true }, tnDice: "-5" }
     }, eff => Boolean(eff?.mods?.tags?.overwhelmed));
   }
 }
@@ -742,15 +738,6 @@ export async function handleTurnTick(actor, context = {}) {
         buff.remaining -= 1;
         await actor.setFlag(FLAG_SCOPE, "greenMobBonus", buff);
       }
-    }
-  }
-  if (origin === "ratmen" && passives.ratTreacherous) {
-    const buff = ensureFlagObject(actor, "ratTreacherousBuff", {});
-    if (buff.remaining > 0) {
-      buff.remaining -= 1;
-      await actor.setFlag(FLAG_SCOPE, "ratTreacherousBuff", buff);
-    } else if (buff.remaining !== 0) {
-      await actor.unsetFlag(FLAG_SCOPE, "ratTreacherousBuff");
     }
   }
 }
