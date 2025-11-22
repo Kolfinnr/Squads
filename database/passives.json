@@ -1,0 +1,48 @@
+{
+  "chaos_origin": {
+    "label": "Chaos-Tainted",
+    "effects": {
+      "flatHpDamage": 10,
+      "flatMoraleDamage": 10
+    }
+  },
+  "chaos_mutation": {
+    "label": "Mutations",
+    "type": "special",
+    "requiresTableRoll": true,
+    "table": "chaos_mutations_d10"
+  },
+  "chaos_corruptive": {
+    "label": "Corruptive",
+    "effects": {
+      "applyOnHit": {
+        "status": "corrupted",
+        "moraleDamageBonus": 5,
+        "maxStacks": 5
+      }
+    }
+  },
+  "chaos_frenzy": {
+    "label": "Frenzy",
+    "effects": {
+      "scaleByHpLoss": {
+        "xpPer10pct": 1,
+        "eqPer10pct": 1
+      }
+    }
+  },
+  "chaos_forged": {
+    "label": "Forged in Daemonfire",
+    "effects": {
+      "armorSoak": 10,
+      "moraleDamage": 10
+    }
+  },
+  "chaos_daemonic": {
+    "label": "Daemonic",
+    "effects": {
+      "flatHpDamage": 5,
+      "flatMoraleDamage": 20
+    }
+  }
+}

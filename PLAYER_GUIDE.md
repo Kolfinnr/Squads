@@ -11,7 +11,13 @@
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
-- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
+- **Disorganized Threshold**: Whenever morale drops below 25% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).【F:scripts/features/actions.js†L176-L178】【F:scripts/index.js†L27-L33】
+
+### Attack Resolution at a Glance
+- **Target Number (TN):** Starts at 40 and rises by +7 per Experience tier and +5 per Equipment tier, then applies weapon accuracy, role bonuses, effect dice, and any hybrid-role penalty. Morale below 30% reduces TN by 10 and squads at 0 HP take −20. Specialists cap their effective TN at 90 and scale it to current HP%.【F:scripts/features/actions.js†L207-L246】
+- **Hit Check:** A d100 roll must fall at or under the final TN. Heat of Battle or aesthetic triggers can further adjust TN mid-roll before the check resolves.【F:scripts/features/actions.js†L226-L244】
+- **Damage:** Successful attacks roll 1d20 plus Experience d10s, weapon and role dice, and effect dice, then scale the total by current HP% (to a 20% floor). Armor, defense, and resistance soak reduce the blow before post-attack effects apply.【F:scripts/features/actions.js†L292-L356】【F:scripts/features/actions.js†L379-L439】
+- **Chip Damage on Miss:** Failed rolls still deal 1d10 chip damage (plus any guard strain) and can inflict morale loss on the target, keeping pressure up even on bad rolls.【F:scripts/features/actions.js†L246-L291】
 
 ### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
@@ -84,6 +90,22 @@
 - **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for 2 rounds.
 - **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (+10 Morale damage taken, −5 TN).
 
+### Undead
+- **Origin:** Unfeeling ranks shrug off 10 Morale damage from every source.
+- **Puppet:** Mindless hordes suffer −10 attack/maneuver TN, −10 HP/Morale damage, and cannot use weapon maneuvers. If at least one “master” undead (Undead origin without Puppet, Morale > 0) is on the battlefield, puppets gain +5 damage and a further −10 Morale damage taken.
+- **Life Drain:** Successful attacks heal the unit for 50% of the final HP damage dealt (rounded down), unless the target is also a Puppet.
+- **Regeneration:** At the end of each turn the unit restores 2d10 + 10 HP, even while Unbound.
+- **Ethereal:** Non-magical attacks deal half damage after soak, every strike adds +20 Morale damage, and 25% of HP damage ignores armor soak.
+- **Crumbling:** When Morale hits 0, Undead do not route; they instead suffer 3d10 + 20 HP damage at the start of each turn.
+- **March of the Dead:** While Morale > 0, every damaging hit inflicts *Overwhelmed* on the victim, and every 100 HP lost lets the unit roll 1d2 to raise 30 + 3d10 HP back into the formation (fails on a 2). The effect shuts down once the unit becomes Unbound.
+
+### Chaos
+- **Origin:** Chaotic warbands deal +10 HP damage and +10 Morale damage on every attack and shrug off 10 Morale loss. A random mutation is assigned the first time they strike, unlocking bespoke bonuses such as armor spikes, armor-piercing claws, flanking shadowplay, or regeneration.【F:scripts/logic/origins.js†L503-L534】【F:scripts/logic/origins.js†L928-L958】【F:scripts/passives/chaos.js†L1-L109】
+- **Daemonic:** Adds another +5 HP and +20 Morale damage. When the unit’s Morale hits 0 it gains a banishing tag that bleeds 5 + 3d10 HP at the start of each turn until removed.【F:scripts/logic/origins.js†L503-L511】【F:scripts/logic/origins.js†L961-L1047】
+- **Forged:** Grants +10 Morale damage on attacks and +10 armor soak on defense, making the unit harder to crack.【F:scripts/logic/origins.js†L503-L513】【F:scripts/logic/origins.js†L445-L463】
+- **Frenzy:** Attack and maneuver TN rise as the squad loses HP (roughly +12 per 10% of HP missing), encouraging reckless assaults when bloodied.【F:scripts/logic/origins.js†L349-L375】
+- **Corruptive:** Successful hits stack *Chaos Corrupted* on enemies, ramping Morale damage by up to 5 stacks over time. Hitting 5 stacks triggers a 10% chance to gift the victim a random mutation; stacks stay as an active effect until combat ends.【F:scripts/logic/origins.js†L815-L839】【F:scripts/index.js†L36-L42】
+
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
 - **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage in a roaming 4-yard blaze that pulses once per round for 3 rounds.
@@ -92,6 +114,7 @@
 - **Transmutation of Lead** (enemy): Strips Equipment Tier ×1d10 soak for 2 rounds.
 - **Magical Revification** (ally): Restores 20 + 2d20 HP and 10 + 3d20 Morale.
 - **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 2 rounds.
+- **Spell Damage Callouts**: Successful magical damage posts the actual HP loss to chat, making it easy to narrate spell impacts.【F:scripts/features/actions.js†L191-L197】
 
 ### Engineer Maneuvers (Average/Hard, CD 2)
 - **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies standing inside (the bonus ends as soon as they leave) for 4 rounds.
@@ -190,6 +213,7 @@ The sheet and dashboard list active effects with coloured chips. Common statuses
 - **Guarding / Guarded** – An infantry unit intercepts melee hits for an ally; strain damage applies when the guard is struck.
 - **Guarded Withdrawal** – The protected ally may disengage safely on its next turn.
 - **Spent Maneuver** – The unit cannot attempt further maneuvers until the next turn (e.g., after Intercept!).
+- **Overwhelmed** – Ratmen hordes and undead marches pile on, increasing incoming Morale damage by 10 and imposing −5 TN until the effect expires.
 - **Fortified** – Heavy cover; immunity to Flanked while in fortifications and +10 + 2d10 soak.
 - **Deep Defense** – Engineers inside their fortification gain an additional 20 + 2d20 soak versus incoming damage.
 - **Immobile** – Unit cannot move or perform maneuvers that require movement (common for entrenched engineers).

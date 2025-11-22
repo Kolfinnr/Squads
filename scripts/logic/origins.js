@@ -1,10 +1,19 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, removeEffectByKey, ensureEffect, actorHasTag, getEffects, removeDisorganized } from "./effects.js";
+import {
+  applyChaosMutationAttack,
+  applyChaosMutationDefense,
+  applyChaosDamageTaken,
+  handleChaosPostHit,
+  ensureChaosMutation,
+  applyChaosRegeneration,
+  mutationLabel
+} from "../passives/chaos.js";
 import { maybeTriggerHoB } from "./hob.js";
 
 const { randomID } = foundry.utils;
 
-const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen"];
+const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen", "undead", "chaos"];
 
 const ORIGIN_PASSIVES = {
   human: [
@@ -53,6 +62,20 @@ const ORIGIN_PASSIVES = {
     "ratMuskOfFear",
     "ratTreacherous",
     "ratNumerous"
+  ],
+  undead: [
+    "undeadPuppet",
+    "undeadLifeDrain",
+    "undeadRegeneration",
+    "undeadEthereal",
+    "undeadMarchOfTheDead"
+  ],
+  chaos: [
+    "chaosMutation",
+    "chaosDaemonic",
+    "chaosCorruptive",
+    "chaosFrenzy",
+    "chaosForged"
   ]
 };
 
@@ -98,7 +121,19 @@ const PASSIVE_LABELS = {
   ratPoisoner: "W4SQ.PassiveRatPoisoner",
   ratMuskOfFear: "W4SQ.PassiveRatMuskOfFear",
   ratTreacherous: "W4SQ.PassiveRatTreacherous",
-  ratNumerous: "W4SQ.PassiveRatNumerous"
+  ratNumerous: "W4SQ.PassiveRatNumerous",
+
+  undeadPuppet: "W4SQ.PassiveUndeadPuppet",
+  undeadLifeDrain: "W4SQ.PassiveUndeadLifeDrain",
+  undeadRegeneration: "W4SQ.PassiveUndeadRegeneration",
+  undeadEthereal: "W4SQ.PassiveUndeadEthereal",
+  undeadMarchOfTheDead: "W4SQ.PassiveUndeadMarchOfTheDead",
+
+  chaosMutation: "W4SQ.PassiveChaosMutation",
+  chaosDaemonic: "W4SQ.PassiveChaosDaemonic",
+  chaosCorruptive: "W4SQ.PassiveChaosCorruptive",
+  chaosFrenzy: "W4SQ.PassiveChaosFrenzy",
+  chaosForged: "W4SQ.PassiveChaosForged"
 };
 
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
@@ -134,9 +169,15 @@ export function getPassives(actor) {
   const source = (flagPassives && typeof flagPassives === "object")
     ? flagPassives
     : (foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {});
+  const origin = getOrigin(actor);
+  const defaults = new Set(ORIGIN_PASSIVES[origin] ?? []);
   const result = {};
   for (const key of ALL_PASSIVE_KEYS) {
-    result[key] = Boolean(source[key]);
+    if (key in source) {
+      result[key] = Boolean(source[key]);
+    } else {
+      result[key] = defaults.has(key);
+    }
   }
   return result;
 }
@@ -155,6 +196,8 @@ export function getOriginLabelKey(origin) {
     case "monster": return "W4SQ.OriginMonster";
     case "greenskin": return "W4SQ.OriginGreenskin";
     case "ratmen": return "W4SQ.OriginRatmen";
+    case "undead": return "W4SQ.OriginUndead";
+    case "chaos": return "W4SQ.OriginChaos";
     default: return "";
   }
 }
@@ -166,7 +209,7 @@ export function buildDefaultPassives(origin) {
   }
   if (origin && ORIGIN_PASSIVES[origin]) {
     for (const key of ORIGIN_PASSIVES[origin]) {
-      passives[key] = Boolean(passives[key]);
+      passives[key] = true;
     }
   }
   return passives;
@@ -185,6 +228,44 @@ export function relevantPassives(origin, actor) {
 
 export function getPassiveLabel(key) {
   return PASSIVE_LABELS[key] ?? key;
+}
+
+function getNumberFlag(actor, key) {
+  return Number(actor?.getFlag(FLAG_SCOPE, key) || 0);
+}
+
+function sceneActors() {
+  const placeables = canvas?.tokens?.placeables ?? [];
+  const set = new Set();
+  for (const token of placeables) {
+    if (token?.actor) set.add(token.actor);
+  }
+  if (!set.size && game.combat) {
+    for (const combatant of game.combat.combatants ?? []) {
+      if (combatant?.actor) set.add(combatant.actor);
+    }
+  }
+  return [...set];
+}
+
+export function hasUndeadMaster(actor) {
+  const actors = sceneActors();
+  for (const candidate of actors) {
+    if (!candidate || candidate === actor) continue;
+    if (getOrigin(candidate) !== "undead") continue;
+    const passives = getPassives(candidate);
+    if (isUndeadPuppet(candidate, passives)) continue;
+    if (!sameSide(actor, candidate)) continue;
+    if (getNumberFlag(candidate, "morale") > 0) return true;
+  }
+  return false;
+}
+
+export function isUndeadPuppet(actor, passives = null) {
+  if (!actor) return false;
+  if (getOrigin(actor) !== "undead") return false;
+  const p = passives ?? getPassives(actor);
+  return Boolean(p.undeadPuppet);
 }
 
 function dispositionOf(actor) {
@@ -285,6 +366,7 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   if (origin === "monster") {
     // No base TN modifier, handled by passives.
   }
+  if (origin === "undead" && passives.undeadPuppet) add(-10);
   if (origin === "greenskin" && passives.greenGobbos) add(-10);
   if (origin === "greenskin" && passives.greenUnstoppableWave) add(-20);
   if (origin === "monster" && passives.monsterBulky) add(-10);
@@ -292,6 +374,11 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   if (origin === "monster" && passives.monsterMultipleAppendages) add(-20);
   if (origin === "monster" && passives.monsterMonstrousCharge) add(-10);
   if (origin === "elf" && passives.elfElvenGrace) add(10);
+  if (origin === "chaos" && passives.chaosFrenzy) {
+    const lostRatio = 1 - Math.max(0, Math.min(1, ratio));
+    const steps = Math.max(0, Math.floor(lostRatio / 0.1));
+    add(steps * (7 + 5));
+  }
   if (origin === "dwarf" && passives.dwarfGrudgin) {
     const ticks = Number(actor.getFlag(FLAG_SCOPE, "dwarfGrudgeTicks") || 0);
     add(Math.min(4, Math.max(0, ticks)) * 5);
@@ -311,6 +398,11 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     if (origin === "human" && passives.humanBattleDrill) add(10);
     if (origin === "human" && passives.humanAdaptive && ratio < 0.5) add(10);
     if (origin === "elf" && passives.elfElvenGrace) add(10);
+    if (origin === "chaos" && passives.chaosFrenzy) {
+      const lostRatio = 1 - Math.max(0, Math.min(1, ratio));
+      const steps = Math.max(0, Math.floor(lostRatio / 0.1));
+      add(steps * (7 + 5));
+    }
     if (origin === "dwarf" && passives.dwarfGrudgin) {
       const ticks = Number(actor.getFlag(FLAG_SCOPE, "dwarfGrudgeTicks") || 0);
       add(Math.min(4, Math.max(0, ticks)) * 5);
@@ -324,6 +416,12 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     if (origin === "ratmen" && maneuverKey === "flank") {
       add(10);
     }
+  }
+
+  if (origin === "chaos" && passives.chaosMutation) {
+    await ensureChaosMutation(actor);
+    const adjusted = await applyChaosMutationAttack(actor, { attackTN: next });
+    if (Number.isFinite(adjusted?.attackTN)) next = adjusted.attackTN;
   }
 
   return next;
@@ -366,6 +464,9 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
   if (origin === "dwarf" && passives.dwarfStalwart && defenderHasBraced(defenseTags)) {
     armor += 10;
   }
+  if (origin === "chaos" && passives.chaosForged) {
+    armor += 10;
+  }
   if (origin === "monster" && passives.monsterThickHide) {
     const roll = await new Roll("3d10+5").evaluate({});
     armor += roll.total;
@@ -404,6 +505,36 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   let moraleBonus = 0;
   let armorPierceBonus = 0;
   let extraAttacks = 0;
+
+  if (origin === "chaos") {
+    await ensureChaosMutation(actor);
+    damage += 10;
+    moraleBonus += 10;
+    if (passives.chaosDaemonic) {
+      damage += 5;
+      moraleBonus += 20;
+    }
+    if (passives.chaosForged) {
+      moraleBonus += 10;
+    }
+    if (passives.chaosMutation) {
+      const adjusted = await applyChaosMutationAttack(actor, {});
+      if (Number.isFinite(adjusted?.damageBonus)) damage += adjusted.damageBonus;
+      if (Number.isFinite(adjusted?.armorPierceBonus)) armorPierceBonus += adjusted.armorPierceBonus;
+      if (adjusted?.applyFlanked) actorHasTag(defender, "flanked") || await ensureEffect(defender, {
+        key: randomID?.() ?? `chaos-flank-${Date.now()}`,
+        label: game.i18n.localize("W4SQ.MutationDancingShadows"),
+        duration: 2,
+        mods: { tags: { flanked: true } }
+      }, eff => Boolean(eff?.mods?.tags?.flanked));
+      if (Number.isFinite(adjusted?.damageVsFlanked) && actorHasTag(defender, "flanked")) {
+        damage += adjusted.damageVsFlanked;
+      }
+      if (Number.isFinite(adjusted?.chargeMorale) && isCharge) {
+        moraleBonus += adjusted.chargeMorale;
+      }
+    }
+  }
 
   if (origin === "elf") {
     damage += 10;
@@ -451,6 +582,27 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
     }
     if (passives.greenUnstoppableWave && isCharge) moraleBonus += 40;
     if (passives.greenBigChoppas) armorPierceBonus += 10;
+  }
+  if (origin === "undead") {
+    if (passives.undeadPuppet) {
+      damage = Math.max(0, damage - 10);
+      moraleBonus = Math.max(0, moraleBonus - 10);
+      if (hasUndeadMaster(actor)) {
+        damage += 5;
+        moraleBonus += 5;
+        await sendPassiveMessage(actor, "W4SQ.PassiveMsgUndeadPuppetMaster", {
+          name: actorName
+        });
+      }
+    }
+    if (passives.undeadEthereal) {
+      moraleBonus += 20;
+      const bypass = Math.floor(damage * 0.25);
+      if (bypass > 0) {
+        damage = Math.max(0, damage - bypass);
+        armorPierceBonus += bypass;
+      }
+    }
   }
   if (origin === "human" && passives.humanResilient) {
     // Attack bonus not applicable
@@ -533,6 +685,18 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
     damage = Math.floor(damage * 0.75);
     moraleBonus = Math.floor(moraleBonus * 0.75);
   }
+  if (origin === "chaos") {
+    if (passives.chaosMutation) {
+      const adjusted = applyChaosMutationDefense(defender, { damage, moraleBonus });
+      if (Number.isFinite(adjusted?.incomingMultiplier)) {
+        damage = Math.floor(damage * adjusted.incomingMultiplier);
+        moraleBonus = Math.floor(moraleBonus * adjusted.incomingMultiplier);
+      }
+      if (Number.isFinite(adjusted?.armorBonus)) {
+        damage = Math.max(0, damage - adjusted.armorBonus);
+      }
+    }
+  }
   if (origin === "dwarf" && passives.dwarfIronWill) {
     moraleBonus = clampNonNegative(moraleBonus - 20);
   }
@@ -541,6 +705,32 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
       damage = clampNonNegative(damage - 10);
     } else if (damageType === "ranged") {
       damage = clampNonNegative(damage - 5);
+    }
+  }
+  if (origin === "undead") {
+    moraleBonus = clampNonNegative(moraleBonus - 10);
+    if (passives.undeadPuppet) {
+      const extra = await new Roll("20+3d10").evaluate({});
+      damage += extra.total;
+      moraleBonus += extra.total;
+      await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadPuppetFragile", {
+        name: safeName(defender),
+        amount: extra.total
+      });
+      if (hasUndeadMaster(defender)) {
+        moraleBonus = clampNonNegative(moraleBonus - 10);
+      }
+    }
+    if (passives.undeadEthereal && !isMagical) {
+      const preEthereal = damage;
+      damage = Math.floor(damage * 0.5);
+      const blocked = clampNonNegative(preEthereal - damage);
+      if (blocked > 0) {
+        await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadEtherealBlocked", {
+          name: safeName(defender),
+          amount: blocked
+        });
+      }
     }
   }
   if (origin === "monster") {
@@ -588,6 +778,11 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   if (attackerOrigin === "monster" && attackerPassives.monsterHorrorIncarnate) {
     moraleBonus += 40;
   }
+  const corrupted = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorruptedStacks);
+  if (corrupted) {
+    const stacks = Number(corrupted.mods.tags.chaosCorruptedStacks) || 0;
+    moraleBonus += stacks * 5;
+  }
   if (actorHasTag(defender, "overwhelmed")) {
     moraleBonus += 10;
   }
@@ -595,10 +790,12 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   return { damage: clampNonNegative(damage), moraleBonus: clampNonNegative(moraleBonus) };
 }
 
-export async function applyPostAttackEffects({ attacker, defender, success, action, isMagical = false } = {}) {
+export async function applyPostAttackEffects({ attacker, defender, success, action, isMagical = false, hpDamage = 0 } = {}) {
   if (!success || !defender) return;
   const origin = getOrigin(attacker);
   const passives = getPassives(attacker);
+  const defenderPassives = getPassives(defender);
+  const targetIsPuppet = isUndeadPuppet(defender, defenderPassives);
 
   if (origin === "ratmen" && passives.ratPoisoner) {
     const alreadyPoisoned = actorHasTag(defender, "ratPoison");
@@ -615,6 +812,37 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
       });
     }
   }
+  if (origin === "chaos") {
+    if (passives.chaosCorruptive) {
+      const existing = getEffects(defender).find(eff => eff?.mods?.tags?.chaosCorrupted);
+      const stacks = Math.min(5, Number(existing?.mods?.tags?.chaosCorruptedStacks || 0) + 1);
+      const label = game.i18n.format("W4SQ.PassiveChaosCorruptiveStacks", { stacks });
+      const effect = {
+        key: existing?.key || (randomID?.() ?? `chaos-corrupt-${Date.now()}`),
+        label,
+        duration: 99,
+        mods: {
+          tags: { chaosCorrupted: true, chaosCorruptedStacks: stacks },
+          moraleDice: "+0"
+        }
+      };
+      const nextEffects = getEffects(defender).filter(eff => !eff?.mods?.tags?.chaosCorrupted);
+      nextEffects.push(effect);
+      await defender.setFlag(FLAG_SCOPE, "effects", nextEffects);
+      if ((!existing && stacks >= 5) || (existing && Number(existing?.mods?.tags?.chaosCorruptedStacks ?? 0) < 5 && stacks >= 5)) {
+        if (Math.random() < 0.1) {
+          const mutation = await ensureChaosMutation(defender);
+          await sendPassiveMessage(attacker, "W4SQ.ChatCorruptionMutation", {
+            name: safeName(defender),
+            mutation: game.i18n.localize(mutationLabel(mutation))
+          });
+        }
+      }
+    }
+    if (passives.chaosMutation) {
+      await handleChaosPostHit(attacker, defender, { success, hpDamage });
+    }
+  }
   if (origin === "ratmen" && passives.ratNumerous) {
     await ensureEffect(defender, {
       key: randomID?.() ?? `rat-overwhelm-${Date.now()}`,
@@ -622,6 +850,33 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
       duration: 2,
       mods: { tags: { overwhelmed: true }, tnDice: "-5", dmgDice: "+0", defPenaltyDice: "0" }
     }, eff => Boolean(eff?.mods?.tags?.overwhelmed));
+  }
+  if (origin === "undead") {
+    if (passives.undeadLifeDrain && hpDamage > 0 && !targetIsPuppet) {
+      const heal = Math.floor(hpDamage * 0.5);
+      if (heal > 0) {
+        const hpCurrent = getNumberFlag(attacker, "hp");
+        const hpMax = getNumberFlag(attacker, "hpMax");
+        await attacker.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hpCurrent + heal));
+        await sendPassiveMessage(attacker, "W4SQ.PassiveMsgUndeadLifeDrain", {
+          name: safeName(attacker),
+          target: safeName(defender),
+          amount: heal
+        });
+      }
+    }
+    if (passives.undeadMarchOfTheDead && hpDamage > 0 && getNumberFlag(attacker, "morale") > 0 && !sameSide(attacker, defender)) {
+      await ensureEffect(defender, {
+        key: randomID?.() ?? `undead-overwhelm-${Date.now()}`,
+        label: game.i18n.localize("W4SQ.EffectOverwhelmed"),
+        duration: 2,
+        mods: { tags: { overwhelmed: true }, tnDice: "-5" }
+      }, eff => Boolean(eff?.mods?.tags?.overwhelmed));
+      await sendPassiveMessage(attacker, "W4SQ.PassiveMsgUndeadMarchOverwhelm", {
+        name: safeName(attacker),
+        target: safeName(defender)
+      });
+    }
   }
 }
 
@@ -652,6 +907,44 @@ export async function recordDamageTaken(defender, { hpDamage = 0 } = {}) {
     info.value = (info.value || 0) + hpDamage;
     await defender.setFlag(FLAG_SCOPE, "greenMobDamage", info);
   }
+  if (origin === "chaos" && passives.chaosMutation) {
+    const mutation = defender.getFlag(FLAG_SCOPE, "chaosMutation");
+    if (mutation === "ritualistic_sacrifice") {
+      const stacks = Number(defender.getFlag(FLAG_SCOPE, "chaosRitualStacks") || 0);
+      await defender.setFlag(FLAG_SCOPE, "chaosRitualStacks", Math.min(5, stacks + 1));
+    }
+  }
+  if (origin === "undead" && passives.undeadMarchOfTheDead) {
+    const morale = getNumberFlag(defender, "morale");
+    if (morale > 0) {
+      const tracker = ensureFlagObject(defender, "undeadMarchLoss", { loss: 0 });
+      tracker.loss = (tracker.loss || 0) + hpDamage;
+      let hpCurrent = getNumberFlag(defender, "hp");
+      const hpMax = getNumberFlag(defender, "hpMax");
+      let healedTotal = 0;
+      while (tracker.loss >= 100) {
+        tracker.loss -= 100;
+        const roll = await new Roll("1d2").evaluate({});
+        if (roll.total === 1 && hpCurrent < hpMax) {
+          const healRoll = await new Roll("3d10+30").evaluate({});
+          const applied = Math.min(healRoll.total, Math.max(0, hpMax - hpCurrent));
+          hpCurrent = Math.min(hpMax, hpCurrent + healRoll.total);
+          healedTotal += applied;
+        }
+      }
+      tracker.loss = Math.max(0, tracker.loss);
+      await defender.setFlag(FLAG_SCOPE, "undeadMarchLoss", tracker);
+      if (healedTotal > 0) {
+        await defender.setFlag(FLAG_SCOPE, "hp", hpCurrent);
+        await sendPassiveMessage(defender, "W4SQ.PassiveMsgUndeadMarchRise", {
+          name: safeName(defender),
+          amount: healedTotal
+        });
+      }
+    } else {
+      await defender.unsetFlag(FLAG_SCOPE, "undeadMarchLoss");
+    }
+  }
 }
 
 export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, bonus = 0 } = {}) {
@@ -662,6 +955,15 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
   if (origin === "human") {
     next = Math.max(0, next - 5);
     if (passives.humanResilient) next = Math.max(0, next - 5);
+  }
+  if (origin === "chaos") {
+    next = Math.max(0, next - 10);
+  }
+  if (origin === "undead") {
+    next = Math.max(0, next - 10);
+    if (passives.undeadPuppet && hasUndeadMaster(defender)) {
+      next = Math.max(0, next - 10);
+    }
   }
   if (origin === "dwarf" && passives.dwarfIronWill) {
     next = Math.max(0, next - 20);
@@ -686,6 +988,14 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
 export async function handleMoraleZero(defender, attacker) {
   const origin = getOrigin(defender);
   const passives = getPassives(defender);
+  if (origin === "chaos" && passives.chaosDaemonic) {
+    await ensureEffect(defender, {
+      key: "chaos-banishing",
+      label: game.i18n.localize("W4SQ.PassiveChaosDaemonic"),
+      duration: 99,
+      mods: { tags: { chaosBanishing: true } }
+    }, eff => Boolean(eff?.mods?.tags?.chaosBanishing));
+  }
   if (origin !== "human" || !passives.humanToTheBitterEnd) return;
   if (await defender.getFlag(FLAG_SCOPE, "usedBitterEnd")) return;
 
@@ -713,6 +1023,18 @@ export async function handleTurnTick(actor, context = {}) {
   const passives = getPassives(actor);
   const { round } = getRoundSignature();
 
+  if (origin === "undead" && getNumberFlag(actor, "morale") <= 0) {
+    const crumble = await new Roll("3d10+20").evaluate({});
+    const hp = getNumberFlag(actor, "hp");
+    if (crumble.total > 0 && hp > 0) {
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - crumble.total));
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgUndeadCrumbling", {
+        name: safeName(actor),
+        amount: crumble.total
+      });
+    }
+  }
+
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
     const roll = await new Roll("1d20+10").evaluate({});
     const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
@@ -722,6 +1044,34 @@ export async function handleTurnTick(actor, context = {}) {
       name: safeName(actor),
       amount: roll.total
     });
+  }
+  if (origin === "undead" && passives.undeadRegeneration) {
+    const roll = await new Roll("2d10+10").evaluate({});
+    const hp = getNumberFlag(actor, "hp");
+    const hpMax = getNumberFlag(actor, "hpMax");
+    const applied = Math.min(roll.total, Math.max(0, hpMax - hp));
+    if (applied > 0) {
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hp + roll.total));
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgUndeadRegeneration", {
+        name: safeName(actor),
+        amount: applied
+      });
+    }
+  }
+  if (origin === "chaos" && passives.chaosMutation) {
+    const regen = await applyChaosRegeneration(actor);
+    if (regen) {
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgChaosRegeneration", { name: safeName(actor), amount: regen });
+    }
+  }
+  if (origin === "chaos" && passives.chaosDaemonic) {
+    const banishing = getEffects(actor).find(eff => eff?.mods?.tags?.chaosBanishing);
+    if (banishing) {
+      const roll = await new Roll("5+3d10").evaluate({});
+      const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.max(0, hp - roll.total));
+      await sendPassiveMessage(actor, "W4SQ.PassiveMsgChaosBanishing", { name: safeName(actor), amount: roll.total });
+    }
   }
   if (origin === "greenskin" && passives.greenSurge) {
     const active = round > 0 && round % 4 === 0;
