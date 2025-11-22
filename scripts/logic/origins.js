@@ -284,6 +284,11 @@ function getRoundSignature() {
   return { round, turn, combatId };
 }
 
+function isGreenSurgeRound() {
+  const { round } = getRoundSignature();
+  return round > 0 && round % 4 === 0;
+}
+
 function addMoraleBonus(current, delta) {
   return clampNonNegative(ensureNumber(current) + ensureNumber(delta));
 }
@@ -326,7 +331,7 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     add(Math.min(4, Math.max(0, ticks)) * 5);
   }
   if (origin === "greenskin" && passives.greenSurge) {
-    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive"));
+    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) || isGreenSurgeRound();
     if (surgeActive) add(10);
   }
   const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
@@ -468,7 +473,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
         amount: 10
       });
     }
-    if (passives.greenSurge && actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) {
+    if (passives.greenSurge && (actor.getFlag(FLAG_SCOPE, "greenSurgeActive") || isGreenSurgeRound())) {
       damage += 20;
       await sendPassiveMessage(actor, "W4SQ.PassiveMsgGreenSurge", {
         name: actorName,
@@ -757,9 +762,9 @@ export async function handleTurnTick(actor, context = {}) {
       amount: roll.total
     });
   }
-  if (origin === "greenskin" && passives.greenSurge) {
-    const active = round > 0 && round % 4 === 0;
-    await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", active);
+  if (origin === "greenskin") {
+    const surgeActive = passives.greenSurge && isGreenSurgeRound();
+    await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", surgeActive);
   }
   if (origin === "greenskin" && passives.greenMobMentality) {
     const info = ensureFlagObject(actor, "greenMobDamage", {});
