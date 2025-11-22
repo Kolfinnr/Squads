@@ -15,7 +15,6 @@ import {
   consumeEngineerGenius,
   consumeSpecialistEcho
 } from "./specialists.js";
-import { getOrigin, getPassives } from "./origins.js";
 
 const E = (mods, duration = 1, key = null, label = null) => ({
   key: key || crypto.randomUUID?.() || randomID(),
@@ -684,16 +683,10 @@ export function maneuversFor(actor) {
   const role = actor.getFlag(FLAG_SCOPE, "role") || "infantry";
   const weaponFlag = actor.getFlag(FLAG_SCOPE, "weapon") || "sword";
   const weapon = role === "specialist" ? null : weaponFlag;
-  const origin = getOrigin(actor);
-  const passives = getPassives(actor);
-  const puppet = origin === "undead" && passives.undeadPuppet;
   return Object.entries(MANEUVERS)
     .filter(([_, m]) => {
       if (m.category === "universal") return !m.roles || m.roles.includes(role);
-      if (m.category === "weapon") {
-        if (puppet) return false;
-        return m.weaponType === weapon;
-      }
+      if (m.category === "weapon") return m.weaponType === weapon;
       if (m.category === "hybrid") return role === "hybrid";
       if (m.category === "mounted") return role === "mounted";
       if (m.category === "specialist") {
