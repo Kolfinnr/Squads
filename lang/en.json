@@ -164,6 +164,7 @@
   "W4SQ.EffectSummaryBraced": "Braced",
   "W4SQ.EffectSummaryFortified": "Fortified",
   "W4SQ.EffectSummaryOverwhelmed": "Overwhelmed",
+  "W4SQ.EffectSummaryGreenSurge": "Surge: +10 attack TN and +20 damage this round",
   "W4SQ.EffectSummaryMuskOfFearBuff": "Musk of Fear: -25% incoming Morale damage while the army holds together",
   "W4SQ.EffectSummaryMuskOfFearDebuff": "Musk of Fear: +50% incoming Morale damage after the army falters",
   "W4SQ.EffectOverwhelmed": "Overwhelmed",

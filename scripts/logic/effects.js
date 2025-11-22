@@ -200,6 +200,7 @@ const EFFECT_TAG_LABELS = {
   braced: "W4SQ.EffectSummaryBraced",
   fortified: "W4SQ.EffectSummaryFortified",
   overwhelmed: "W4SQ.EffectSummaryOverwhelmed",
+  greenSurge: "W4SQ.EffectSummaryGreenSurge",
   ratMuskBuff: "W4SQ.EffectSummaryMuskOfFearBuff",
   ratMuskDebuff: "W4SQ.EffectSummaryMuskOfFearDebuff"
 };

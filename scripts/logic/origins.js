@@ -104,6 +104,7 @@ const PASSIVE_LABELS = {
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
 const RAT_MUSK_BUFF_KEY = "rat-musk-buff";
 const RAT_MUSK_DEBUFF_KEY = "rat-musk-debuff";
+const GREEN_SURGE_EFFECT_KEY = "green-surge-active";
 
 function safeName(entity) {
   if (!entity) {
@@ -783,6 +784,21 @@ export async function handleTurnTick(actor, context = {}) {
   if (origin === "greenskin") {
     const surgeActive = passives.greenSurge && isGreenSurgeRound({ ...context, actor });
     await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", surgeActive);
+    if (passives.greenSurge) {
+      if (surgeActive) {
+        await ensureEffect(actor, {
+          key: GREEN_SURGE_EFFECT_KEY,
+          label: game.i18n.localize("W4SQ.PassiveGreenSurge"),
+          mods: {
+            tags: { greenSurge: true },
+            tnDice: "+10",
+            dmgDice: "+20"
+          }
+        }, eff => eff?.key === GREEN_SURGE_EFFECT_KEY);
+      } else {
+        await removeEffectByKey(actor, GREEN_SURGE_EFFECT_KEY);
+      }
+    }
   }
   if (origin === "greenskin" && passives.greenMobMentality) {
     const info = ensureFlagObject(actor, "greenMobDamage", {});
