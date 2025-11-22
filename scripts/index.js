@@ -20,6 +20,34 @@ const IMPORT_PATHS = [
   "./aoe.js"
 ];
 
+function bridgeRenderChatMessageHook() {
+  if (Hooks._w4sqPatchedRenderChatMessage) return;
+  Hooks._w4sqPatchedRenderChatMessage = true;
+  const originalCallAll = Hooks.callAll.bind(Hooks);
+  Hooks.callAll = function patchedCallAll(hook, ...args) {
+    if (hook !== "renderChatMessage") {
+      return originalCallAll(hook, ...args);
+    }
+    const [message, html, data] = args;
+    const element = html instanceof HTMLElement ? html : html?.[0];
+    try {
+      originalCallAll("renderChatMessageHTML", message, element, data);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Failed to forward renderChatMessageHTML`, err);
+    }
+    const listeners = Array.from(Hooks._hooks?.[hook] ?? []);
+    for (const listener of listeners) {
+      try {
+        listener.fn(...args);
+      } catch (err) {
+        console.error(`${MODULE_ID} | renderChatMessage handler failed`, err);
+      }
+      if (listener.once) Hooks.off(hook, listener.fn);
+    }
+    return listeners.length;
+  };
+}
+
 function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
 }
@@ -140,6 +168,7 @@ function safeProcessTurnTick(combat, context) {
 
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | Initialising squads v1.0.2`);
+  bridgeRenderChatMessageHook();
   patchFlagOverrides();
   Actors.registerSheet(MODULE_ID, SquadActorSheet, { types: ACTOR_TYPES, makeDefault: false, label: "Squad" });
 
@@ -162,6 +191,15 @@ Hooks.once("init", () => {
     config: true,
     type: Boolean,
     default: true
+  });
+
+  game.settings.register(MODULE_ID, SETTINGS.treasury, {
+    name: "FOB Treasury",
+    hint: "Starting treasury amount for downtime actions on the command dashboard.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0
   });
 });
 
@@ -245,7 +283,9 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
-  html.find(".left").append(btn);
+  $(html)
+    .find(".left")
+    .append(btn);
 });
 
 function canSeeSquad(token) {
