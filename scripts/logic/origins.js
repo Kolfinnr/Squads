@@ -102,6 +102,8 @@ const PASSIVE_LABELS = {
 };
 
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
+const RAT_MUSK_BUFF_KEY = "rat-musk-buff";
+const RAT_MUSK_DEBUFF_KEY = "rat-musk-debuff";
 
 function safeName(entity) {
   if (!entity) {
@@ -244,15 +246,65 @@ function armyHpRatio(actor) {
   return Math.max(0, Math.min(1, total / max));
 }
 
+async function syncRatMuskEffect(actor, enabled, ratio) {
+  if (!actor) return;
+  const label = game.i18n.localize("W4SQ.PassiveRatMuskOfFear");
+  if (!enabled) {
+    await removeEffectByKey(actor, RAT_MUSK_BUFF_KEY);
+    await removeEffectByKey(actor, RAT_MUSK_DEBUFF_KEY);
+    return;
+  }
+
+  const buffing = ratio > 0.5;
+  if (buffing) {
+    await removeEffectByKey(actor, RAT_MUSK_DEBUFF_KEY);
+    await ensureEffect(actor, {
+      key: RAT_MUSK_BUFF_KEY,
+      label,
+      mods: { tags: { ratMuskOfFear: true, ratMuskBuff: true } }
+    }, eff => eff?.key === RAT_MUSK_BUFF_KEY);
+  } else {
+    await removeEffectByKey(actor, RAT_MUSK_BUFF_KEY);
+    await ensureEffect(actor, {
+      key: RAT_MUSK_DEBUFF_KEY,
+      label,
+      mods: { tags: { ratMuskOfFear: true, ratMuskDebuff: true } }
+    }, eff => eff?.key === RAT_MUSK_DEBUFF_KEY);
+  }
+}
+
 function ensureNumber(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function getRoundSignature() {
-  const round = Number(game.combat?.round ?? 0);
-  const turn = Number(game.combat?.turn ?? 0);
-  const combatId = game.combat?.id ?? game.combat?._id ?? "";
+function resolveCombat(context = {}) {
+  const { combat: ctxCombat, actor } = context;
+  if (ctxCombat) return ctxCombat;
+  if (game.combat) return game.combat;
+
+  const collection = game.combats;
+  const combats = Array.isArray(collection)
+    ? collection
+    : Array.from(collection?.contents ?? []);
+  if (actor) {
+    const actorId = actor.id ?? actor._id;
+    const byActor = combats.find(c => c.combatants?.some(cm => cm?.actorId === actorId));
+    if (byActor) return byActor;
+  }
+  return combats[0] ?? null;
+}
+
+function getRoundSignature(context = {}) {
+  const combat = resolveCombat(context);
+  const round = Number(context.round ?? combat?.round ?? 0);
+  const turn = Number(context.turn ?? combat?.turn ?? 0);
+  const combatId = context.combatId ?? combat?.id ?? combat?._id ?? "";
   return { round, turn, combatId };
+}
+
+function isGreenSurgeRound(context = {}) {
+  const { round } = getRoundSignature(context);
+  return round > 0 && round % 4 === 0;
 }
 
 function addMoraleBonus(current, delta) {
@@ -278,7 +330,7 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
   const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
   const ratio = hpMax > 0 ? hp / hpMax : 0;
-  const { round } = getRoundSignature();
+  const { round } = getRoundSignature({ actor });
 
   const add = value => { next += Number(value) || 0; };
 
@@ -297,16 +349,13 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     add(Math.min(4, Math.max(0, ticks)) * 5);
   }
   if (origin === "greenskin" && passives.greenSurge) {
-    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive"));
+    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) || isGreenSurgeRound({ actor });
     if (surgeActive) add(10);
   }
-  if (passives.ratTreacherous) {
-    const buff = actor.getFlag(FLAG_SCOPE, "ratTreacherousBuff");
-    if (buff?.remaining > 0) add(40);
-  }
-  if (origin === "ratmen" && passives.ratTreacherous && opponent && sameSide(actor, opponent)) {
-    add(40);
-  }
+  const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
+  const treacherousTrigger = treacherousActive && opponent && sameSide(actor, opponent);
+  const treacherousBuffed = treacherousActive && (actorHasTag(actor, "ratTreacherousBuff") || treacherousTrigger);
+  if (treacherousBuffed) add(20);
   if (isManeuver) {
     if (origin === "human" && passives.humanBattleDrill) add(10);
     if (origin === "human" && passives.humanAdaptive && ratio < 0.5) add(10);
@@ -442,7 +491,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
         amount: 10
       });
     }
-    if (passives.greenSurge && actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) {
+    if (passives.greenSurge && (actor.getFlag(FLAG_SCOPE, "greenSurgeActive") || isGreenSurgeRound({ actor }))) {
       damage += 20;
       await sendPassiveMessage(actor, "W4SQ.PassiveMsgGreenSurge", {
         name: actorName,
@@ -465,17 +514,10 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
       });
     }
   }
-  if (origin === "ratmen" && passives.ratTreacherous) {
-    const buff = actor.getFlag(FLAG_SCOPE, "ratTreacherousBuff");
-    if (buff?.remaining > 0) damage += 10;
-  }
-  if (origin === "ratmen" && passives.ratTreacherous && defender && sameSide(actor, defender)) {
-    await actor.setFlag(FLAG_SCOPE, "ratTreacherousBuff", {
-      remaining: 2,
-      round: getRoundSignature().round
-    });
-    damage += 10;
-  }
+  const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
+  const treacherousTrigger = treacherousActive && defender && sameSide(actor, defender);
+  const treacherousBuffed = treacherousActive && (actorHasTag(actor, "ratTreacherousBuff") || treacherousTrigger);
+  if (treacherousBuffed) damage += 10;
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10; // overwhelmed baseline
   }
@@ -500,7 +542,13 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   if (origin === "ratmen" && passives.ratNumerous) {
     moraleBonus += 10;
   }
-  if (origin === "ratmen" && passives.ratTreacherous && defender && sameSide(actor, defender)) {
+  if (treacherousTrigger) {
+    await ensureEffect(actor, {
+      key: randomID?.() ?? `rat-treachery-${Date.now()}`,
+      label: game.i18n.localize("W4SQ.PassiveRatTreacherous"),
+      duration: 2,
+      mods: { tags: { ratTreacherousBuff: true }, tnDice: "+20", dmgDice: "+10" }
+    }, eff => Boolean(eff?.mods?.tags?.ratTreacherousBuff));
     await sendPassiveMessage(actor, "W4SQ.PassiveMsgRatTreacherous", {
       name: actorName,
       target: defenderName,
@@ -519,6 +567,8 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   const attackerPassives = getPassives(attacker);
   const ratio = hpRatio(defender);
   const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
+
+  await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
   const reduceFlat = amount => {
     damage = clampNonNegative(damage - amount);
@@ -618,9 +668,9 @@ export async function applyPostAttackEffects({ attacker, defender, success, acti
   if (origin === "ratmen" && passives.ratNumerous) {
     await ensureEffect(defender, {
       key: randomID?.() ?? `rat-overwhelm-${Date.now()}`,
-      label: game.i18n.localize("W4SQ.PassiveRatNumerous"),
+      label: game.i18n.localize("W4SQ.EffectOverwhelmed"),
       duration: 2,
-      mods: { tags: { overwhelmed: true }, tnDice: "-5", dmgDice: "+0", defPenaltyDice: "0" }
+      mods: { tags: { overwhelmed: true }, tnDice: "-5" }
     }, eff => Boolean(eff?.mods?.tags?.overwhelmed));
   }
 }
@@ -658,6 +708,10 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
   let next = Number(total) || 0;
   const origin = getOrigin(defender);
   const passives = getPassives(defender);
+  const ratio = hpRatio(defender);
+  const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
+
+  await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
   if (origin === "human") {
     next = Math.max(0, next - 5);
@@ -673,8 +727,7 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
     next += 5;
     if (passives.ratCoward) next += 20;
     if (passives.ratMuskOfFear) {
-      const army = armyHpRatio(defender);
-      next = army > 0.5 ? Math.floor(next * 0.75) : Math.floor(next * 1.5);
+      next = armyRatio > 0.5 ? Math.floor(next * 0.75) : Math.floor(next * 1.5);
     }
   }
   if (actorHasTag(defender, "overwhelmed")) {
@@ -711,7 +764,11 @@ export async function handleMoraleZero(defender, attacker) {
 export async function handleTurnTick(actor, context = {}) {
   const origin = getOrigin(actor);
   const passives = getPassives(actor);
-  const { round } = getRoundSignature();
+  const { round } = getRoundSignature({ ...context, actor });
+
+  const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
+  const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
+  await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
 
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
     const roll = await new Roll("1d20+10").evaluate({});
@@ -723,9 +780,9 @@ export async function handleTurnTick(actor, context = {}) {
       amount: roll.total
     });
   }
-  if (origin === "greenskin" && passives.greenSurge) {
-    const active = round > 0 && round % 4 === 0;
-    await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", active);
+  if (origin === "greenskin") {
+    const surgeActive = passives.greenSurge && isGreenSurgeRound({ ...context, actor });
+    await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", surgeActive);
   }
   if (origin === "greenskin" && passives.greenMobMentality) {
     const info = ensureFlagObject(actor, "greenMobDamage", {});
@@ -742,15 +799,6 @@ export async function handleTurnTick(actor, context = {}) {
         buff.remaining -= 1;
         await actor.setFlag(FLAG_SCOPE, "greenMobBonus", buff);
       }
-    }
-  }
-  if (origin === "ratmen" && passives.ratTreacherous) {
-    const buff = ensureFlagObject(actor, "ratTreacherousBuff", {});
-    if (buff.remaining > 0) {
-      buff.remaining -= 1;
-      await actor.setFlag(FLAG_SCOPE, "ratTreacherousBuff", buff);
-    } else if (buff.remaining !== 0) {
-      await actor.unsetFlag(FLAG_SCOPE, "ratTreacherousBuff");
     }
   }
 }
