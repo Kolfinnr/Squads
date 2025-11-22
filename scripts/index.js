@@ -245,7 +245,9 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
-  html.find(".left").append(btn);
+  $(html)
+    .find(".left")
+    .append(btn);
 });
 
 function canSeeSquad(token) {

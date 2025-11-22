@@ -6,12 +6,13 @@
 - **HP / HP Max**: Track the formation’s current strength. Damage reduces HP; when it reaches 0 the unit is spent.
 - **Morale / Morale Max**: Represents cohesion and willingness to fight. Many effects raise or lower morale.
 - **Experience Tier & Equipment Tier**: Improve target numbers (TN) and damage output. Equipment also contributes to defensive soak.
-- **Role & Weapon**: Determine role bonuses and which weapon maneuvers are available.
+- **Role & Weapon**: Determine role bonuses and which weapon maneuvers are available. **Hybrid** units can mix melee and ranged gear but suffer a −1d10 hybrid penalty when rolling melee or ranged actions.
 - **Traits**: Flags such as Fear, Terror, and Unbreakable influence morale loss and special rules.
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
-- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
+- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized. A successful Reorganization clears that morale stack and prevents further morale-based Disorganized from re-triggering while the unit stays above 25% morale. If morale falls to 25% or lower the squad stays Disorganized until morale recovers past that breakpoint.
+- **Shaken Crews**: When morale falls below 30% the squad’s TN drops by 10, making both attacks and maneuvers harder to land.
 
 ### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
@@ -20,6 +21,10 @@
 
 ### Command Points (CP)
 - Commanders start with a default pool (3 of 6). Spending CP triggers command abilities. Adjustments appear on the dashboard, and the pool refills only through in-game rewards or GM fiat.
+
+### Reloading Rules
+- Ranged attacks apply an automatic Reload cooldown: 1 round for bows and crossbows, 2 for firearms, and 3 for artillery.
+- **Fast Reload** shortens the cooldown to a minimum of 1 round, while **Continuous Fire** skips reloading entirely until the volley ends.
 
 ## Specialist Roles
 - Set a squad’s role to **Specialist** and choose a subtype (Mage or Engineer) on the sheet.
@@ -69,20 +74,20 @@
 - **Monstrous Charge:** Charge attacks add an extra 1d20 damage, but the monster’s attack TN drops by 10 and incoming damage increases by 30.
 
 ### Greenskin
-- **Origin:** As long as HP exceeds 50%, add +10 HP damage to attacks.
-- **Surge:** Every fourth round the unit surges, gaining +20 HP damage and +10 attack TN for that round.
-- **Mob Mentality:** If the squad suffers ≥50% HP damage in a round, next round’s attacks deal +4d10 + 10 Morale damage; while above half HP incoming Morale damage is halved.
-- **Gobbos:** Rowdy mobs take +20 incoming HP damage and suffer −10 attack TN.
-- **Big Choppas:** Ignore an additional 10 points of armor soak.
-- **Unstoppable Wave:** Charges inflict +40 Morale damage, at the cost of a permanent −20 attack TN penalty.
+- **Origin:** Above 50% HP, swings land with +10 HP damage.
+- **Surge:** Every fourth round, gain +20 HP damage and +10 attack TN for that round.
+- **Mob Mentality:** Taking ≥50% max HP damage in a single round primes the next round’s attacks for +4d10 + 10 Morale damage; while above half HP, incoming Morale damage is halved.
+- **Gobbos:** Rowdy mobs suffer −10 attack TN and +20 incoming HP damage.
+- **Big Choppas:** Ignore an extra 10 points of armor soak.
+- **Unstoppable Wave:** Charges inflict +40 Morale damage but the squad suffers a constant −20 attack TN.
 
 ### Ratmen
-- **Origin:** Skittish fighters take +5 Morale damage from all sources and gain +10 TN on Flank maneuvers.
-- **Coward:** Incoming Morale damage increases by 20; if Flanked they also take +20 HP damage.
+- **Origin:** Skittish fighters always take +5 Morale damage and gain +10 TN on Flank maneuvers.
+- **Coward:** Incoming Morale damage rises by 20; if Flanked, they also take +20 HP damage.
 - **Poisoner:** Successful attacks impose −20 TN on the target for 2 rounds.
 - **Musk of Fear:** When the army is healthy (>50% HP), reduce incoming Morale damage by 25%; if the army falters, increase it by 50%.
-- **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for 2 rounds.
-- **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (+10 Morale damage taken, −5 TN).
+- **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for that strike and the following 2 rounds.
+- **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (−5 TN, +10 Morale damage taken) for 2 rounds.
 
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
@@ -109,7 +114,7 @@
 | **New Orders!** | 1 CP | Clears current orders and maneuver reminder, then prompts for Melee, Ranged, or Hold. Posts the new order to chat. Commanders cannot receive orders. |
 | **Rally!** | 1 CP | Clears Routed and Disorganized, then restores 4d20 Morale (units at 0 Morale stand back up at 1). |
 | **Unit! Withdraw!** | 1 CP | Removes Flanked/Encircled tags and grants Withdraw for 1 round (+1d10 Defense soak, Disengaged). |
-| **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. |
+| **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. The protected ally gains Guarded Withdrawal (Disengaged) for 1 round after the intercept resolves. |
 | **Player Special Action** | 1 CP | Prompts custom text and posts it to chat for narration. |
 | **Get in Formation!** | 2 CP | Grants +8d10 maneuver TN bonus for 1 round. |
 
@@ -125,12 +130,12 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 
 ### Universal Maneuvers
 - **Flank** (Average, enemy target): Apply −1d20 Defense (Flanked) for 2 rounds and inflict 1d20 Morale loss.
-- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round.
+- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round. Clearing morale-based Disorganized also flags the unit so it won’t re-trigger from morale drops while above 25% morale; units at or below 25% morale remain Disorganized until they rally past that point.
 - **Charge** (Easy, self): +1d20 TN, +1d20 Damage, grants *Charged* tag.
 - **Brace** (Easy, self): +1d10 Defense soak and *Braced* tag.
 - **Loose Formation** (Easy, self): +1d20 Ranged Resistance, −1d20 Defense soak, grants *Loose Formation* tag.
 - **Disengage** (Easy, self): +1d10 Defense soak and *Disengaged* tag.
-- **Guard** (Easy, ally, CD 1, infantry only): Assign the squad to protect an adjacent ally. The next melee attack against that ally is redirected to the guard, dealing the normal result plus +1d20 HP and +1d20 Morale strain to the guarding unit while allowing the ally to disengage safely.
+- **Guard** (Easy, ally, CD 1, infantry only): Assign the squad to protect an adjacent ally. The next melee attack against that ally is redirected to the guard, dealing the normal result plus +1d20 HP and +1d20 Morale strain to the guarding unit while allowing the ally to disengage safely (they gain Guarded Withdrawal/Disengaged for 1 round).
 
 ### Sword Maneuvers
 - **Mordhau Swordsmanship** (Hard, self, CD 3): +5d10 TN, +4d10 Damage.
