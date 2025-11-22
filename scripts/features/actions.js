@@ -178,10 +178,9 @@ async function applyDamage(actor, defender, finalDamage, options = {}) {
   if (hp > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatHPZero");
   }
-  const applied = Math.max(0, hp - next);
   const moraleLoss = await moraleLossFor(defender, actor, finalDamage, options);
   await actor.setFlag(FLAG_SCOPE, "lastTargetName", defender.name || "");
-  return { moraleLoss, hpDamage: applied };
+  return { moraleLoss };
 }
 
 function selectedTarget() {
@@ -274,8 +273,8 @@ export async function doSquadAction(actor, action) {
     if (targetActor) {
       const res = await applyDamage(actor, targetActor, damage);
       moraleResult = res.moraleLoss;
-      if ((res.hpDamage || 0) > 0) {
-        await recordDamageTaken(targetActor, { hpDamage: res.hpDamage || 0 });
+      if (damage > 0) {
+        await recordDamageTaken(targetActor, { hpDamage: damage });
       }
       if (guardContext) {
         const protectedActor = guardContext.protectedActor;
@@ -504,8 +503,6 @@ export async function doSquadAction(actor, action) {
   }
 
   let moraleLoss = null;
-  let totalHpDamageDealt = 0;
-
   if (targetActor) {
     if (aggAttack.tags?.multiShot) {
       const shots = Number(aggAttack.tags.multiShot) || 1;
@@ -513,23 +510,19 @@ export async function doSquadAction(actor, action) {
       for (let i = 0; i < shots; i++) {
         const res = await applyDamage(actor, targetActor, per, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
         moraleLoss = res.moraleLoss;
-        totalHpDamageDealt += res.hpDamage || 0;
-        await recordDamageTaken(targetActor, { hpDamage: res.hpDamage || 0 });
       }
     } else {
       const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
       moraleLoss = res.moraleLoss;
-      totalHpDamageDealt += res.hpDamage || 0;
-      await recordDamageTaken(targetActor, { hpDamage: res.hpDamage || 0 });
     }
+    await recordDamageTaken(targetActor, { hpDamage: finalDamage });
   }
 
   if (targetActor && success && extraAttacks > 0) {
     for (let i = 0; i < extraAttacks; i++) {
       const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
       moraleLoss = (moraleLoss || 0) + (res.moraleLoss || 0);
-      totalHpDamageDealt += res.hpDamage || 0;
-      await recordDamageTaken(targetActor, { hpDamage: res.hpDamage || 0 });
+      await recordDamageTaken(targetActor, { hpDamage: finalDamage });
     }
   }
 
@@ -610,14 +603,7 @@ export async function doSquadAction(actor, action) {
   }
 
   if (success && targetActor) {
-    await applyPostAttackEffects({
-      attacker: actor,
-      defender: targetActor,
-      success: true,
-      action,
-      isMagical: Boolean(aggAttack.tags?.magical),
-      hpDamage: totalHpDamageDealt
-    });
+    await applyPostAttackEffects({ attacker: actor, defender: targetActor, success: true, action, isMagical: Boolean(aggAttack.tags?.magical) });
   }
 
   await sendActionMessage({

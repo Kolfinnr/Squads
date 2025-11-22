@@ -84,14 +84,6 @@
 - **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for 2 rounds.
 - **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (+10 Morale damage taken, −5 TN).
 
-### Undead
-- **Origin:** Unfeeling ranks shrug off 10 Morale damage from every source.
-- **Puppet:** Mindless hordes suffer −10 attack/maneuver TN, −10 HP/Morale damage, and cannot use weapon maneuvers. If at least one “master” undead (Undead origin without Puppet, Morale > 0) is on the battlefield, puppets gain +5 damage and a further −10 Morale damage taken.
-- **Life Drain:** Successful attacks heal the unit for 50% of the final HP damage dealt (rounded down), unless the target is also a Puppet.
-- **Regeneration:** At the end of each turn the unit restores 2d10 + 10 HP, even while Unbound.
-- **Ethereal:** Non-magical attacks deal half damage after soak, every strike adds +20 Morale damage, and 25% of HP damage ignores armor soak.
-- **March of the Dead:** While Morale > 0, every damaging hit inflicts *Overwhelmed* on the victim, and every 100 HP lost lets the unit roll 1d2 to raise 30 + 3d10 HP back into the formation (fails on a 2). The effect shuts down once the unit becomes Unbound.
-
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
 - **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage in a roaming 4-yard blaze that pulses once per round for 3 rounds.
@@ -198,7 +190,6 @@ The sheet and dashboard list active effects with coloured chips. Common statuses
 - **Guarding / Guarded** – An infantry unit intercepts melee hits for an ally; strain damage applies when the guard is struck.
 - **Guarded Withdrawal** – The protected ally may disengage safely on its next turn.
 - **Spent Maneuver** – The unit cannot attempt further maneuvers until the next turn (e.g., after Intercept!).
-- **Overwhelmed** – Ratmen hordes and undead marches pile on, increasing incoming Morale damage by 10 and imposing −5 TN until the effect expires.
 - **Fortified** – Heavy cover; immunity to Flanked while in fortifications and +10 + 2d10 soak.
 - **Deep Defense** – Engineers inside their fortification gain an additional 20 + 2d20 soak versus incoming damage.
 - **Immobile** – Unit cannot move or perform maneuvers that require movement (common for entrenched engineers).
