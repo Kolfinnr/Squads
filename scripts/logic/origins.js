@@ -282,7 +282,10 @@ function resolveCombat(context = {}) {
   if (ctxCombat) return ctxCombat;
   if (game.combat) return game.combat;
 
-  const combats = [...(game.combats ?? [])];
+  const collection = game.combats;
+  const combats = Array.isArray(collection)
+    ? collection
+    : Array.from(collection?.contents ?? []);
   if (actor) {
     const actorId = actor.id ?? actor._id;
     const byActor = combats.find(c => c.combatants?.some(cm => cm?.actorId === actorId));
@@ -762,10 +765,6 @@ export async function handleTurnTick(actor, context = {}) {
   const origin = getOrigin(actor);
   const passives = getPassives(actor);
   const { round } = getRoundSignature({ ...context, actor });
-
-  const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
-  const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
-  await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
 
   const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
   const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
