@@ -104,35 +104,13 @@
             {{#if passiveChips.length}}
               <div class="effect-list">
                 {{#each passiveChips as |chip|}}
-                  <span class="effect-chip passive {{chip.type}} {{#if chip.shield}}shield{{/if}}" title="{{chip.shieldTooltip}}">{{chip.label}}{{#if chip.durationLabel}} ({{chip.durationLabel}}){{/if}}
-                    {{#if chip.shield}}
-                      <span class="chip-shield" aria-label="{{chip.shieldTooltip}}">🛡</span>
-                    {{/if}}
-                    {{#if chip.details}}
-                      {{#each chip.details as |detail|}}
-                        <span class="chip-detail">{{detail}}</span>
-                      {{/each}}
-                    {{/if}}
-                  </span>
+                  <span class="effect-chip passive {{chip.type}}">{{chip.label}}{{#if chip.durationLabel}} ({{chip.durationLabel}}){{/if}}</span>
                 {{/each}}
               </div>
             {{else}}
               <p>{{localize "W4SQ.None"}}</p>
             {{/if}}
           </div>
-          {{#if chaosMutation}}
-            <div class="chaos-mutation">
-              <h4>{{localize "W4SQ.MutationLabel"}}</h4>
-              <p class="mutation-label">{{chaosMutation.label}}</p>
-              {{#if chaosMutation.details}}
-                <ul class="mutation-details">
-                  {{#each chaosMutation.details as |detail|}}
-                    <li>{{detail}}</li>
-                  {{/each}}
-                </ul>
-              {{/if}}
-            </div>
-          {{/if}}
         </div>
         <div>
           <h3>{{localize "W4SQ.ActiveEffects"}}</h3>

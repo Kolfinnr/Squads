@@ -1,7 +1,7 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects, ensureDisorganized, removeEffectsByTag } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
@@ -28,17 +28,8 @@ async function enforceMoraleState(actor) {
   const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   if (!moraleMax) return;
   const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
-  if (moraleMax > 0 && morale / moraleMax < 0.25) {
+  if (moraleMax > 0 && morale / moraleMax < 0.5) {
     await ensureDisorganized(actor, { source: "morale" });
-  }
-}
-
-async function clearCorruption(combat) {
-  if (!combat) return;
-  for (const combatant of combat.combatants ?? []) {
-    const actor = combatant?.actor;
-    if (!actor) continue;
-    await removeEffectsByTag(actor, "chaosCorrupted");
   }
 }
 
@@ -244,7 +235,6 @@ Hooks.on("updateCombat", (combat, changed) => {
 });
 
 Hooks.on("renderTokenHUD", (hud, html) => {
-  const root = html?.jquery ? html : $(html);
   const token = canvas?.tokens?.get(hud.object.id);
   const actor = token?.actor;
   if (!isSquadActor(actor)) return;
@@ -255,7 +245,7 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
-  root?.find?.(".left")?.append?.(btn);
+  html.find(".left").append(btn);
 });
 
 function canSeeSquad(token) {
@@ -295,13 +285,11 @@ Hooks.on("renderApplication", app => {
   shouldSilenceHoB(app);
 });
 
-Hooks.on("deleteCombat", async combat => {
+Hooks.on("deleteCombat", combat => {
   resetProcessedTurn(combat);
   W4SQCommandApp.closeAll();
-  await clearCorruption(combat);
 });
 
-Hooks.on("combatEnd", async combat => {
+Hooks.on("combatEnd", combat => {
   resetProcessedTurn(combat);
-  await clearCorruption(combat);
 });

@@ -219,7 +219,7 @@ async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = nul
         mods: { tags: { routed: true, disorganized: true } }
       }, effect => Boolean(effect?.mods?.tags?.routed));
       await postDefeatLine(actor, "W4SQ.ChatMoraleZero");
-    } else if (moraleMax > 0 && moraleAfter / moraleMax < 0.25) {
+    } else if (moraleMax > 0 && moraleAfter / moraleMax < 0.5) {
       await ensureDisorganized(actor, { source: "morale" });
     }
   }

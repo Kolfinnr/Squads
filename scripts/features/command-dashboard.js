@@ -4,10 +4,6 @@ import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorgani
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 
-const ApplicationV2 = foundry.applications?.Application
-  ?? globalThis.Application
-  ?? foundry.applications?.api?.ApplicationV2;
-
 const TEMPLATE = `modules/${MODULE_ID}/templates/command-dashboard.hbs`;
 
 const ORDER_OPTIONS = [
@@ -137,7 +133,7 @@ function dispositionLabel(disposition) {
   }
 }
 
-export class W4SQCommandApp extends ApplicationV2 {
+export class W4SQCommandApp extends Application {
   static instances = new Map();
 
   static closeAll() {
