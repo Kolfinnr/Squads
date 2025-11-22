@@ -115,6 +115,10 @@
   border: 1px solid transparent;
 }
 
+.w4sq .effect-chip[data-summary] {
+  cursor: pointer;
+}
+
 .w4sq .effect-chip.positive {
   background: rgba(76, 175, 80, 0.2);
   border-color: rgba(76, 175, 80, 0.35);

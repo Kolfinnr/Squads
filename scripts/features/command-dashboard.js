@@ -1,6 +1,14 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
 import { doSquadAction } from "./actions.js";
-import { addEffect, attachGuard, getEffects, getEffectsDetailed, removeDisorganized, actorHasTag } from "../logic/effects.js";
+import {
+  addEffect,
+  attachGuard,
+  getEffects,
+  getEffectsDetailed,
+  removeDisorganized,
+  actorHasTag,
+  summarizeEffect
+} from "../logic/effects.js";
 import { maneuversFor, friendlyTokensNear } from "../logic/maneuvers.js";
 import { getCooldown, setCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 
@@ -255,7 +263,8 @@ export class W4SQCommandApp extends Application {
         : null;
       const effects = getEffectsDetailed(actor).map(effect => ({
         ...effect,
-        durationLabel: formatTurns(effect.duration ?? 0)
+        durationLabel: formatTurns(effect.duration ?? 0),
+        summary: summarizeEffect(effect)
       }));
       const specialistExtras = [];
       if (role === "specialist") {
@@ -412,6 +421,16 @@ export class W4SQCommandApp extends Application {
 
   activateListeners(html) {
     super.activateListeners(html);
+    html.find('.effect-chip[data-summary]').on("click", ev => {
+      const { summary, label } = ev.currentTarget.dataset;
+      if (!summary) return;
+      const message = game.i18n.format("W4SQ.EffectSummaryMessage", {
+        label: label || game.i18n.localize("W4SQ.ActiveEffects"),
+        summary
+      });
+      ui.notifications?.info(message);
+    });
+
     html.find('[data-action="select"]').on("click", ev => {
       const id = ev.currentTarget.dataset.id;
       this.selectedSquadId = id;

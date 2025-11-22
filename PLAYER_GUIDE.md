@@ -74,20 +74,20 @@
 - **Monstrous Charge:** Charge attacks add an extra 1d20 damage, but the monster’s attack TN drops by 10 and incoming damage increases by 30.
 
 ### Greenskin
-- **Origin:** As long as HP exceeds 50%, add +10 HP damage to attacks.
-- **Surge:** Every fourth round the unit surges, gaining +20 HP damage and +10 attack TN for that round.
-- **Mob Mentality:** If the squad suffers ≥50% HP damage in a round, next round’s attacks deal +4d10 + 10 Morale damage; while above half HP incoming Morale damage is halved.
-- **Gobbos:** Rowdy mobs take +20 incoming HP damage and suffer −10 attack TN.
-- **Big Choppas:** Ignore an additional 10 points of armor soak.
-- **Unstoppable Wave:** Charges inflict +40 Morale damage, at the cost of a permanent −20 attack TN penalty.
+- **Origin:** Above 50% HP, swings land with +10 HP damage.
+- **Surge:** Every fourth round, gain +20 HP damage and +10 attack TN for that round.
+- **Mob Mentality:** Taking ≥50% max HP damage in a single round primes the next round’s attacks for +4d10 + 10 Morale damage; while above half HP, incoming Morale damage is halved.
+- **Gobbos:** Rowdy mobs suffer −10 attack TN and +20 incoming HP damage.
+- **Big Choppas:** Ignore an extra 10 points of armor soak.
+- **Unstoppable Wave:** Charges inflict +40 Morale damage but the squad suffers a constant −20 attack TN.
 
 ### Ratmen
-- **Origin:** Skittish fighters take +5 Morale damage from all sources and gain +10 TN on Flank maneuvers.
-- **Coward:** Incoming Morale damage increases by 20; if Flanked they also take +20 HP damage.
+- **Origin:** Skittish fighters always take +5 Morale damage and gain +10 TN on Flank maneuvers.
+- **Coward:** Incoming Morale damage rises by 20; if Flanked, they also take +20 HP damage.
 - **Poisoner:** Successful attacks impose −20 TN on the target for 2 rounds.
 - **Musk of Fear:** When the army is healthy (>50% HP), reduce incoming Morale damage by 25%; if the army falters, increase it by 50%.
-- **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for 2 rounds.
-- **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (+10 Morale damage taken, −5 TN).
+- **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for that strike and the following 2 rounds.
+- **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (−5 TN, +10 Morale damage taken) for 2 rounds.
 
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
