@@ -203,13 +203,42 @@ export class SquadActorSheet extends ActorSheet {
     if (!root) return;
     root.querySelectorAll('.effect-chip[data-summary]').forEach(el => {
       el.addEventListener("click", ev => {
-        const { summary, label } = ev.currentTarget.dataset;
+        const { summary } = ev.currentTarget.dataset;
         if (!summary) return;
-        const message = game.i18n.format("W4SQ.EffectSummaryMessage", {
-          label: label || game.i18n.localize("W4SQ.ActiveEffects"),
-          summary
-        });
-        ui.notifications?.info(message);
+        const container = ev.currentTarget.closest(".effect-list");
+        if (!container) return;
+
+        const existing = container.querySelector(".effect-summary-popup");
+        if (existing?.dataset?.source === summary) {
+          existing.remove();
+          return;
+        }
+        existing?.remove();
+
+        const label = ev.currentTarget.dataset.label || game.i18n.localize("W4SQ.ActiveEffects");
+        const closeLabel = game.i18n.localize("Close");
+        const popup = document.createElement("div");
+        popup.classList.add("effect-summary-popup");
+        popup.dataset.source = summary;
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.classList.add("close");
+        closeBtn.setAttribute("aria-label", closeLabel);
+        closeBtn.textContent = "\u00d7";
+
+        const labelEl = document.createElement("p");
+        labelEl.classList.add("label");
+        labelEl.textContent = label;
+
+        const summaryEl = document.createElement("p");
+        summaryEl.classList.add("summary");
+        summaryEl.textContent = summary;
+
+        closeBtn.addEventListener("click", () => popup.remove());
+
+        popup.append(closeBtn, labelEl, summaryEl);
+        container.appendChild(popup);
       });
     });
   }
