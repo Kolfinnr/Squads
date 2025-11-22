@@ -349,6 +349,21 @@ export class W4SQCommandApp extends Application {
     };
   }
 
+  _getTreasury() {
+    const value = game.settings.get(MODULE_ID, SETTINGS.treasury);
+    return Number.isFinite(value) ? Number(value) : 0;
+  }
+
+  async _setTreasury(value) {
+    const safe = Math.max(0, Math.round(Number(value) || 0));
+    await game.settings.set(MODULE_ID, SETTINGS.treasury, safe);
+    return safe;
+  }
+
+  _getFriendlySquads() {
+    return this._getSquadTokens().filter(token => getDisposition(token) === CONST.TOKEN_DISPOSITIONS.FRIENDLY);
+  }
+
   async getData() {
     const commanderInfo = this._getCommander();
     const commanderActor = commanderInfo?.actor ?? null;
@@ -415,7 +430,8 @@ export class W4SQCommandApp extends Application {
         label: game.i18n.localize(opt.label)
       })),
       dispositionLabel: dispositionLabel(this.disposition),
-      strength: this._getStrengthTotals()
+      strength: this._getStrengthTotals(),
+      treasury: this._getTreasury()
     };
   }
 
@@ -526,6 +542,17 @@ export class W4SQCommandApp extends Application {
         this.render();
       });
     }
+
+    html.find('[data-treasury-input]').on("change", async ev => {
+      await this._setTreasury(ev.currentTarget.value);
+      this.render(false);
+    });
+
+    html.find('[data-fob-action]').on("click", async ev => {
+      const action = ev.currentTarget.dataset.fobAction;
+      await this._handleFobAction(action);
+      this.render();
+    });
   }
 
   _getSelectedActor() {
@@ -759,6 +786,121 @@ export class W4SQCommandApp extends Application {
       mods: { maneuverTNDice: "+8d10" }
     });
     await this._announceCommand(commander, squad, "W4SQ.ChatCmdFormation");
+  }
+
+  async _handleFobAction(action) {
+    switch (action) {
+      case "rest":
+        await this._fobRest();
+        break;
+      case "restore":
+        await this._fobRestoreCasualties();
+        break;
+      case "upkeep":
+        await this._fobPayUpkeep();
+        break;
+      case "clear-effects":
+        await this._fobClearEffects();
+        break;
+    }
+  }
+
+  async _fobRest() {
+    const squads = this._getFriendlySquads().filter(token => game.user.isGM || token.actor?.isOwner);
+    if (!squads.length) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.FobNoSquads"));
+      return;
+    }
+    for (const token of squads) {
+      const actor = token.actor;
+      const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+      const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+      if (hpMax <= 0) continue;
+      const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      const roll = await new Roll("1d10").evaluate({});
+      const healedHp = Math.min(hpMax, hp + roll.total);
+      await actor.setFlag(FLAG_SCOPE, "hp", healedHp);
+      if (moraleMax > 0) {
+        const morale = Math.round((healedHp * moraleMax) / Math.max(1, hpMax));
+        await actor.setFlag(FLAG_SCOPE, "morale", morale);
+      }
+    }
+    ui.notifications.info(game.i18n.localize("W4SQ.FobRestApplied"));
+  }
+
+  async _fobRestoreCasualties() {
+    const token = this._getSelectedToken();
+    const squad = token?.actor ?? null;
+    if (!squad) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.SelectSquad"));
+      return;
+    }
+    if (getDisposition(token) !== CONST.TOKEN_DISPOSITIONS.FRIENDLY) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
+      return;
+    }
+    if (!(game.user.isGM || squad.isOwner)) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
+      return;
+    }
+    const hpMax = Number(squad.getFlag(FLAG_SCOPE, "hpMax") || 0);
+    const hp = Number(squad.getFlag(FLAG_SCOPE, "hp") || 0);
+    const missing = Math.max(0, hpMax - hp);
+    if (missing <= 0) {
+      ui.notifications.info(game.i18n.localize("W4SQ.FobNoCasualties"));
+      return;
+    }
+    const exp = Number(squad.getFlag(FLAG_SCOPE, "experienceTier") || 0);
+    const eq = Number(squad.getFlag(FLAG_SCOPE, "equipmentTier") || 0);
+    const cost = Math.ceil(missing + missing * exp + missing * (0.5 * eq));
+    const treasury = this._getTreasury();
+    if (cost > treasury) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.FobNotEnoughFunds"));
+      return;
+    }
+    await this._setTreasury(treasury - cost);
+    await squad.setFlag(FLAG_SCOPE, "hp", hpMax);
+    const moraleMax = Number(squad.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+    if (moraleMax > 0) {
+      await squad.setFlag(FLAG_SCOPE, "morale", moraleMax);
+    }
+    ui.notifications.info(game.i18n.format("W4SQ.FobRestored", { cost }));
+  }
+
+  async _fobPayUpkeep() {
+    const squads = this._getFriendlySquads().filter(token => game.user.isGM || token.actor?.isOwner);
+    if (!squads.length) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.FobNoSquads"));
+      return;
+    }
+    const totalCost = squads.reduce((sum, token) => {
+      const actor = token.actor;
+      const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+      const exp = Number(actor.getFlag(FLAG_SCOPE, "experienceTier") || 0);
+      return sum + Math.max(0, hpMax + hpMax * exp);
+    }, 0);
+    const treasury = this._getTreasury();
+    if (totalCost > treasury) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.FobNotEnoughFunds"));
+      return;
+    }
+    await this._setTreasury(treasury - totalCost);
+    ui.notifications.info(game.i18n.format("W4SQ.FobUpkeepPaid", { cost: totalCost }));
+  }
+
+  async _fobClearEffects() {
+    const token = this._getSelectedToken();
+    const squad = token?.actor ?? null;
+    if (!squad) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.SelectSquad"));
+      return;
+    }
+    if (!(game.user.isGM || squad.isOwner)) {
+      ui.notifications.warn(game.i18n.localize("W4SQ.NoPermission"));
+      return;
+    }
+    await squad.setFlag(FLAG_SCOPE, "effects", []);
+    ui.notifications.info(game.i18n.localize("W4SQ.FobClearedEffects"));
   }
 
   async _adjustCP(commander, delta) {

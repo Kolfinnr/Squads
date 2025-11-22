@@ -163,6 +163,15 @@ Hooks.once("init", () => {
     type: Boolean,
     default: true
   });
+
+  game.settings.register(MODULE_ID, SETTINGS.treasury, {
+    name: "FOB Treasury",
+    hint: "Starting treasury amount for downtime actions on the command dashboard.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0
+  });
 });
 
 Hooks.once("ready", async () => {

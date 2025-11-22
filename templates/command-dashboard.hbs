@@ -156,4 +156,20 @@
   {{else}}
     {{> w4sq-squad-table squads=squads}}
   {{/if}}
+
+  <div class="fob-menu">
+    <div class="fob-header">
+      <p class="title">{{localize "W4SQ.FobMenu"}}</p>
+      <label>
+        {{localize "W4SQ.FobTreasury"}}
+        <input type="number" min="0" data-treasury-input value="{{treasury}}" />
+      </label>
+    </div>
+    <div class="fob-actions">
+      <button type="button" data-fob-action="rest">{{localize "W4SQ.FobRest"}}</button>
+      <button type="button" data-fob-action="restore">{{localize "W4SQ.FobRestore"}}</button>
+      <button type="button" data-fob-action="upkeep">{{localize "W4SQ.FobUpkeep"}}</button>
+      <button type="button" data-fob-action="clear-effects">{{localize "W4SQ.FobClearEffects"}}</button>
+    </div>
+  </div>
 </section>
