@@ -277,15 +277,30 @@ function ensureNumber(value) {
   return Number.isFinite(value) ? value : 0;
 }
 
-function getRoundSignature() {
-  const round = Number(game.combat?.round ?? 0);
-  const turn = Number(game.combat?.turn ?? 0);
-  const combatId = game.combat?.id ?? game.combat?._id ?? "";
+function resolveCombat(context = {}) {
+  const { combat: ctxCombat, actor } = context;
+  if (ctxCombat) return ctxCombat;
+  if (game.combat) return game.combat;
+
+  const combats = [...(game.combats ?? [])];
+  if (actor) {
+    const actorId = actor.id ?? actor._id;
+    const byActor = combats.find(c => c.combatants?.some(cm => cm?.actorId === actorId));
+    if (byActor) return byActor;
+  }
+  return combats[0] ?? null;
+}
+
+function getRoundSignature(context = {}) {
+  const combat = resolveCombat(context);
+  const round = Number(context.round ?? combat?.round ?? 0);
+  const turn = Number(context.turn ?? combat?.turn ?? 0);
+  const combatId = context.combatId ?? combat?.id ?? combat?._id ?? "";
   return { round, turn, combatId };
 }
 
-function isGreenSurgeRound() {
-  const { round } = getRoundSignature();
+function isGreenSurgeRound(context = {}) {
+  const { round } = getRoundSignature(context);
   return round > 0 && round % 4 === 0;
 }
 
@@ -312,7 +327,7 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
   const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
   const ratio = hpMax > 0 ? hp / hpMax : 0;
-  const { round } = getRoundSignature();
+  const { round } = getRoundSignature({ actor });
 
   const add = value => { next += Number(value) || 0; };
 
@@ -331,7 +346,7 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
     add(Math.min(4, Math.max(0, ticks)) * 5);
   }
   if (origin === "greenskin" && passives.greenSurge) {
-    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) || isGreenSurgeRound();
+    const surgeActive = Boolean(actor.getFlag(FLAG_SCOPE, "greenSurgeActive")) || isGreenSurgeRound({ actor });
     if (surgeActive) add(10);
   }
   const treacherousActive = origin === "ratmen" && passives.ratTreacherous;
@@ -473,7 +488,7 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
         amount: 10
       });
     }
-    if (passives.greenSurge && (actor.getFlag(FLAG_SCOPE, "greenSurgeActive") || isGreenSurgeRound())) {
+    if (passives.greenSurge && (actor.getFlag(FLAG_SCOPE, "greenSurgeActive") || isGreenSurgeRound({ actor }))) {
       damage += 20;
       await sendPassiveMessage(actor, "W4SQ.PassiveMsgGreenSurge", {
         name: actorName,
@@ -746,7 +761,11 @@ export async function handleMoraleZero(defender, attacker) {
 export async function handleTurnTick(actor, context = {}) {
   const origin = getOrigin(actor);
   const passives = getPassives(actor);
-  const { round } = getRoundSignature();
+  const { round } = getRoundSignature({ ...context, actor });
+
+  const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
+  const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
+  await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
 
   const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
   const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
@@ -763,7 +782,7 @@ export async function handleTurnTick(actor, context = {}) {
     });
   }
   if (origin === "greenskin") {
-    const surgeActive = passives.greenSurge && isGreenSurgeRound();
+    const surgeActive = passives.greenSurge && isGreenSurgeRound({ ...context, actor });
     await actor.setFlag(FLAG_SCOPE, "greenSurgeActive", surgeActive);
   }
   if (origin === "greenskin" && passives.greenMobMentality) {
