@@ -11,7 +11,7 @@
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
-- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized. Reorganization clears it once morale is back above half, but if morale falls to 25% or lower the squad stays Disorganized until morale recovers past that breakpoint.
+- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized. A successful Reorganization clears that morale stack and prevents further morale-based Disorganized from re-triggering while the unit stays above 25% morale. If morale falls to 25% or lower the squad stays Disorganized until morale recovers past that breakpoint.
 - **Shaken Crews**: When morale falls below 30% the squad’s TN drops by 10, making both attacks and maneuvers harder to land.
 
 ### Orders & Maneuver Toggle
@@ -130,7 +130,7 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 
 ### Universal Maneuvers
 - **Flank** (Average, enemy target): Apply −1d20 Defense (Flanked) for 2 rounds and inflict 1d20 Morale loss.
-- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round; Disorganized from morale stays on units at or below 25% morale until they rally past that point.
+- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round. Clearing morale-based Disorganized also flags the unit so it won’t re-trigger from morale drops while above 25% morale; units at or below 25% morale remain Disorganized until they rally past that point.
 - **Charge** (Easy, self): +1d20 TN, +1d20 Damage, grants *Charged* tag.
 - **Brace** (Easy, self): +1d10 Defense soak and *Braced* tag.
 - **Loose Formation** (Easy, self): +1d20 Ranged Resistance, −1d20 Defense soak, grants *Loose Formation* tag.
