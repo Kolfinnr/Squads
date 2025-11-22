@@ -71,5 +71,6 @@ export const SPECIALIST_TYPES = {
 
 export const SETTINGS = {
   enableHoB: "enableHoB",
-  showUnassignedToPlayers: "showUnassignedToPlayers"
+  showUnassignedToPlayers: "showUnassignedToPlayers",
+  treasury: "treasury"
 };

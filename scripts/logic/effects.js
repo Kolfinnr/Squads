@@ -7,7 +7,8 @@ const NEGATIVE_TAGS = new Set([
   "encircled",
   "skipTurn",
   "halfDamage",
-  "routed"
+  "routed",
+  "ratMuskDebuff"
 ]);
 
 const NEGATIVE_DICE_KEYS = [
@@ -174,6 +175,58 @@ export function getEffectsDetailed(actor) {
     ...effect,
     polarity: effectPolarity(effect)
   }));
+}
+
+const EFFECT_DICE_LABELS = {
+  tnDice: "W4SQ.EffectSummaryTN",
+  dmgDice: "W4SQ.EffectSummaryDamage",
+  defSoakDice: "W4SQ.EffectSummarySoak",
+  defPenaltyDice: "W4SQ.EffectSummaryDefense",
+  rangedResistDice: "W4SQ.EffectSummaryRangedResist",
+  maneuverTNDice: "W4SQ.EffectSummaryManeuver"
+};
+
+const EFFECT_TAG_LABELS = {
+  disorganized: "W4SQ.EffectSummaryDisorganized",
+  tired: "W4SQ.EffectSummaryTired",
+  flanked: "W4SQ.EffectSummaryFlanked",
+  encircled: "W4SQ.EffectSummaryEncircled",
+  skipTurn: "W4SQ.EffectSummarySkip",
+  halfDamage: "W4SQ.EffectSummaryHalfDamage",
+  noDefense: "W4SQ.EffectSummaryNoDefense",
+  disengaged: "W4SQ.EffectSummaryDisengaged",
+  routed: "W4SQ.EffectSummaryRouted",
+  charged: "W4SQ.EffectSummaryCharged",
+  braced: "W4SQ.EffectSummaryBraced",
+  fortified: "W4SQ.EffectSummaryFortified",
+  overwhelmed: "W4SQ.EffectSummaryOverwhelmed",
+  greenSurge: "W4SQ.EffectSummaryGreenSurge",
+  ratMuskBuff: "W4SQ.EffectSummaryMuskOfFearBuff",
+  ratMuskDebuff: "W4SQ.EffectSummaryMuskOfFearDebuff"
+};
+
+export function summarizeEffect(effect) {
+  const mods = effect?.mods ?? {};
+  const parts = [];
+
+  for (const [key, labelKey] of Object.entries(EFFECT_DICE_LABELS)) {
+    const value = mods[key];
+    if (value !== undefined && value !== null && String(value).trim()) {
+      parts.push(game.i18n.format(labelKey, { value }));
+    }
+  }
+
+  const tags = mods.tags ?? {};
+  const tagParts = [];
+  for (const [tag, labelKey] of Object.entries(EFFECT_TAG_LABELS)) {
+    if (tags[tag]) tagParts.push(game.i18n.localize(labelKey));
+  }
+  if (tagParts.length) {
+    parts.push(tagParts.join(", "));
+  }
+
+  if (!parts.length) return game.i18n.localize("W4SQ.EffectSummaryEmpty");
+  return parts.join("; ");
 }
 
 function shouldBlockEffect(actor, effect) {

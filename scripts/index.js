@@ -163,6 +163,15 @@ Hooks.once("init", () => {
     type: Boolean,
     default: true
   });
+
+  game.settings.register(MODULE_ID, SETTINGS.treasury, {
+    name: "FOB Treasury",
+    hint: "Starting treasury amount for downtime actions on the command dashboard.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0
+  });
 });
 
 Hooks.once("ready", async () => {
@@ -245,7 +254,9 @@ Hooks.on("renderTokenHUD", (hud, html) => {
   btn.innerHTML = `<i class="fas fa-chess-knight"></i>`;
   btn.title = game.i18n.localize("W4SQ.CommandDashboard");
   btn.addEventListener("click", () => openCommandDashboard(token));
-  html.find(".left").append(btn);
+  $(html)
+    .find(".left")
+    .append(btn);
 });
 
 function canSeeSquad(token) {
