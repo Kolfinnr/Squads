@@ -767,6 +767,10 @@ export async function handleTurnTick(actor, context = {}) {
   const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
   await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
 
+  const ratMuskActive = origin === "ratmen" && passives.ratMuskOfFear;
+  const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
+  await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
+
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
     const roll = await new Roll("1d20+10").evaluate({});
     const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
