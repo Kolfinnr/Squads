@@ -102,6 +102,8 @@ const PASSIVE_LABELS = {
 };
 
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
+const RAT_MUSK_BUFF_KEY = "rat-musk-buff";
+const RAT_MUSK_DEBUFF_KEY = "rat-musk-debuff";
 
 function safeName(entity) {
   if (!entity) {
@@ -242,6 +244,33 @@ function armyHpRatio(actor) {
     return hpRatio(actor);
   }
   return Math.max(0, Math.min(1, total / max));
+}
+
+async function syncRatMuskEffect(actor, enabled, ratio) {
+  if (!actor) return;
+  const label = game.i18n.localize("W4SQ.PassiveRatMuskOfFear");
+  if (!enabled) {
+    await removeEffectByKey(actor, RAT_MUSK_BUFF_KEY);
+    await removeEffectByKey(actor, RAT_MUSK_DEBUFF_KEY);
+    return;
+  }
+
+  const buffing = ratio > 0.5;
+  if (buffing) {
+    await removeEffectByKey(actor, RAT_MUSK_DEBUFF_KEY);
+    await ensureEffect(actor, {
+      key: RAT_MUSK_BUFF_KEY,
+      label,
+      mods: { tags: { ratMuskOfFear: true, ratMuskBuff: true } }
+    }, eff => eff?.key === RAT_MUSK_BUFF_KEY);
+  } else {
+    await removeEffectByKey(actor, RAT_MUSK_BUFF_KEY);
+    await ensureEffect(actor, {
+      key: RAT_MUSK_DEBUFF_KEY,
+      label,
+      mods: { tags: { ratMuskOfFear: true, ratMuskDebuff: true } }
+    }, eff => eff?.key === RAT_MUSK_DEBUFF_KEY);
+  }
 }
 
 function ensureNumber(value) {
@@ -516,6 +545,8 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   const ratio = hpRatio(defender);
   const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
 
+  await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
+
   const reduceFlat = amount => {
     damage = clampNonNegative(damage - amount);
     moraleBonus = clampNonNegative(moraleBonus - amount);
@@ -654,6 +685,10 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
   let next = Number(total) || 0;
   const origin = getOrigin(defender);
   const passives = getPassives(defender);
+  const ratio = hpRatio(defender);
+  const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
+
+  await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
   if (origin === "human") {
     next = Math.max(0, next - 5);
@@ -669,8 +704,7 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
     next += 5;
     if (passives.ratCoward) next += 20;
     if (passives.ratMuskOfFear) {
-      const army = armyHpRatio(defender);
-      next = army > 0.5 ? Math.floor(next * 0.75) : Math.floor(next * 1.5);
+      next = armyRatio > 0.5 ? Math.floor(next * 0.75) : Math.floor(next * 1.5);
     }
   }
   if (actorHasTag(defender, "overwhelmed")) {

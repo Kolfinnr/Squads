@@ -7,7 +7,8 @@ const NEGATIVE_TAGS = new Set([
   "encircled",
   "skipTurn",
   "halfDamage",
-  "routed"
+  "routed",
+  "ratMuskDebuff"
 ]);
 
 const NEGATIVE_DICE_KEYS = [
@@ -198,7 +199,9 @@ const EFFECT_TAG_LABELS = {
   charged: "W4SQ.EffectSummaryCharged",
   braced: "W4SQ.EffectSummaryBraced",
   fortified: "W4SQ.EffectSummaryFortified",
-  overwhelmed: "W4SQ.EffectSummaryOverwhelmed"
+  overwhelmed: "W4SQ.EffectSummaryOverwhelmed",
+  ratMuskBuff: "W4SQ.EffectSummaryMuskOfFearBuff",
+  ratMuskDebuff: "W4SQ.EffectSummaryMuskOfFearDebuff"
 };
 
 export function summarizeEffect(effect) {
