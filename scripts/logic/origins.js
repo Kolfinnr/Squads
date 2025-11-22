@@ -134,9 +134,15 @@ export function getPassives(actor) {
   const source = (flagPassives && typeof flagPassives === "object")
     ? flagPassives
     : (foundry.utils.getProperty(actor.system ?? actor.data?.data, "squad.passives") || {});
+  const origin = getOrigin(actor);
+  const defaults = new Set(ORIGIN_PASSIVES[origin] ?? []);
   const result = {};
   for (const key of ALL_PASSIVE_KEYS) {
-    result[key] = Boolean(source[key]);
+    if (key in source) {
+      result[key] = Boolean(source[key]);
+    } else {
+      result[key] = defaults.has(key);
+    }
   }
   return result;
 }
@@ -166,7 +172,7 @@ export function buildDefaultPassives(origin) {
   }
   if (origin && ORIGIN_PASSIVES[origin]) {
     for (const key of ORIGIN_PASSIVES[origin]) {
-      passives[key] = Boolean(passives[key]);
+      passives[key] = true;
     }
   }
   return passives;
