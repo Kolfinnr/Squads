@@ -1,7 +1,7 @@
 import { FLAG_SCOPE, SHEET_TEMPLATE, WEAPONS, ROLES, DEFAULT_FLAGS, SPECIALIST_TYPES } from "../config.js";
 import { doSquadAction } from "../features/actions.js";
 import { openManeuverDialog } from "../features/maneuver-action.js";
-import { getEffectsDetailed } from "../logic/effects.js";
+import { getEffectsDetailed, summarizeEffect } from "../logic/effects.js";
 import { getCooldown, mergeCooldownEntries } from "../logic/cooldowns.js";
 import { maneuversFor } from "../logic/maneuvers.js";
 import { openCommandDashboard } from "../features/command-dashboard.js";
@@ -63,6 +63,7 @@ export class SquadActorSheet extends ActorSheet {
       const isPassive = Boolean(effect?.mods?.tags?.passive);
       const entry = {
         ...effect,
+        summary: summarizeEffect(effect),
         durationLabel: isPassive
           ? game.i18n.localize("W4SQ.PassiveEffectDuration")
           : formatTurns(effect.duration ?? 0)
@@ -160,6 +161,7 @@ export class SquadActorSheet extends ActorSheet {
     const root = html[0] ?? html;
     this._bindFlagInputs(root);
     this._bindSystemInputs(root);
+    this._bindEffectSummaries(root);
 
     html.find('button[data-action="melee"]').on("click", () => doSquadAction(this.actor, "melee"));
     html.find('button[data-action="ranged"]').on("click", () => doSquadAction(this.actor, "ranged"));
@@ -193,6 +195,50 @@ export class SquadActorSheet extends ActorSheet {
         } catch (err) {
           console.error(`wfrp4e-squads | Failed to update ${path}`, err);
         }
+      });
+    });
+  }
+
+  _bindEffectSummaries(root) {
+    if (!root) return;
+    root.querySelectorAll('.effect-chip[data-summary]').forEach(el => {
+      el.addEventListener("click", ev => {
+        const { summary } = ev.currentTarget.dataset;
+        if (!summary) return;
+        const container = ev.currentTarget.closest(".effect-list");
+        if (!container) return;
+
+        const existing = container.querySelector(".effect-summary-popup");
+        if (existing?.dataset?.source === summary) {
+          existing.remove();
+          return;
+        }
+        existing?.remove();
+
+        const label = ev.currentTarget.dataset.label || game.i18n.localize("W4SQ.ActiveEffects");
+        const closeLabel = game.i18n.localize("Close");
+        const popup = document.createElement("div");
+        popup.classList.add("effect-summary-popup");
+        popup.dataset.source = summary;
+
+        const closeBtn = document.createElement("button");
+        closeBtn.type = "button";
+        closeBtn.classList.add("close");
+        closeBtn.setAttribute("aria-label", closeLabel);
+        closeBtn.textContent = "\u00d7";
+
+        const labelEl = document.createElement("p");
+        labelEl.classList.add("label");
+        labelEl.textContent = label;
+
+        const summaryEl = document.createElement("p");
+        summaryEl.classList.add("summary");
+        summaryEl.textContent = summary;
+
+        closeBtn.addEventListener("click", () => popup.remove());
+
+        popup.append(closeBtn, labelEl, summaryEl);
+        container.appendChild(popup);
       });
     });
   }
