@@ -6,12 +6,13 @@
 - **HP / HP Max**: Track the formation’s current strength. Damage reduces HP; when it reaches 0 the unit is spent.
 - **Morale / Morale Max**: Represents cohesion and willingness to fight. Many effects raise or lower morale.
 - **Experience Tier & Equipment Tier**: Improve target numbers (TN) and damage output. Equipment also contributes to defensive soak.
-- **Role & Weapon**: Determine role bonuses and which weapon maneuvers are available.
+- **Role & Weapon**: Determine role bonuses and which weapon maneuvers are available. **Hybrid** units can mix melee and ranged gear but suffer a −1d10 hybrid penalty when rolling melee or ranged actions.
 - **Traits**: Flags such as Fear, Terror, and Unbreakable influence morale loss and special rules.
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
 - **Turn Timers**: Durations and cooldowns tick at the start of a squad’s turn; the UI now reports remaining turns rather than generic rounds.
-- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized until it is cleared (for example, by Reorganization).
+- **Disorganized Threshold**: Whenever morale drops below 50% the unit automatically gains Disorganized. Reorganization clears it once morale is back above half, but if morale falls to 25% or lower the squad stays Disorganized until morale recovers past that breakpoint.
+- **Shaken Crews**: When morale falls below 30% the squad’s TN drops by 10, making both attacks and maneuvers harder to land.
 
 ### Orders & Maneuver Toggle
 - Each squad can hold a current **Order** (Move, Attack, Idle, or blank). Use the dashboard or sheet to note plans.
@@ -20,6 +21,10 @@
 
 ### Command Points (CP)
 - Commanders start with a default pool (3 of 6). Spending CP triggers command abilities. Adjustments appear on the dashboard, and the pool refills only through in-game rewards or GM fiat.
+
+### Reloading Rules
+- Ranged attacks apply an automatic Reload cooldown: 1 round for bows and crossbows, 2 for firearms, and 3 for artillery.
+- **Fast Reload** shortens the cooldown to a minimum of 1 round, while **Continuous Fire** skips reloading entirely until the volley ends.
 
 ## Specialist Roles
 - Set a squad’s role to **Specialist** and choose a subtype (Mage or Engineer) on the sheet.
@@ -109,7 +114,7 @@
 | **New Orders!** | 1 CP | Clears current orders and maneuver reminder, then prompts for Melee, Ranged, or Hold. Posts the new order to chat. Commanders cannot receive orders. |
 | **Rally!** | 1 CP | Clears Routed and Disorganized, then restores 4d20 Morale (units at 0 Morale stand back up at 1). |
 | **Unit! Withdraw!** | 1 CP | Removes Flanked/Encircled tags and grants Withdraw for 1 round (+1d10 Defense soak, Disengaged). |
-| **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. |
+| **Intercept!** | 1 CP | Infantry squad within 3 tiles immediately Guard an allied unit, redirecting the next melee attack to themselves (+1d20 HP/+1d20 Morale strain) and marking them Spent for maneuvers. The protected ally gains Guarded Withdrawal (Disengaged) for 1 round after the intercept resolves. |
 | **Player Special Action** | 1 CP | Prompts custom text and posts it to chat for narration. |
 | **Get in Formation!** | 2 CP | Grants +8d10 maneuver TN bonus for 1 round. |
 
@@ -125,12 +130,12 @@ Each maneuver requires a maneuver roll using the squad’s TN plus difficulty mo
 
 ### Universal Maneuvers
 - **Flank** (Average, enemy target): Apply −1d20 Defense (Flanked) for 2 rounds and inflict 1d20 Morale loss.
-- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round.
+- **Reorganization** (Easy, self): Remove negative statuses (Tired/Disorganized), gain 2d20 Morale, but suffer −1d10 TN and −1d10 Defense soak for 1 round; Disorganized from morale stays on units at or below 25% morale until they rally past that point.
 - **Charge** (Easy, self): +1d20 TN, +1d20 Damage, grants *Charged* tag.
 - **Brace** (Easy, self): +1d10 Defense soak and *Braced* tag.
 - **Loose Formation** (Easy, self): +1d20 Ranged Resistance, −1d20 Defense soak, grants *Loose Formation* tag.
 - **Disengage** (Easy, self): +1d10 Defense soak and *Disengaged* tag.
-- **Guard** (Easy, ally, CD 1, infantry only): Assign the squad to protect an adjacent ally. The next melee attack against that ally is redirected to the guard, dealing the normal result plus +1d20 HP and +1d20 Morale strain to the guarding unit while allowing the ally to disengage safely.
+- **Guard** (Easy, ally, CD 1, infantry only): Assign the squad to protect an adjacent ally. The next melee attack against that ally is redirected to the guard, dealing the normal result plus +1d20 HP and +1d20 Morale strain to the guarding unit while allowing the ally to disengage safely (they gain Guarded Withdrawal/Disengaged for 1 round).
 
 ### Sword Maneuvers
 - **Mordhau Swordsmanship** (Hard, self, CD 3): +5d10 TN, +4d10 Damage.
