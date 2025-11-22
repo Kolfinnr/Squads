@@ -261,11 +261,74 @@
   padding-bottom: 0.5rem;
 }
 
+.w4sq-command header .header-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.w4sq-command header .header-main {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
 .w4sq-command .cp-bar {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.w4sq-command .strength-summary {
+  flex: 0 0 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  text-align: right;
+}
+
+.w4sq-command .strength-summary .strength-title {
+  margin: 0;
+  font-weight: bold;
+}
+
+.w4sq-command .strength-summary .strength-values {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  font-size: 0.9rem;
+}
+
+.w4sq-command .strength-summary .strength-entry.allied {
+  color: #2e7d32;
+}
+
+.w4sq-command .strength-summary .strength-entry.hostile {
+  color: #c62828;
+}
+
+.w4sq-command .strength-bar {
+  position: relative;
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.w4sq-command .strength-bar .segment {
+  display: block;
+  height: 100%;
+}
+
+.w4sq-command .strength-bar .segment.allied {
+  background: linear-gradient(90deg, #81c784, #2e7d32);
+}
+
+.w4sq-command .strength-bar .segment.hostile {
+  background: linear-gradient(90deg, #f44336, #c62828);
 }
 
 .w4sq-command header .group-label {

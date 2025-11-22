@@ -307,6 +307,39 @@ export class W4SQCommandApp extends Application {
     });
   }
 
+  _getStrengthTotals() {
+    const tokens = collectActiveTokens().filter(canSee);
+    const totals = {
+      allied: { current: 0, max: 0 },
+      hostile: { current: 0, max: 0 }
+    };
+
+    for (const token of tokens) {
+      const actor = token.actor;
+      if (!actor) continue;
+      const disposition = getDisposition(token);
+      const bucket =
+        disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY
+          ? totals.allied
+          : disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
+          ? totals.hostile
+          : null;
+      if (!bucket) continue;
+      bucket.current += Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      bucket.max += Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+    }
+
+    const totalCurrent = totals.allied.current + totals.hostile.current;
+    const alliedPct = totalCurrent > 0 ? Math.round((totals.allied.current / totalCurrent) * 100) : 50;
+
+    return {
+      ...totals,
+      totalCurrent,
+      alliedPct,
+      hostilePct: 100 - alliedPct
+    };
+  }
+
   async getData() {
     const commanderInfo = this._getCommander();
     const commanderActor = commanderInfo?.actor ?? null;
@@ -372,7 +405,8 @@ export class W4SQCommandApp extends Application {
         value: opt.value,
         label: game.i18n.localize(opt.label)
       })),
-      dispositionLabel: dispositionLabel(this.disposition)
+      dispositionLabel: dispositionLabel(this.disposition),
+      strength: this._getStrengthTotals()
     };
   }
 
