@@ -32,6 +32,10 @@
 - **Track fatigue:** the tired condition now penalises bow and crossbow squads unless another effect overrides the TN modifier.
 - **Reloading is automatic:** ranged units receive reloading cooldowns after firing, and the dashboard highlights their status as “Reloading” until the timer expires.
 
+## Reference Docs
+- `PLAYER_GUIDE.md` for table-facing rules and content.
+- `docs/PROJECT_OVERVIEW.md` for a code-and-systems refresher covering features, formulas, parameters, and exported functions.
+
 ## For Developers
 - Entry point: `scripts/index.js` wires up hooks, sheet registration, and world settings.
 - Combat logic lives under `scripts/features/` and `scripts/logic/`.
