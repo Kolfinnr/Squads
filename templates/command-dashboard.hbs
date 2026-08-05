@@ -69,7 +69,7 @@
         {{#each squads as |squad|}}
           <tr class="{{#if squad.isSelected}}selected{{/if}}">
             <td><button data-action="select" data-id="{{squad.id}}">{{localize "W4SQ.Select"}}</button></td>
-            <td>{{squad.name}}</td>
+            <td>{{squad.name}}{{#if squad.binding}}<div class="binding-state">{{squad.binding.label}}{{#if squad.binding.crumbling}} · {{squad.binding.crumblingLabel}}{{/if}}</div>{{/if}}</td>
             <td>
               <div class="bar">
                 <div class="fill" style="width: {{squad.hpPct}}%"></div>
