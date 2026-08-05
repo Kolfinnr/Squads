@@ -1,7 +1,7 @@
 import { FLAG_SCOPE } from "../config.js";
 import { addEffect, attachGuard, clearNegative, getEffects, removeDisorganized } from "./effects.js";
 import { getCooldown, setCooldown } from "./cooldowns.js";
-import { createAoEFromEffect } from "../aoe.js";
+import { postAoEPlacementChat } from "../aoe.js";
 import {
   isMage,
   isEngineer,
@@ -477,16 +477,15 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "firestorm",
         duration: 3,
-        data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 }
-      });
+        data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3, magical: true }
+      }, "W4SQ.ChatFirestormDeploy");
       await clearChannelledMagic(actor);
-      await postChat(actor, "W4SQ.ChatFirestormDeploy", { name: actor.name ?? "" });
     }
   },
   fireball: {
@@ -498,16 +497,15 @@ export const MANEUVERS = {
     target: "enemy",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "fireball",
         duration: 1,
-        data: { hpDamage: "3d20", moraleDamage: "4d20" }
-      });
+        data: { hpDamage: "3d20", moraleDamage: "4d20", magical: true }
+      }, "W4SQ.ChatFireball");
       await clearChannelledMagic(actor);
-      await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "" });
     }
   },
   doomGloom: {
@@ -565,9 +563,35 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true } }, 2, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
+      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true, magical: true } }, 2, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFireAspect", { name: actor.name ?? "", target: target.name ?? "" });
+    }
+  },
+  magicWeaponEmbedment: {
+    name: "Magic Weapon Embedment",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "average",
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await addEffect(target, E({ tags: { magical: true } }, 1, `magic-weapon-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWeapon")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatMagicWeapon", { name: actor.name ?? "", target: target.name ?? "" });
+    }
+  },
+  magicWard: {
+    name: "Magic Ward",
+    category: "specialist",
+    specialistType: "mage",
+    difficulty: "average",
+    target: "ally",
+    apply: async ({ actor, target }) => {
+      if (!target) return;
+      await addEffect(target, E({ tags: { nonMagicalResistance: true } }, 1, `magic-ward-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWard")));
+      await clearChannelledMagic(actor);
+      await postChat(actor, "W4SQ.ChatMagicWard", { name: actor.name ?? "", target: target.name ?? "" });
     }
   },
 
@@ -580,15 +604,14 @@ export const MANEUVERS = {
     target: "none",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "lineDefense",
         duration: 4,
         data: {}
-      });
-      await postChat(actor, "W4SQ.ChatLineDefense", { name: actor.name ?? "" });
+      }, "W4SQ.ChatLineDefense");
     }
   },
   minefield: {
@@ -600,15 +623,14 @@ export const MANEUVERS = {
     target: "none",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "minefield",
         duration: 4,
         data: { hpDamage: "3d20", moraleDamage: "4d20" }
-      });
-      await postChat(actor, "W4SQ.ChatMinefieldDeploy", { name: actor.name ?? "" });
+      }, "W4SQ.ChatMinefieldDeploy");
     }
   },
   wolfPits: {
@@ -620,15 +642,14 @@ export const MANEUVERS = {
     target: "none",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "wolfPits",
         duration: 4,
         data: { hpDamage: "2d10", moraleDamage: "2d10" }
-      });
-      await postChat(actor, "W4SQ.ChatWolfPitsDeploy", { name: actor.name ?? "" });
+      }, "W4SQ.ChatWolfPitsDeploy");
     }
   },
   flashbombs: {
@@ -653,15 +674,14 @@ export const MANEUVERS = {
     target: "self",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
-      await createAoEFromEffect({
+      await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
         casterTokenId: token?.id ?? null,
         type: "fortify",
         duration: null,
         data: {}
-      });
-      await postChat(actor, "W4SQ.ChatFortify", { name: actor.name ?? "" });
+      }, "W4SQ.ChatFortify");
     }
   },
   ballisticCalibration: {

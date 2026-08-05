@@ -7,6 +7,7 @@
 - **Morale / Morale Max**: Represents cohesion and willingness to fight. Many effects raise or lower morale.
 - **Experience Tier & Equipment Tier**: Improve target numbers (TN) and damage output. Equipment also contributes to defensive soak.
 - **Role & Weapon**: Determine role bonuses and which weapon maneuvers are available. **Hybrid** units can mix melee and ranged gear but suffer a −1d10 hybrid penalty when rolling melee or ranged actions.
+- **Magical Weapon**: Toggle this beside Equipment when a unit’s normal attacks count as magical. Magical attacks bypass non-magical damage resistance such as Ethereal protection.
 - **Traits**: Flags such as Fear, Terror, and Unbreakable influence morale loss and special rules.
 - **Effects**: Temporary buffs or penalties listed on the sheet and dashboard. Green chips are boons; red chips are debuffs.
 - **Cooldowns**: Show abilities or commands waiting to refresh. The command dashboard displays remaining rounds and special statuses such as Reloading.
@@ -89,14 +90,36 @@
 - **Treacherous:** Attacking an ally grants +40 attack TN and +10 HP damage for that strike and the following 2 rounds.
 - **Numerous:** AoE and artillery deal +40 HP damage to the unit; targets struck gain *Overwhelmed* (−5 TN, +10 Morale damage taken) for 2 rounds.
 
+### Undead
+- **Origin:** Undead Morale measures necromantic binding rather than courage. Undead ignore Fear/Terror morale additions and do not gain normal low-Morale Disorganized or Routed states.
+- **Binding:** If an allied Undead Commander is present, Undead take normal Morale damage. Without one, non-Vampiric Undead take double Morale damage. The command dashboard shows whether each Undead squad is **Bound** or **Unbound**.
+- **Crumbling:** Non-Vampiric Undead at 0 Morale gain *Crumbling* instead of routing. Crumbling doubles final incoming HP damage and ends once Morale is restored above 0.
+- **Puppet Host:** −10 attack TN, −10 maneuver TN, −1d10 HP damage dealt, immune to Tired, and takes +10 incoming HP damage. While Bound and not Crumbling, restores 1d10 + 10 HP at the start of its turn.
+- **True Undead:** +10 attack TN, +10 maneuver TN, and +10 Morale damage on successful attacks.
+- **Vampiric:** Restores 25% of final HP damage dealt, capped at 30 HP per attack. Vampiric units do not suffer doubled Morale damage while Unbound, ignore Crumbling, and become Disorganized at 0 Morale instead.
+- **Ethereal:** After all soak is calculated, halve final incoming non-magical HP damage. Magical attacks bypass this reduction. Ethereal units add +20 Morale damage on successful attacks, take half Morale damage, receive no ordinary Equipment armor soak, and can still Crumble.
+- **Regeneration:** Restores 1d20 + 10 HP at the start of its turn without needing an Undead Commander, but stops while Crumbling.
+- **Grave Discipline:** +1d10 + 5 TN to maneuver checks.
+- **Frenzy:** +10 attack TN, +1d10 HP damage, and −10 total soak.
+- **Dread Host:** Successful attacks inflict +20 Morale damage; Charges add another 1d20 Morale damage; targets below 50% Morale suffer +10 more Morale damage.
+- **Undead Cohesion:** Gain +4 TN for each other allied Undead Cohesion squad in combat, capped at +20.
+
+#### Undead table guidance
+- Use **fewer, larger Puppet Host squads** to represent zombie hordes instead of placing many weak tokens. A single 400–600 HP zombie block is easier to run and better represents a tarpit that absorbs actions, collapses when Unbound, and avoids filling the battlefield with chip-damage tokens.
+- Treat **Puppets and True Undead** as anvils, **Ethereal** units as morale-pressure control pieces, and **Vampiric** units as elite hammers. Stacking passives is allowed for GM tooling, but combinations such as Vampiric + Regeneration + Dread Host should generally be reserved for boss or set-piece units.
+- Counterplay should stay visible: kill or isolate the Undead Commander, restore friendly morale, and use Magical Weapons or mage spells into Ethereal formations.
+
 ### Mage Maneuvers (Hard, CD 4 unless noted)
 - **Channel Magic** (Average, self): Prerequisite to cast. Grants the Channelled Magic status.
 - **Firestorm** (enemy): 4d20 HP and 6d20 Morale damage in a roaming 4-yard blaze that pulses once per round for 3 rounds.
-- **Fireball** (enemy): 20 + 3d10 HP and Morale damage with a dramatic chat recap.
+- **Fireball** (enemy): 3d20 HP and 4d20 Morale damage with a dramatic chat recap.
 - **Doom & Gloom** (enemy): Drains 50 + 5d10 Morale and inflicts −2d20 TN for 2 rounds.
 - **Transmutation of Lead** (enemy): Strips Equipment Tier ×1d10 soak for 2 rounds.
 - **Magical Revification** (ally): Restores 20 + 2d20 HP and 10 + 3d20 Morale.
 - **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 2 rounds.
+- Mage spell damage and Fire Aspect-empowered attacks count as magical.
+- **Magic Weapon Embedment** makes an allied squad's attacks magical for one turn, while **Magic Ward** halves non-magical damage suffered by an allied squad for one turn. Neither spell has a cooldown.
+- Spells and engineering maneuvers that create an area post a draggable placement link in chat; drag it onto the intended battlefield position to deploy the template.
 
 ### Engineer Maneuvers (Average/Hard, CD 2)
 - **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies standing inside (the bonus ends as soon as they leave) for 4 rounds.
