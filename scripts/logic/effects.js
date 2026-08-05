@@ -231,6 +231,9 @@ export function summarizeEffect(effect) {
 
 function shouldBlockEffect(actor, effect) {
   const tags = effect?.mods?.tags ?? {};
+  const origin = actor?.getFlag?.(FLAG_SCOPE, "origin");
+  const passives = actor?.getFlag?.(FLAG_SCOPE, "passives") ?? {};
+  if (origin === "undead" && passives.undeadPuppetHost && tags.tired) return true;
   if (tags.flanked && (actorHasTag(actor, "immuneFlank") || actorHasTag(actor, "fortified"))) return true;
   if (tags.encircled && actorHasTag(actor, "immuneEncircle")) return true;
   return false;
@@ -355,7 +358,7 @@ export function aggregateForAttack(actor, context = {}) {
     }
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
   }
@@ -395,7 +398,7 @@ export function aggregateForDefense(actor, options = {}) {
     pushDice(defSoakParts, mods.defSoakDice);
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
     if (mods.tags?.fortified && action === "ranged") {
