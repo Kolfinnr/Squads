@@ -5,7 +5,7 @@ import { tickEffects, ensureDisorganized } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
-import { handleTurnTick } from "./logic/origins.js";
+import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
 
@@ -56,6 +56,7 @@ async function enforceMoraleState(actor) {
   const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   if (!moraleMax) return;
   const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
+  if (getOrigin(actor) === "undead") return;
   if (moraleMax > 0 && morale / moraleMax < 0.5) {
     await ensureDisorganized(actor, { source: "morale" });
   }

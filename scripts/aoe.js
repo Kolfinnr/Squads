@@ -1,5 +1,6 @@
 import { MODULE_ID, FLAG_SCOPE } from "./config.js";
 import { addEffect, ensureEffect, removeEffectByKey, ensureDisorganized } from "./logic/effects.js";
+import { adjustIncomingDamage, getOrigin, handleMoraleZero } from "./logic/origins.js";
 
 const AOE_FLAG = "aoe";
 const DEFAULT_DISTANCE = 4;
@@ -529,6 +530,14 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {
     if (hpFormula) {
       const hpRoll = await rollFormula(hpFormula);
       hpTotal = hpRoll.total;
+      const adjusted = await adjustIncomingDamage(actor, null, {
+        damage: hpTotal,
+        moraleBonus: 0,
+        damageType: "aoe",
+        isMagical: Boolean(context?.state?.data?.magical),
+        isAoE: true
+      });
+      hpTotal = adjusted.damage;
       if (hpTotal > 0) inflicted = true;
       await adjustActorFlag(actor, "hp", -hpTotal, "hpMax");
     }
@@ -538,16 +547,20 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {
       if (moraleTotal > 0) inflicted = true;
       const result = await adjustActorFlag(actor, "morale", -moraleTotal, "moraleMax");
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-      if (moraleMax > 0 && result.after / moraleMax < 0.5) {
+      if (getOrigin(actor) !== "undead" && moraleMax > 0 && result.after / moraleMax < 0.5) {
         await ensureDisorganized(actor, { source: "morale" });
       }
       if (result.before > 0 && result.after <= 0) {
-        await ensureEffect(actor, {
-          key: `routed-zone-${crypto.randomUUID?.() ?? randomID()}`,
-          label: game.i18n.localize("W4SQ.EffectRouted"),
-          duration: 99,
-          mods: { tags: { routed: true, disorganized: true } }
-        }, eff => eff?.mods?.tags?.routed);
+        if (getOrigin(actor) === "undead") {
+          await handleMoraleZero(actor, null);
+        } else {
+          await ensureEffect(actor, {
+            key: `routed-zone-${crypto.randomUUID?.() ?? randomID()}`,
+            label: game.i18n.localize("W4SQ.EffectRouted"),
+            duration: 99,
+            mods: { tags: { routed: true, disorganized: true } }
+          }, eff => eff?.mods?.tags?.routed);
+        }
       }
     }
     if (inflicted) {

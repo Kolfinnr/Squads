@@ -483,7 +483,7 @@ export const MANEUVERS = {
         casterTokenId: token?.id ?? null,
         type: "firestorm",
         duration: 3,
-        data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3 }
+        data: { hpDamage: "4d20", moraleDamage: "6d20", movePerRound: 3, magical: true }
       });
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFirestormDeploy", { name: actor.name ?? "" });
@@ -504,7 +504,7 @@ export const MANEUVERS = {
         casterTokenId: token?.id ?? null,
         type: "fireball",
         duration: 1,
-        data: { hpDamage: "3d20", moraleDamage: "4d20" }
+        data: { hpDamage: "3d20", moraleDamage: "4d20", magical: true }
       });
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFireball", { name: actor.name ?? "" });
@@ -565,7 +565,7 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true } }, 2, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
+      await addEffect(target, E({ tnDice: "+4d10", dmgDice: "+3d20", defSoakDice: "+1d20", tags: { fireAspect: true, magical: true } }, 2, `fire-aspect-${randomID()}`, game.i18n.localize("W4SQ.ManeuverFireAspect")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatFireAspect", { name: actor.name ?? "", target: target.name ?? "" });
     }
