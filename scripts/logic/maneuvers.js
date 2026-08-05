@@ -16,6 +16,8 @@ import {
   consumeSpecialistEcho
 } from "./specialists.js";
 
+const randomID = foundry.utils.randomID;
+
 const E = (mods, duration = 1, key = null, label = null) => ({
   key: key || crypto.randomUUID?.() || randomID(),
   label: label || "Effect",

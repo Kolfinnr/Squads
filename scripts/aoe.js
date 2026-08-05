@@ -65,7 +65,7 @@ export function registerAoEHooks() {
   Hooks.on("combatRound", handleCombatRound);
   Hooks.on("updateCombat", handleUpdateCombat);
   Hooks.on("deleteMeasuredTemplate", handleTemplateDelete);
-  Hooks.on("renderChatMessage", activateAoEChatLink);
+  Hooks.on("renderChatMessageHTML", activateAoEChatLink);
   Hooks.on("dropCanvasData", handleAoECanvasDrop);
 }
 
@@ -85,11 +85,20 @@ export async function postAoEPlacementChat(actor, opts = {}, messageKey = "W4SQ.
 
 function activateAoEChatLink(_message, html) {
   const root = html?.[0] ?? html;
-  for (const link of root?.querySelectorAll?.(".w4sq-aoe-drag") ?? []) {
+  const links = [
+    ...(root?.matches?.(".w4sq-aoe-drag") ? [root] : []),
+    ...(root?.querySelectorAll?.(".w4sq-aoe-drag") ?? [])
+  ];
+  for (const link of links) {
+    if (link.dataset.aoeDragReady === "true") continue;
+    link.dataset.aoeDragReady = "true";
     link.addEventListener("dragstart", event => {
       const raw = link.dataset.aoePayload;
       if (!raw) return;
-      event.dataTransfer?.setData("text/plain", decodeURIComponent(raw));
+      const json = decodeURIComponent(raw);
+      event.dataTransfer?.setData("text/plain", json);
+      event.dataTransfer?.setData("application/json", json);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
     });
   }
 }
