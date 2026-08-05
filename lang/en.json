@@ -311,7 +311,7 @@
   "W4SQ.ManeuverMagicWeapon": "Magic Weapon Embedment",
   "W4SQ.ChatMagicWeapon": "{name} enchants {target}'s weapons; their attacks are magical for one turn.",
   "W4SQ.ManeuverMagicWard": "Magic Ward",
-  "W4SQ.ChatMagicWard": "{name} wards {target}; non-magical damage is halved for one turn.",
+  "W4SQ.ChatMagicWard": "{name} wards {target}; non-magical damage is halved until the mage's second following turn.",
   "W4SQ.ChatNonMagicalResistance": "Non-magical resistance blocked {total} damage",
   "W4SQ.ChatAoEReady": "{name} prepares an area effect.",
   "W4SQ.ChatAoEDragLink": "Click to preview {aoe}, or drag it onto the battlefield",

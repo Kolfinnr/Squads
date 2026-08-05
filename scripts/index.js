@@ -1,7 +1,7 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects, ensureDisorganized, removeEffectsByTag } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized, removeEffectsByTag, advanceEffectsByTag } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
@@ -118,7 +118,7 @@ function resetProcessedTurn(combat) {
 async function expireEffectsForTurnEntry(actor) {
   if (!actor) return;
   for (const candidate of game.actors?.contents ?? []) {
-    await removeEffectsByTag(candidate, "expiresOnActorTurn", actor.id);
+    await advanceEffectsByTag(candidate, "expiresOnActorTurn", actor.id);
   }
 }
 

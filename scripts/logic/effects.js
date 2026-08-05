@@ -55,6 +55,35 @@ export async function removeEffectsByTag(actor, tag, value = true) {
   return current.length - next.length;
 }
 
+export async function advanceEffectsByTag(actor, tag, value) {
+  if (!actor || !tag) return 0;
+  const current = getEffects(actor);
+  let expired = 0;
+  const next = [];
+  for (const effect of current) {
+    if (effect?.mods?.tags?.[tag] !== value) {
+      next.push(effect);
+      continue;
+    }
+    const turns = Math.max(1, Number(effect?.mods?.tags?.expiryTurns ?? 1));
+    if (turns <= 1) {
+      expired += 1;
+      continue;
+    }
+    next.push({
+      ...effect,
+      mods: {
+        ...(effect.mods ?? {}),
+        tags: { ...(effect.mods?.tags ?? {}), expiryTurns: turns - 1 }
+      }
+    });
+  }
+  if (expired || next.some((effect, index) => effect !== current[index])) {
+    await actor.setFlag(FLAG_SCOPE, "effects", next);
+  }
+  return expired;
+}
+
 function hasAnyTag(effect, tags) {
   if (!tags || !effect?.mods?.tags) return false;
   for (const key of Object.keys(effect.mods.tags)) {

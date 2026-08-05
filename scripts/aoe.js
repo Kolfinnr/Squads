@@ -124,21 +124,49 @@ async function previewAoEPlacement(opts = {}) {
   }
   const definition = AOE_DEFINITIONS[opts.type];
   if (!definition) return;
-  const data = buildTemplateData(definition.template, {
-    ...opts,
-    sceneId: scene.id,
-    duration: opts.duration ?? definition.duration,
-    position: null
-  });
-  const DocumentClass = CONFIG.MeasuredTemplate.documentClass;
-  const previewDocument = new DocumentClass(data, { parent: scene });
-  const PreviewClass = CONFIG.MeasuredTemplate.objectClass;
-  const preview = new PreviewClass(previewDocument);
-  if (typeof preview.drawPreview === "function") {
-    await preview.drawPreview();
+  const radius = unitsToPixels(definition.template.distance ?? DEFAULT_DISTANCE);
+  const preview = new PIXI.Graphics();
+  if (typeof preview.circle === "function") {
+    preview.circle(0, 0, radius)
+      .fill({ color: 0xff3300, alpha: 0.2 })
+      .stroke({ color: 0xff6600, width: 3, alpha: 0.95 });
   } else {
-    ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable"));
+    preview.lineStyle(3, 0xff6600, 0.95);
+    preview.beginFill(0xff3300, 0.2);
+    preview.drawCircle(0, 0, radius);
+    preview.endFill();
   }
+  preview.eventMode = "none";
+  canvas.stage.addChild(preview);
+
+  const move = event => {
+    const point = event.getLocalPosition(canvas.stage);
+    preview.position.set(point.x, point.y);
+  };
+  const cleanup = () => {
+    canvas.stage.off("pointermove", move);
+    canvas.stage.off("pointerdown", place);
+    canvas.app.view.removeEventListener("contextmenu", cancel);
+    window.removeEventListener("keydown", keydown);
+    preview.destroy();
+  };
+  const place = event => {
+    if (event.button !== 0) return;
+    const point = event.getLocalPosition(canvas.stage);
+    cleanup();
+    createAoEFromEffect({ ...opts, sceneId: scene.id, position: { x: point.x, y: point.y } });
+  };
+  const cancel = event => {
+    event.preventDefault();
+    cleanup();
+  };
+  const keydown = event => {
+    if (event.key === "Escape") cleanup();
+  };
+  canvas.stage.on("pointermove", move);
+  canvas.stage.on("pointerdown", place);
+  canvas.app.view.addEventListener("contextmenu", cancel, { once: true });
+  window.addEventListener("keydown", keydown);
 }
 
 async function handleAoECanvasDrop(_canvas, data) {
@@ -197,6 +225,12 @@ export async function createAoEFromEffect(opts = {}) {
     const doc = created?.[0] ?? null;
     if (doc) {
       await finalizeTemplate(doc, state);
+      if (game.user.isGM && ROUND_ONLY_TYPES.has(type)) {
+        await processTemplateTick(doc, {
+          round: Number(game.combat?.round ?? 0),
+          turn: Number(game.combat?.turn ?? 0)
+        });
+      }
     }
     return doc;
   } catch (err) {
@@ -269,6 +303,7 @@ function handleAoETemplateCreate(templateDoc) {
   if (!game.user.isGM || !templateDoc?.getFlag?.(MODULE_ID, AOE_FLAG)) return;
   const state = getAoEState(templateDoc);
   if (!state || !ROUND_ONLY_TYPES.has(state.aoeType)) return;
+  if (state.userId === game.user.id) return;
   const round = Number(game.combat?.round ?? 0);
   const turn = Number(game.combat?.turn ?? 0);
   setTimeout(() => {
