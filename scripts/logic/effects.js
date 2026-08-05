@@ -45,6 +45,16 @@ export function actorHasTag(actor, tag) {
   return getEffects(actor).some(effect => effectHasTag(effect, tag));
 }
 
+export async function removeEffectsByTag(actor, tag, value = true) {
+  if (!actor || !tag) return 0;
+  const current = getEffects(actor);
+  const next = current.filter(effect => effect?.mods?.tags?.[tag] !== value);
+  if (next.length !== current.length) {
+    await actor.setFlag(FLAG_SCOPE, "effects", next);
+  }
+  return current.length - next.length;
+}
+
 function hasAnyTag(effect, tags) {
   if (!tags || !effect?.mods?.tags) return false;
   for (const key of Object.keys(effect.mods.tags)) {
@@ -231,6 +241,9 @@ export function summarizeEffect(effect) {
 
 function shouldBlockEffect(actor, effect) {
   const tags = effect?.mods?.tags ?? {};
+  const origin = actor?.getFlag?.(FLAG_SCOPE, "origin");
+  const passives = actor?.getFlag?.(FLAG_SCOPE, "passives") ?? {};
+  if (origin === "undead" && passives.undeadPuppetHost && tags.tired) return true;
   if (tags.flanked && (actorHasTag(actor, "immuneFlank") || actorHasTag(actor, "fortified"))) return true;
   if (tags.encircled && actorHasTag(actor, "immuneEncircle")) return true;
   return false;
@@ -355,7 +368,7 @@ export function aggregateForAttack(actor, context = {}) {
     }
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
   }
@@ -395,7 +408,7 @@ export function aggregateForDefense(actor, options = {}) {
     pushDice(defSoakParts, mods.defSoakDice);
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
     if (mods.tags?.fortified && action === "ranged") {

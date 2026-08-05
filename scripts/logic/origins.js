@@ -4,7 +4,7 @@ import { maybeTriggerHoB } from "./hob.js";
 
 const { randomID } = foundry.utils;
 
-const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen"];
+const ORIGINS = ["human", "dwarf", "elf", "monster", "greenskin", "ratmen", "undead"];
 
 const ORIGIN_PASSIVES = {
   human: [
@@ -53,6 +53,17 @@ const ORIGIN_PASSIVES = {
     "ratMuskOfFear",
     "ratTreacherous",
     "ratNumerous"
+  ],
+  undead: [
+    "undeadPuppetHost",
+    "undeadTrueUndead",
+    "undeadVampiric",
+    "undeadEthereal",
+    "undeadRegeneration",
+    "undeadGraveDiscipline",
+    "undeadFrenzy",
+    "undeadDreadHost",
+    "undeadCohesion"
   ]
 };
 
@@ -98,7 +109,17 @@ const PASSIVE_LABELS = {
   ratPoisoner: "W4SQ.PassiveRatPoisoner",
   ratMuskOfFear: "W4SQ.PassiveRatMuskOfFear",
   ratTreacherous: "W4SQ.PassiveRatTreacherous",
-  ratNumerous: "W4SQ.PassiveRatNumerous"
+  ratNumerous: "W4SQ.PassiveRatNumerous",
+
+  undeadPuppetHost: "W4SQ.PassiveUndeadPuppetHost",
+  undeadTrueUndead: "W4SQ.PassiveUndeadTrueUndead",
+  undeadVampiric: "W4SQ.PassiveUndeadVampiric",
+  undeadEthereal: "W4SQ.PassiveUndeadEthereal",
+  undeadRegeneration: "W4SQ.PassiveUndeadRegeneration",
+  undeadGraveDiscipline: "W4SQ.PassiveUndeadGraveDiscipline",
+  undeadFrenzy: "W4SQ.PassiveUndeadFrenzy",
+  undeadDreadHost: "W4SQ.PassiveUndeadDreadHost",
+  undeadCohesion: "W4SQ.PassiveUndeadCohesion"
 };
 
 const escapeHtml = foundry.utils?.escapeHTML ?? (str => String(str ?? ""));
@@ -158,6 +179,7 @@ export function getOriginLabelKey(origin) {
     case "monster": return "W4SQ.OriginMonster";
     case "greenskin": return "W4SQ.OriginGreenskin";
     case "ratmen": return "W4SQ.OriginRatmen";
+    case "undead": return "W4SQ.OriginUndead";
     default: return "";
   }
 }
@@ -188,6 +210,46 @@ export function relevantPassives(origin, actor) {
 
 export function getPassiveLabel(key) {
   return PASSIVE_LABELS[key] ?? key;
+}
+
+
+function isUndeadCommanderPresent(actor) {
+  if (!actor) return false;
+  const disposition = dispositionOf(actor);
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const other = token?.actor;
+    if (!other) continue;
+    if (dispositionOf(other) !== disposition) continue;
+    if (getOrigin(other) === "undead" && other.getFlag(FLAG_SCOPE, "isCommander")) return true;
+  }
+  return false;
+}
+
+export function undeadBindingState(actor) {
+  if (getOrigin(actor) !== "undead") return null;
+  const morale = Number(actor?.getFlag(FLAG_SCOPE, "morale") || 0);
+  const passives = getPassives(actor);
+  const commanderPresent = isUndeadCommanderPresent(actor);
+  return {
+    commanderPresent,
+    crumbling: morale <= 0 && !passives.undeadVampiric,
+    bindingLabelKey: commanderPresent ? "W4SQ.UndeadBindingBound" : "W4SQ.UndeadBindingUnbound"
+  };
+}
+
+function undeadCohesionBonus(actor, passives) {
+  if (!passives.undeadCohesion || !actor) return 0;
+  const disposition = dispositionOf(actor);
+  let count = 0;
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const other = token?.actor;
+    if (!other || other === actor) continue;
+    if (dispositionOf(other) !== disposition) continue;
+    if (getOrigin(other) !== "undead") continue;
+    if (!getPassives(other).undeadCohesion) continue;
+    count += 1;
+  }
+  return Math.min(20, count * 4);
 }
 
 function dispositionOf(actor) {
@@ -338,6 +400,16 @@ export async function adjustAttackTN(actor, opponent, { tn, action, isManeuver =
   if (origin === "monster") {
     // No base TN modifier, handled by passives.
   }
+  if (origin === "undead") {
+    if (passives.undeadPuppetHost) add(-10);
+    if (passives.undeadTrueUndead) add(10);
+    if (passives.undeadGraveDiscipline && isManeuver) {
+      const discipline = await new Roll("1d10+5").evaluate({});
+      add(discipline.total);
+    }
+    if (passives.undeadFrenzy) add(10);
+    add(undeadCohesionBonus(actor, passives));
+  }
   if (origin === "greenskin" && passives.greenGobbos) add(-10);
   if (origin === "greenskin" && passives.greenUnstoppableWave) add(-20);
   if (origin === "monster" && passives.monsterBulky) add(-10);
@@ -387,6 +459,10 @@ export async function adjustChipDamage(actor, chip, { action } = {}) {
   const origin = getOrigin(actor);
   const passives = getPassives(actor);
   let total = Number(chip?.total ?? chip ?? 0);
+  if (origin === "undead" && passives.undeadPuppetHost) {
+    const penalty = await new Roll("1d10").evaluate({});
+    total = Math.max(0, total - penalty.total);
+  }
   if (origin === "monster" && passives.monsterMultipleAppendages && action === "melee") {
     const extra = await new Roll("1d10").evaluate({});
     total += extra.total;
@@ -407,6 +483,14 @@ export async function adjustDefenseSoak(defender, attacker, context = {}) {
   const attackerOrigin = getOrigin(attacker);
   const attackerPassives = getPassives(attacker);
 
+  if (origin === "undead" && passives.undeadEthereal) {
+    armor = 0;
+  }
+  if (origin === "undead" && passives.undeadFrenzy) {
+    defenseOnly = Math.max(0, defenseOnly - 10);
+    armor = Math.max(0, armor - 10);
+    rangedResist = Math.max(0, rangedResist - 10);
+  }
   if (origin === "human" && passives.humanWellEquipped) {
     armor += 5;
   }
@@ -455,6 +539,23 @@ export async function adjustAttackDamage(actor, defender, context = {}) {
   let armorPierceBonus = 0;
   let extraAttacks = 0;
 
+  if (origin === "undead") {
+    if (passives.undeadPuppetHost) damage = clampNonNegative(damage - 10);
+    if (passives.undeadTrueUndead) moraleBonus += 10;
+    if (passives.undeadEthereal) moraleBonus += 20;
+    if (passives.undeadFrenzy) {
+      const frenzy = await new Roll("1d10").evaluate({});
+      damage += frenzy.total;
+    }
+    if (passives.undeadDreadHost) {
+      moraleBonus += 20;
+      if (isCharge) {
+        const dreadCharge = await new Roll("1d20").evaluate({});
+        moraleBonus += dreadCharge.total;
+      }
+      if (moraleRatioTarget < 0.5) moraleBonus += 10;
+    }
+  }
   if (origin === "elf") {
     damage += 10;
     if (passives.elfElvenWeaponry) damage += 10;
@@ -568,6 +669,7 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   const attackerPassives = getPassives(attacker);
   const ratio = hpRatio(defender);
   const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
+  let resistanceBlocked = 0;
 
   await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
@@ -576,6 +678,16 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
     moraleBonus = clampNonNegative(moraleBonus - amount);
   };
 
+  if (origin === "undead") {
+    if (passives.undeadPuppetHost) damage += 10;
+  }
+  const hasNonMagicalResistance = passives.undeadEthereal || actorHasTag(defender, "nonMagicalResistance");
+  if (hasNonMagicalResistance && !isMagical) {
+    const beforeResistance = damage;
+    damage = Math.floor(damage / 2);
+    resistanceBlocked += beforeResistance - damage;
+  }
+  if (origin === "undead" && undeadBindingState(defender)?.crumbling) damage *= 2;
   if (origin === "human") {
     reduceFlat(5);
     if (passives.humanResilient) reduceFlat(5);
@@ -643,7 +755,7 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
     moraleBonus += 10;
   }
 
-  return { damage: clampNonNegative(damage), moraleBonus: clampNonNegative(moraleBonus) };
+  return { damage: clampNonNegative(damage), moraleBonus: clampNonNegative(moraleBonus), resistanceBlocked };
 }
 
 export async function applyPostAttackEffects({ attacker, defender, success, action, isMagical = false } = {}) {
@@ -714,6 +826,10 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
 
   await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
+  if (origin === "undead") {
+    if (passives.undeadEthereal) next = Math.floor(next / 2);
+    if (!undeadBindingState(defender)?.commanderPresent && !passives.undeadVampiric) next *= 2;
+  }
   if (origin === "human") {
     next = Math.max(0, next - 5);
     if (passives.humanResilient) next = Math.max(0, next - 5);
@@ -740,6 +856,14 @@ export async function adjustMoraleLoss(defender, attacker, { total, baseDamage, 
 export async function handleMoraleZero(defender, attacker) {
   const origin = getOrigin(defender);
   const passives = getPassives(defender);
+  if (origin === "undead") {
+    if (passives.undeadVampiric) {
+      await ensureEffect(defender, { key: "undead-vampiric-disorganized", label: game.i18n.localize("W4SQ.Disorganized"), duration: 99, mods: { tags: { disorganized: true } } }, eff => Boolean(eff?.mods?.tags?.disorganized));
+      return;
+    }
+    await ensureEffect(defender, { key: "undead-crumbling", label: game.i18n.localize("W4SQ.EffectUndeadCrumbling"), duration: 99, mods: { tags: { crumbling: true } } }, eff => Boolean(eff?.mods?.tags?.crumbling));
+    return;
+  }
   if (origin !== "human" || !passives.humanToTheBitterEnd) return;
   if (await defender.getFlag(FLAG_SCOPE, "usedBitterEnd")) return;
 
@@ -771,6 +895,21 @@ export async function handleTurnTick(actor, context = {}) {
   const ratMuskRatio = ratMuskActive ? armyHpRatio(actor) : 0;
   await syncRatMuskEffect(actor, ratMuskActive, ratMuskRatio);
 
+  if (origin === "undead" && Number(actor.getFlag(FLAG_SCOPE, "morale") || 0) > 0) {
+    await removeEffectByKey(actor, "undead-crumbling");
+  }
+  if (origin === "undead" && round > 0) {
+    const state = undeadBindingState(actor);
+    const canPuppet = passives.undeadPuppetHost && state?.commanderPresent && !state?.crumbling;
+    const canRegen = passives.undeadRegeneration && !state?.crumbling;
+    if (canPuppet || canRegen) {
+      const roll = await new Roll(canPuppet ? "1d10+10" : "1d20+10").evaluate({});
+      const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+      const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+      await actor.setFlag(FLAG_SCOPE, "hp", Math.min(hpMax, hp + roll.total));
+      await sendPassiveMessage(actor, canPuppet ? "W4SQ.PassiveMsgUndeadPuppetHost" : "W4SQ.PassiveMsgUndeadRegeneration", { name: safeName(actor), amount: roll.total });
+    }
+  }
   if (origin === "monster" && passives.monsterRegeneration && round > 0 && context.turn === 0) {
     const roll = await new Roll("1d20+10").evaluate({});
     const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
