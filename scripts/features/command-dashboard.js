@@ -1,4 +1,5 @@
 import { FLAG_SCOPE, MODULE_ID, DEFAULT_FLAGS, SETTINGS } from "../config.js";
+import { getOrigin, undeadBindingState } from "../logic/origins.js";
 import { doSquadAction } from "./actions.js";
 import {
   addEffect,
@@ -291,6 +292,7 @@ export class W4SQCommandApp extends Application {
         maneuverChecked = flagged;
         this._maneuverState.set(token.id, maneuverChecked);
       }
+      const binding = getOrigin(actor) === "undead" ? undeadBindingState(actor) : null;
       return {
         id: token.id,
         name: token.name,
@@ -306,6 +308,11 @@ export class W4SQCommandApp extends Application {
         effects,
         cooldowns,
         activeManeuver: activeInfo,
+        binding: binding ? {
+          label: game.i18n.localize(binding.bindingLabelKey),
+          crumbling: binding.crumbling,
+          crumblingLabel: binding.crumbling ? game.i18n.localize("W4SQ.EffectUndeadCrumbling") : ""
+        } : null,
         lastTargetName: actor.getFlag(FLAG_SCOPE, "lastTargetName") || "",
         order,
         maneuverChecked,

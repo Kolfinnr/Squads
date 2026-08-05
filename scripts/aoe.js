@@ -1,5 +1,6 @@
 import { MODULE_ID, FLAG_SCOPE } from "./config.js";
 import { addEffect, ensureEffect, removeEffectByKey, ensureDisorganized } from "./logic/effects.js";
+import { adjustIncomingDamage, getOrigin, handleMoraleZero } from "./logic/origins.js";
 
 const AOE_FLAG = "aoe";
 const DEFAULT_DISTANCE = 4;
@@ -64,6 +65,123 @@ export function registerAoEHooks() {
   Hooks.on("combatRound", handleCombatRound);
   Hooks.on("updateCombat", handleUpdateCombat);
   Hooks.on("deleteMeasuredTemplate", handleTemplateDelete);
+  Hooks.on("createMeasuredTemplate", handleAoETemplateCreate);
+  Hooks.on("renderChatMessageHTML", activateAoEChatLink);
+  Hooks.on("dropCanvasData", handleAoECanvasDrop);
+}
+
+export async function postAoEPlacementChat(actor, opts = {}, messageKey = "W4SQ.ChatAoEReady") {
+  const payload = encodeURIComponent(JSON.stringify({
+    type: "W4SQAoE",
+    options: opts
+  }));
+  const label = game.i18n.localize(AOE_DEFINITIONS[opts.type]?.labelKey ?? "W4SQ.AoEUnknown");
+  const prompt = game.i18n.format(messageKey, { name: actor?.name ?? "" });
+  const linkText = game.i18n.format("W4SQ.ChatAoEDragLink", { aoe: label });
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<p>${prompt}</p><p><a class="w4sq-aoe-drag" draggable="true" data-aoe-payload="${payload}"><i class="fas fa-bullseye"></i> ${linkText}</a></p>`
+  });
+}
+
+function activateAoEChatLink(_message, html) {
+  const root = html?.[0] ?? html;
+  const links = [
+    ...(root?.matches?.(".w4sq-aoe-drag") ? [root] : []),
+    ...(root?.querySelectorAll?.(".w4sq-aoe-drag") ?? [])
+  ];
+  for (const link of links) {
+    if (link.dataset.aoeDragReady === "true") continue;
+    link.dataset.aoeDragReady = "true";
+    link.addEventListener("dragstart", event => {
+      const raw = link.dataset.aoePayload;
+      if (!raw) return;
+      const json = decodeURIComponent(raw);
+      event.dataTransfer?.setData("text/plain", json);
+      event.dataTransfer?.setData("application/json", json);
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
+    });
+    link.addEventListener("click", async event => {
+      event.preventDefault();
+      const raw = link.dataset.aoePayload;
+      if (!raw) return;
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        await previewAoEPlacement(payload.options);
+      } catch (err) {
+        console.error("[W4SQ] Failed to preview AoE placement", err);
+        ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable"));
+      }
+    });
+  }
+}
+
+async function previewAoEPlacement(opts = {}) {
+  const scene = opts.sceneId ? game.scenes.get(opts.sceneId) : canvas.scene;
+  if (!scene || scene.id !== canvas.scene?.id) {
+    ui.notifications?.warn?.(game.i18n.localize("W4SQ.ChatAoEWrongScene"));
+    return;
+  }
+  const definition = AOE_DEFINITIONS[opts.type];
+  if (!definition) return;
+  const radius = unitsToPixels(definition.template.distance ?? DEFAULT_DISTANCE);
+  const preview = new PIXI.Graphics();
+  if (typeof preview.circle === "function") {
+    preview.circle(0, 0, radius)
+      .fill({ color: 0xff3300, alpha: 0.2 })
+      .stroke({ color: 0xff6600, width: 3, alpha: 0.95 });
+  } else {
+    preview.lineStyle(3, 0xff6600, 0.95);
+    preview.beginFill(0xff3300, 0.2);
+    preview.drawCircle(0, 0, radius);
+    preview.endFill();
+  }
+  preview.eventMode = "none";
+  canvas.stage.addChild(preview);
+
+  const move = event => {
+    const point = event.getLocalPosition(canvas.stage);
+    preview.position.set(point.x, point.y);
+  };
+  const cleanup = () => {
+    canvas.stage.off("pointermove", move);
+    canvas.stage.off("pointerdown", place);
+    canvas.app.view.removeEventListener("contextmenu", cancel);
+    window.removeEventListener("keydown", keydown);
+    preview.destroy();
+  };
+  const place = event => {
+    if (event.button !== 0) return;
+    const point = event.getLocalPosition(canvas.stage);
+    cleanup();
+    createAoEFromEffect({ ...opts, sceneId: scene.id, position: { x: point.x, y: point.y } });
+  };
+  const cancel = event => {
+    event.preventDefault();
+    cleanup();
+  };
+  const keydown = event => {
+    if (event.key === "Escape") cleanup();
+  };
+  canvas.stage.on("pointermove", move);
+  canvas.stage.on("pointerdown", place);
+  canvas.app.view.addEventListener("contextmenu", cancel, { once: true });
+  window.addEventListener("keydown", keydown);
+}
+
+async function handleAoECanvasDrop(_canvas, data) {
+  if (data?.type !== "W4SQAoE" || !data.options) return;
+  const sceneId = canvas?.scene?.id;
+  if (data.options.sceneId && data.options.sceneId !== sceneId) {
+    ui.notifications?.warn?.(game.i18n.localize("W4SQ.ChatAoEWrongScene"));
+    return false;
+  }
+  await createAoEFromEffect({
+    ...data.options,
+    sceneId,
+    position: { x: Number(data.x) || 0, y: Number(data.y) || 0 }
+  });
+  return false;
 }
 
 export async function createAoEFromEffect(opts = {}) {
@@ -107,6 +225,12 @@ export async function createAoEFromEffect(opts = {}) {
     const doc = created?.[0] ?? null;
     if (doc) {
       await finalizeTemplate(doc, state);
+      if (game.user.isGM && ROUND_ONLY_TYPES.has(type)) {
+        await processTemplateTick(doc, {
+          round: Number(game.combat?.round ?? 0),
+          turn: Number(game.combat?.turn ?? 0)
+        });
+      }
     }
     return doc;
   } catch (err) {
@@ -152,7 +276,7 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     casterTokenId,
     lastRound: null,
     lastTurn: null,
-    pendingFirstTick: type === "firestorm",
+    pendingFirstTick: false,
     occupants: [],
     direction: null,
     userId,
@@ -173,6 +297,19 @@ async function finalizeTemplate(templateDoc, state) {
     ...state,
     templateId: templateDoc.id
   });
+}
+
+function handleAoETemplateCreate(templateDoc) {
+  if (!game.user.isGM || !templateDoc?.getFlag?.(MODULE_ID, AOE_FLAG)) return;
+  const state = getAoEState(templateDoc);
+  if (!state || !ROUND_ONLY_TYPES.has(state.aoeType)) return;
+  if (state.userId === game.user.id) return;
+  const round = Number(game.combat?.round ?? 0);
+  const turn = Number(game.combat?.turn ?? 0);
+  setTimeout(() => {
+    processTemplateTick(templateDoc, { round, turn })
+      .catch(err => console.error("[W4SQ] Failed to activate placed AoE", err));
+  }, 0);
 }
 
 async function handleCombatRound(combat) {
@@ -525,10 +662,20 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {
     if (!actor) continue;
     let hpTotal = 0;
     let moraleTotal = 0;
+    let resistanceBlocked = 0;
     let inflicted = false;
     if (hpFormula) {
       const hpRoll = await rollFormula(hpFormula);
       hpTotal = hpRoll.total;
+      const adjusted = await adjustIncomingDamage(actor, null, {
+        damage: hpTotal,
+        moraleBonus: 0,
+        damageType: "aoe",
+        isMagical: Boolean(context?.state?.data?.magical),
+        isAoE: true
+      });
+      hpTotal = adjusted.damage;
+      resistanceBlocked = adjusted.resistanceBlocked ?? 0;
       if (hpTotal > 0) inflicted = true;
       await adjustActorFlag(actor, "hp", -hpTotal, "hpMax");
     }
@@ -538,20 +685,24 @@ async function applyDamageToTokens(tokens, hpFormula, moraleFormula, context = {
       if (moraleTotal > 0) inflicted = true;
       const result = await adjustActorFlag(actor, "morale", -moraleTotal, "moraleMax");
       const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-      if (moraleMax > 0 && result.after / moraleMax < 0.5) {
+      if (getOrigin(actor) !== "undead" && moraleMax > 0 && result.after / moraleMax < 0.5) {
         await ensureDisorganized(actor, { source: "morale" });
       }
       if (result.before > 0 && result.after <= 0) {
-        await ensureEffect(actor, {
-          key: `routed-zone-${crypto.randomUUID?.() ?? randomID()}`,
-          label: game.i18n.localize("W4SQ.EffectRouted"),
-          duration: 99,
-          mods: { tags: { routed: true, disorganized: true } }
-        }, eff => eff?.mods?.tags?.routed);
+        if (getOrigin(actor) === "undead") {
+          await handleMoraleZero(actor, null);
+        } else {
+          await ensureEffect(actor, {
+            key: `routed-zone-${crypto.randomUUID?.() ?? randomID()}`,
+            label: game.i18n.localize("W4SQ.EffectRouted"),
+            duration: 99,
+            mods: { tags: { routed: true, disorganized: true } }
+          }, eff => eff?.mods?.tags?.routed);
+        }
       }
     }
     if (inflicted) {
-      affectedEnemies.push({ token, hpTotal, moraleTotal });
+      affectedEnemies.push({ token, hpTotal, moraleTotal, resistanceBlocked });
     }
   }
   if (affectedEnemies.length) {
@@ -682,11 +833,15 @@ async function sendAoEFlavorMessage(entries, context = {}) {
     morale: moraleValue,
     damage: damageValue
   }) ?? `${aoeLabel} batters ${formatNameList(enemyNames)}`;
+  const blocked = entries.reduce((sum, entry) => sum + Number(entry?.resistanceBlocked ?? 0), 0);
+  const resistanceNote = blocked > 0
+    ? `<p>${game.i18n.format("W4SQ.ChatNonMagicalResistance", { total: blocked })}</p>`
+    : "";
 
   const speakerActor = casterActor ?? entries[0]?.token?.actor ?? null;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor: speakerActor }),
-    content: `<p>${message}</p>`
+    content: `<p>${message}</p>${resistanceNote}`
   });
 }
 
