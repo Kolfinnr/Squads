@@ -222,6 +222,12 @@ export async function createAoEFromEffect(opts = {}) {
     const doc = created?.[0] ?? null;
     if (doc) {
       await finalizeTemplate(doc, state);
+      if (game.user.isGM && ROUND_ONLY_TYPES.has(type)) {
+        await processTemplateTick(doc, {
+          round: Number(game.combat?.round ?? 0),
+          turn: Number(game.combat?.turn ?? 0)
+        });
+      }
     }
     return doc;
   } catch (err) {
@@ -265,7 +271,7 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     remaining: duration ?? null,
     data,
     casterTokenId,
-    lastRound: null,
+    lastRound: type === "firestorm" ? placedRound : null,
     lastTurn: null,
     pendingFirstTick: false,
     occupants: [],
@@ -303,6 +309,19 @@ async function finalizeTemplate(templateDoc, state) {
     ...state,
     templateId: templateDoc.id
   });
+}
+
+function handleAoETemplateCreate(templateDoc) {
+  if (!game.user.isGM || !templateDoc?.getFlag?.(MODULE_ID, AOE_FLAG)) return;
+  const state = getAoEState(templateDoc);
+  if (!state || !ROUND_ONLY_TYPES.has(state.aoeType)) return;
+  if (state.userId === game.user.id) return;
+  const round = Number(game.combat?.round ?? 0);
+  const turn = Number(game.combat?.turn ?? 0);
+  setTimeout(() => {
+    processTemplateTick(templateDoc, { round, turn })
+      .catch(err => console.error("[W4SQ] Failed to activate placed AoE", err));
+  }, 0);
 }
 
 async function handleCombatRound(combat) {
