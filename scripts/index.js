@@ -8,6 +8,7 @@ import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
+import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -16,37 +17,10 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
+  "./logic/zones.js",
   "./services/gm-bridge.js",
   "./aoe.js"
 ];
-
-function bridgeRenderChatMessageHook() {
-  if (Hooks._w4sqPatchedRenderChatMessage) return;
-  Hooks._w4sqPatchedRenderChatMessage = true;
-  const originalCallAll = Hooks.callAll.bind(Hooks);
-  Hooks.callAll = function patchedCallAll(hook, ...args) {
-    if (hook !== "renderChatMessage") {
-      return originalCallAll(hook, ...args);
-    }
-    const [message, html, data] = args;
-    const element = html instanceof HTMLElement ? html : html?.[0];
-    try {
-      originalCallAll("renderChatMessageHTML", message, element, data);
-    } catch (err) {
-      console.error(`${MODULE_ID} | Failed to forward renderChatMessageHTML`, err);
-    }
-    const listeners = Array.from(Hooks._hooks?.[hook] ?? []);
-    for (const listener of listeners) {
-      try {
-        listener.fn(...args);
-      } catch (err) {
-        console.error(`${MODULE_ID} | renderChatMessage handler failed`, err);
-      }
-      if (listener.once) Hooks.off(hook, listener.fn);
-    }
-    return listeners.length;
-  };
-}
 
 function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
@@ -172,6 +146,7 @@ async function processTurnTick(combat, context = {}) {
   }
   await expireEffectsForTurnEntry(actor);
   previousTurnActors.set(combatKey, actor);
+  await tickZones({ isRoundStart, context: tickContext });
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
@@ -185,7 +160,6 @@ function safeProcessTurnTick(combat, context) {
 
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | Initialising squads v1.0.2`);
-  bridgeRenderChatMessageHook();
   patchFlagOverrides();
   Actors.registerSheet(MODULE_ID, SquadActorSheet, { types: ACTOR_TYPES, makeDefault: false, label: "Squad" });
 
@@ -287,6 +261,26 @@ Hooks.on("updateCombat", (combat, changed) => {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
     safeProcessTurnTick(combat, { event: "updateCombat", changed });
   }
+});
+
+Hooks.on("createMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
+});
+
+Hooks.on("updateMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+});
+
+Hooks.on("updateToken", (document, changes) => {
+  if (!game.user.isGM) return;
+  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
+});
+
+Hooks.on("createToken", document => {
+  if (!game.user.isGM) return;
+  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
 });
 
 Hooks.on("renderTokenHUD", (hud, html) => {

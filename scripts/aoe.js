@@ -62,10 +62,7 @@ let hooksRegistered = false;
 export function registerAoEHooks() {
   if (hooksRegistered) return;
   hooksRegistered = true;
-  Hooks.on("combatRound", handleCombatRound);
-  Hooks.on("updateCombat", handleUpdateCombat);
   Hooks.on("deleteMeasuredTemplate", handleTemplateDelete);
-  Hooks.on("createMeasuredTemplate", handleAoETemplateCreate);
   Hooks.on("renderChatMessageHTML", activateAoEChatLink);
   Hooks.on("dropCanvasData", handleAoECanvasDrop);
 }
@@ -286,8 +283,23 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     placedTurn
   };
 
+  const casterToken = casterTokenId ? canvas?.tokens?.get(casterTokenId) : null;
+  const zoneKey = type === "fortify" ? "fortifyPosition" : type;
   base.flags = base.flags ?? {};
-  base.flags[MODULE_ID] = { [AOE_FLAG]: flagData };
+  base.flags[MODULE_ID] = {
+    [AOE_FLAG]: flagData,
+    zone: {
+      key: zoneKey,
+      duration: duration ?? null,
+      actorId: casterToken?.actor?.id ?? null,
+      tokenId: casterTokenId,
+      disposition: casterToken?.document?.disposition ?? null,
+      target: ["minefield", "wolfPits"].includes(type) ? "enemies" : (["fortify", "lineDefense"].includes(type) ? "allies" : "any"),
+      extra: { magical: Boolean(data?.magical) },
+      template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE },
+      occupants: []
+    }
+  };
   return base;
 }
 
