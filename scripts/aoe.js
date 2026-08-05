@@ -65,6 +65,7 @@ export function registerAoEHooks() {
   Hooks.on("combatRound", handleCombatRound);
   Hooks.on("updateCombat", handleUpdateCombat);
   Hooks.on("deleteMeasuredTemplate", handleTemplateDelete);
+  Hooks.on("createMeasuredTemplate", handleAoETemplateCreate);
   Hooks.on("renderChatMessageHTML", activateAoEChatLink);
   Hooks.on("dropCanvasData", handleAoECanvasDrop);
 }
@@ -100,6 +101,43 @@ function activateAoEChatLink(_message, html) {
       event.dataTransfer?.setData("application/json", json);
       if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy";
     });
+    link.addEventListener("click", async event => {
+      event.preventDefault();
+      const raw = link.dataset.aoePayload;
+      if (!raw) return;
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        await previewAoEPlacement(payload.options);
+      } catch (err) {
+        console.error("[W4SQ] Failed to preview AoE placement", err);
+        ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable"));
+      }
+    });
+  }
+}
+
+async function previewAoEPlacement(opts = {}) {
+  const scene = opts.sceneId ? game.scenes.get(opts.sceneId) : canvas.scene;
+  if (!scene || scene.id !== canvas.scene?.id) {
+    ui.notifications?.warn?.(game.i18n.localize("W4SQ.ChatAoEWrongScene"));
+    return;
+  }
+  const definition = AOE_DEFINITIONS[opts.type];
+  if (!definition) return;
+  const data = buildTemplateData(definition.template, {
+    ...opts,
+    sceneId: scene.id,
+    duration: opts.duration ?? definition.duration,
+    position: null
+  });
+  const DocumentClass = CONFIG.MeasuredTemplate.documentClass;
+  const previewDocument = new DocumentClass(data, { parent: scene });
+  const PreviewClass = CONFIG.MeasuredTemplate.objectClass;
+  const preview = new PreviewClass(previewDocument);
+  if (typeof preview.drawPreview === "function") {
+    await preview.drawPreview();
+  } else {
+    ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable"));
   }
 }
 
@@ -225,6 +263,18 @@ async function finalizeTemplate(templateDoc, state) {
     ...state,
     templateId: templateDoc.id
   });
+}
+
+function handleAoETemplateCreate(templateDoc) {
+  if (!game.user.isGM || !templateDoc?.getFlag?.(MODULE_ID, AOE_FLAG)) return;
+  const state = getAoEState(templateDoc);
+  if (!state || !ROUND_ONLY_TYPES.has(state.aoeType)) return;
+  const round = Number(game.combat?.round ?? 0);
+  const turn = Number(game.combat?.turn ?? 0);
+  setTimeout(() => {
+    processTemplateTick(templateDoc, { round, turn })
+      .catch(err => console.error("[W4SQ] Failed to activate placed AoE", err));
+  }, 0);
 }
 
 async function handleCombatRound(combat) {

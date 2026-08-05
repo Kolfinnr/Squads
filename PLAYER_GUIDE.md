@@ -119,7 +119,7 @@
 - **Fire Aspect** (ally): Grants +4d10 TN, +3d20 Damage, and +1d20 Defense for 2 rounds.
 - Mage spell damage and Fire Aspect-empowered attacks count as magical.
 - **Magic Weapon Embedment** makes an allied squad's attacks magical for one turn, while **Magic Ward** halves non-magical damage suffered by an allied squad for one turn. Neither spell has a cooldown.
-- Spells and engineering maneuvers that create an area post a draggable placement link in chat; drag it onto the intended battlefield position to deploy the template.
+- Spells and engineering maneuvers that create an area post a placement link in chat. Click it for Foundry's measured-template preview and precise placement, or drag it directly onto the intended battlefield position.
 
 ### Engineer Maneuvers (Average/Hard, CD 2)
 - **Line Defense** (self): Deploys a barricade zone that grants +2d10 soak and Fortified/Braced tags to allies standing inside (the bonus ends as soon as they leave) for 4 rounds.
