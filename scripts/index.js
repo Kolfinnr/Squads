@@ -1,7 +1,7 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects, ensureDisorganized } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized, removeEffectsByTag } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
@@ -106,11 +106,20 @@ async function tickActorEntry(actor, context = {}) {
 }
 
 const processedTurns = new Map();
+const previousTurnActors = new Map();
 
 function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
   if (!key) return;
   processedTurns.delete(key);
+  previousTurnActors.delete(key);
+}
+
+async function expireEffectsForTurnEntry(actor) {
+  if (!actor) return;
+  for (const candidate of game.actors?.contents ?? []) {
+    await removeEffectsByTag(candidate, "expiresOnActorTurn", actor.id);
+  }
 }
 
 function markTurn(combat, round, turn) {
@@ -156,6 +165,13 @@ async function processTurnTick(combat, context = {}) {
     turn
   };
   const actor = combatant.actor;
+  const combatKey = combat.id ?? combat._id;
+  const previousActor = previousTurnActors.get(combatKey);
+  if (previousActor) {
+    await removeEffectsByTag(previousActor, "expiresAtTurnEnd", previousActor.id);
+  }
+  await expireEffectsForTurnEntry(actor);
+  previousTurnActors.set(combatKey, actor);
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;

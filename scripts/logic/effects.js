@@ -45,6 +45,16 @@ export function actorHasTag(actor, tag) {
   return getEffects(actor).some(effect => effectHasTag(effect, tag));
 }
 
+export async function removeEffectsByTag(actor, tag, value = true) {
+  if (!actor || !tag) return 0;
+  const current = getEffects(actor);
+  const next = current.filter(effect => effect?.mods?.tags?.[tag] !== value);
+  if (next.length !== current.length) {
+    await actor.setFlag(FLAG_SCOPE, "effects", next);
+  }
+  return current.length - next.length;
+}
+
 function hasAnyTag(effect, tags) {
   if (!tags || !effect?.mods?.tags) return false;
   for (const key of Object.keys(effect.mods.tags)) {

@@ -578,7 +578,7 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tags: { magical: true } }, 1, `magic-weapon-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWeapon")));
+      await addEffect(target, E({ tags: { magical: true, expiresAtTurnEnd: target.id } }, 99, `magic-weapon-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWeapon")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatMagicWeapon", { name: actor.name ?? "", target: target.name ?? "" });
     }
@@ -591,7 +591,7 @@ export const MANEUVERS = {
     target: "ally",
     apply: async ({ actor, target }) => {
       if (!target) return;
-      await addEffect(target, E({ tags: { nonMagicalResistance: true } }, 1, `magic-ward-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWard")));
+      await addEffect(target, E({ tags: { nonMagicalResistance: true, expiresOnActorTurn: actor.id } }, 99, `magic-ward-${randomID()}`, game.i18n.localize("W4SQ.ManeuverMagicWard")));
       await clearChannelledMagic(actor);
       await postChat(actor, "W4SQ.ChatMagicWard", { name: actor.name ?? "", target: target.name ?? "" });
     }
