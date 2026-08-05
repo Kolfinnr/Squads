@@ -505,6 +505,9 @@ export async function doSquadAction(actor, action) {
     });
     finalDamage = incomingAdjust.damage;
     moraleBonus = incomingAdjust.moraleBonus;
+    if (incomingAdjust.resistanceBlocked > 0) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatNonMagicalResistance", { total: incomingAdjust.resistanceBlocked }));
+    }
   }
 
   if (success && targetActor && action === "melee" && effectiveBackline) {

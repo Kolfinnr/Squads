@@ -669,6 +669,7 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
   const attackerPassives = getPassives(attacker);
   const ratio = hpRatio(defender);
   const armyRatio = origin === "ratmen" && passives.ratMuskOfFear ? armyHpRatio(defender) : ratio;
+  let resistanceBlocked = 0;
 
   await syncRatMuskEffect(defender, origin === "ratmen" && passives.ratMuskOfFear, armyRatio);
 
@@ -679,9 +680,14 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
 
   if (origin === "undead") {
     if (passives.undeadPuppetHost) damage += 10;
-    if (passives.undeadEthereal && !isMagical) damage = Math.floor(damage / 2);
-    if (undeadBindingState(defender)?.crumbling) damage *= 2;
   }
+  const hasNonMagicalResistance = passives.undeadEthereal || actorHasTag(defender, "nonMagicalResistance");
+  if (hasNonMagicalResistance && !isMagical) {
+    const beforeResistance = damage;
+    damage = Math.floor(damage / 2);
+    resistanceBlocked += beforeResistance - damage;
+  }
+  if (origin === "undead" && undeadBindingState(defender)?.crumbling) damage *= 2;
   if (origin === "human") {
     reduceFlat(5);
     if (passives.humanResilient) reduceFlat(5);
@@ -749,7 +755,7 @@ export async function adjustIncomingDamage(defender, attacker, context = {}) {
     moraleBonus += 10;
   }
 
-  return { damage: clampNonNegative(damage), moraleBonus: clampNonNegative(moraleBonus) };
+  return { damage: clampNonNegative(damage), moraleBonus: clampNonNegative(moraleBonus), resistanceBlocked };
 }
 
 export async function applyPostAttackEffects({ attacker, defender, success, action, isMagical = false } = {}) {
