@@ -196,7 +196,7 @@ async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = nul
   let moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   const hpBefore = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
   if (hpFormula) {
-    const roll = await (new Roll(hpFormula).roll({ async: true }));
+    const roll = await (new Roll(hpFormula).evaluate({}));
     hp = roll.total;
     const result = await adjustFlag(actor, "hp", -hp, "hpMax");
     const hpAfter = result.after;
@@ -205,7 +205,7 @@ async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = nul
     }
   }
   if (moraleFormula) {
-    const roll = await (new Roll(moraleFormula).roll({ async: true }));
+    const roll = await (new Roll(moraleFormula).evaluate({}));
     morale = roll.total;
     const result = await adjustFlag(actor, "morale", -morale, "moraleMax");
     const moraleAfter = result.after;
@@ -329,8 +329,8 @@ const ZONE_HANDLERS = {
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
       if (zone.triggered) return;
-      const hpRoll = await (new Roll("3d20").roll({ async: true }));
-      const moraleRoll = await (new Roll("4d20").roll({ async: true }));
+      const hpRoll = await (new Roll("3d20").evaluate({}));
+      const moraleRoll = await (new Roll("4d20").evaluate({}));
       await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
       await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
       await ensureDisorganized(actor, { source: "zone" });
@@ -352,8 +352,8 @@ const ZONE_HANDLERS = {
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
       if (zone.triggered) return;
-      const hpRoll = await (new Roll("2d10").roll({ async: true }));
-      const moraleRoll = await (new Roll("2d10").roll({ async: true }));
+      const hpRoll = await (new Roll("2d10").evaluate({}));
+      const moraleRoll = await (new Roll("2d10").evaluate({}));
       await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
       await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
       await ensureEffect(actor, {
