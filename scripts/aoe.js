@@ -79,7 +79,10 @@ function activateAoEChatLink(_message, html) {
         await previewAoEPlacement(payload.options);
       } catch (err) {
         console.error("[W4SQ] Failed to preview AoE placement", err);
-        ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable"));
+        const message = err?.message
+          ? `${game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable")} (${err.message})`
+          : game.i18n.localize("W4SQ.ChatAoEPreviewUnavailable");
+        ui.notifications?.error?.(message);
       }
     });
   }
@@ -94,18 +97,31 @@ async function previewAoEPlacement(opts = {}) {
   const definition = AOE_DEFINITIONS[opts.type];
   if (!definition) return;
   const radius = unitsToPixels(definition.template.distance ?? DEFAULT_DISTANCE);
-  const surface = new PIXI.Container();
+  const surface = new PIXI.Graphics();
   surface.eventMode = "static";
   surface.cursor = "crosshair";
   surface.zIndex = Number.MAX_SAFE_INTEGER;
   const dimensions = canvas.dimensions;
   const sceneRect = dimensions?.sceneRect ?? dimensions?.rect;
-  surface.hitArea = sceneRect
-    ? new PIXI.Rectangle(sceneRect.x, sceneRect.y, sceneRect.width, sceneRect.height)
-    : new PIXI.Rectangle(0, 0, dimensions?.width ?? 0, dimensions?.height ?? 0);
+  const surfaceBounds = {
+    x: Number(sceneRect?.x ?? 0),
+    y: Number(sceneRect?.y ?? 0),
+    width: Number(sceneRect?.width ?? dimensions?.width ?? 0),
+    height: Number(sceneRect?.height ?? dimensions?.height ?? 0)
+  };
+  // A nearly transparent Graphics object supplies a real PIXI hit geometry in
+  // both the v7-style and v8-style APIs used by Foundry v13 installations.
+  if (typeof surface.rect === "function" && typeof surface.fill === "function") {
+    surface.rect(surfaceBounds.x, surfaceBounds.y, surfaceBounds.width, surfaceBounds.height)
+      .fill({ color: 0x000000, alpha: 0.001 });
+  } else {
+    surface.beginFill(0x000000, 0.001);
+    surface.drawRect(surfaceBounds.x, surfaceBounds.y, surfaceBounds.width, surfaceBounds.height);
+    surface.endFill();
+  }
 
   const preview = new PIXI.Graphics();
-  if (typeof preview.circle === "function") {
+  if (typeof preview.circle === "function" && typeof preview.fill === "function" && typeof preview.stroke === "function") {
     preview.circle(0, 0, radius)
       .fill({ color: 0xff3300, alpha: 0.2 })
       .stroke({ color: 0xff6600, width: 3, alpha: 0.95 });
