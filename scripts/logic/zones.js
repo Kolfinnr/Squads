@@ -3,34 +3,12 @@ import { ensureEffect, ensureDisorganized, addEffect, removeEffectByKey } from "
 
 const FLAG_KEY = "zone";
 
-function getOriginToken(actor) {
-  const tokens = actor?.getActiveTokens?.(true) ?? [];
-  return tokens[0] ?? null;
-}
-
 function gridSize() {
   return canvas?.grid?.size ?? 100;
 }
 
 function gridDistance() {
   return canvas?.dimensions?.distance ?? canvas?.grid?.distance ?? 5;
-}
-
-function sceneBounds() {
-  const dims = canvas?.dimensions;
-  if (dims) {
-    const size = dims.size ?? gridSize();
-    const width = dims.sceneWidth ?? ((dims.width ?? 0) * size);
-    const height = dims.sceneHeight ?? ((dims.height ?? 0) * size);
-    const x = dims.sceneX ?? 0;
-    const y = dims.sceneY ?? 0;
-    return { x, y, width, height };
-  }
-  const grid = gridSize();
-  const scene = canvas?.scene;
-  const width = (scene?.width ?? 0) * grid;
-  const height = (scene?.height ?? 0) * grid;
-  return { x: 0, y: 0, width, height };
 }
 
 function duplicateConfig(source = {}) {
@@ -55,97 +33,6 @@ function duplicateConfig(source = {}) {
     console.error(`${MODULE_ID} | JSON clone failed for template config`, err, data);
   }
   return { ...data };
-}
-
-function buildTemplateData(templateConfig = {}, originToken = null) {
-  const defaults = { type: "rect" };
-  const config = foundry.utils.mergeObject(defaults, templateConfig ?? {}, { inplace: false });
-  const unitDistance = gridDistance() || 1;
-  const originX = originToken ? (originToken.center?.x ?? (originToken.x + originToken.width / 2)) : 0;
-  const originY = originToken ? (originToken.center?.y ?? (originToken.y + originToken.height / 2)) : 0;
-  const data = {
-    t: config.type ?? "rect",
-    user: game.user.id,
-    fillColor: config.fillColor ?? game.user.color,
-    angle: config.angle ?? 0,
-    direction: config.direction ?? 0,
-    x: originX,
-    y: originY
-  };
-
-  if (data.t === "circle") {
-    if (config.radiusUnits != null) {
-      data.distance = Number(config.radiusUnits);
-    } else if (config.distance != null) {
-      data.distance = Number(config.distance);
-    } else if (config.radius != null) {
-      data.distance = Number(config.radius) * unitDistance;
-    } else if (config.size != null) {
-      data.distance = Number(config.size) * unitDistance;
-    } else {
-      data.distance = unitDistance;
-    }
-  } else {
-    const fallback = Number(config.size ?? 1) || 1;
-    const widthUnits = config.widthUnits != null
-      ? Number(config.widthUnits)
-      : config.widthSquares != null
-        ? Number(config.widthSquares) * unitDistance
-        : fallback * unitDistance;
-    const heightUnits = config.heightUnits != null
-      ? Number(config.heightUnits)
-      : config.heightSquares != null
-        ? Number(config.heightSquares) * unitDistance
-        : fallback * unitDistance;
-    data.distance = widthUnits || unitDistance;
-    data.width = heightUnits || unitDistance;
-  }
-
-  return data;
-}
-
-async function previewTemplate(document, { originToken } = {}) {
-  if (canvas?.templates?.activatePreview) {
-    try {
-      const result = await canvas.templates.activatePreview({ document, user: game.user });
-      if (result?.document) return result.document;
-      return result ?? null;
-    } catch (err) {
-      console.error(`${MODULE_ID} | canvas.templates.activatePreview failed`, err);
-    }
-  }
-  if (typeof MeasuredTemplate?.createPreview === "function") {
-    try {
-      const preview = await MeasuredTemplate.createPreview({ document, user: game.user });
-      if (preview?.document) return preview.document;
-      return preview ?? null;
-    } catch (err) {
-      console.error(`${MODULE_ID} | MeasuredTemplate.createPreview failed`, err);
-    }
-  }
-  if (canvas?.templates?.preview?.create) {
-    try {
-      return await new Promise(resolve => {
-        canvas.templates.preview.create({
-          document,
-          user: game.user,
-          callback: result => {
-            if (result?.document) return resolve(result.document);
-            resolve(result ?? null);
-          }
-        });
-      });
-    } catch (err) {
-      console.error(`${MODULE_ID} | Template preview failed`, err);
-    }
-  }
-  const data = document.toObject();
-  if (originToken) {
-    data.x = originToken.center?.x ?? originToken.x + originToken.width / 2;
-    data.y = originToken.center?.y ?? originToken.y + originToken.height / 2;
-  }
-  const created = await canvas.scene?.createEmbeddedDocuments("MeasuredTemplate", [data]);
-  return created?.[0] ?? null;
 }
 
 async function adjustFlag(actor, key, delta, maxKey = null) {
@@ -196,7 +83,7 @@ async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = nul
   let moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   const hpBefore = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
   if (hpFormula) {
-    const roll = await (new Roll(hpFormula).roll({ async: true }));
+    const roll = await (new Roll(hpFormula).evaluate({}));
     hp = roll.total;
     const result = await adjustFlag(actor, "hp", -hp, "hpMax");
     const hpAfter = result.after;
@@ -205,7 +92,7 @@ async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = nul
     }
   }
   if (moraleFormula) {
-    const roll = await (new Roll(moraleFormula).roll({ async: true }));
+    const roll = await (new Roll(moraleFormula).evaluate({}));
     morale = roll.total;
     const result = await adjustFlag(actor, "morale", -morale, "moraleMax");
     const moraleAfter = result.after;
@@ -244,10 +131,10 @@ function deepDefenseKey(document, actor) {
 async function applyFortifyBuffs({ actor, document, zone }) {
   if (!actor) return;
   const baseKey = `zone-fortify-${document.id}-${actor.id}`;
-  const activeDuration = Math.max(1, Number(zone?.duration ?? 1));
+  const activeDuration = Math.max(1, Number(zone?.remainingRounds ?? 1));
   await removeEffectByKey(actor, baseKey);
   const baseTags = { fortified: true, braced: true };
-  if (zone?.actorId && actor.id === zone.actorId) {
+  if (zone?.casterActorId && actor.id === zone.casterActorId) {
     baseTags.immobile = true;
   }
   await addEffect(actor, {
@@ -257,7 +144,7 @@ async function applyFortifyBuffs({ actor, document, zone }) {
     mods: { defSoakDice: "+10+2d10", tags: baseTags }
   });
 
-  if (zone?.actorId && actor.id === zone.actorId) {
+  if (zone?.casterActorId && actor.id === zone.casterActorId) {
     const key = deepDefenseKey(document, actor);
     await removeEffectByKey(actor, key);
     await addEffect(actor, {
@@ -272,15 +159,33 @@ async function applyFortifyBuffs({ actor, document, zone }) {
 }
 
 const ZONE_HANDLERS = {
+  fireball: {
+    duration: 1,
+    template: { type: "circle", radiusUnits: 3 },
+    target: "any",
+    async onPlaced({ document, tokens, zone, sourceActor }) {
+      for (const token of tokens) {
+        const actor = token?.actor;
+        if (!actor) continue;
+        const damage = await rollAndApplyDamage(actor, { hpFormula: "3d20", moraleFormula: "4d20" });
+        await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFireballImpact", {
+          name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+          target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+          hp: damage.hp,
+          morale: damage.morale
+        });
+      }
+      await document.delete();
+    }
+  },
   firestorm: {
     duration: 3,
     template: { type: "circle", radiusUnits: 4 },
     target: "any",
-    initialDelay: true,
     roundOnly: true,
-    moveSquares: 2,
-    async onEnter({ actor, document, zone, sourceActor }) {
-      const duration = zone.duration ?? 1;
+    moveSquares: 3,
+    async onEnter({ actor, document, zone }) {
+      const duration = zone.remainingRounds ?? 1;
       const key = `zone-firestorm-${document.id}-${actor.id}`;
       const label = game.i18n.localize("W4SQ.ManeuverFirestorm");
       await ensureEffect(actor, {
@@ -289,22 +194,18 @@ const ZONE_HANDLERS = {
         duration,
         mods: { tags: { zoneFirestorm: true, [`zone-${document.id}`]: true } }
       }, effect => effect.key === key);
-      const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
-      const caster = sourceActor ?? (zone.actorId ? game.actors.get(zone.actorId) ?? null : null) ?? actor;
-      await postZoneChat(caster, "W4SQ.ChatFirestorm", {
-        name: caster.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        hp: damage.hp,
-        morale: damage.morale
-      });
     },
-    async onRound({ actor, zone, sourceActor }) {
+    async onTurn({ actor, sourceActor }) {
       const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
       await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFirestormPulse", {
         name: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
         hp: damage.hp,
         morale: damage.morale
       });
+    },
+    async onExit({ actor, document }) {
+      if (!actor) return;
+      await removeEffectByKey(actor, `zone-firestorm-${document.id}-${actor.id}`);
     }
   },
   lineDefense: {
@@ -312,7 +213,7 @@ const ZONE_HANDLERS = {
     template: { type: "circle", radiusUnits: 1.5 },
     target: "allies",
     async onEnter({ actor, document, zone }) {
-      const duration = zone.duration ?? 1;
+      const duration = zone.remainingRounds ?? 1;
       const key = `zone-line-defense-${document.id}-${actor.id}`;
       await ensureEffect(actor, {
         key,
@@ -320,6 +221,10 @@ const ZONE_HANDLERS = {
         duration,
         mods: { defSoakDice: "+2d10", tags: { braced: true, fortified: true } }
       }, effect => effect.key === key);
+    },
+    async onExit({ actor, document }) {
+      if (!actor) return;
+      await removeEffectByKey(actor, `zone-line-defense-${document.id}-${actor.id}`);
     }
   },
   minefield: {
@@ -329,8 +234,8 @@ const ZONE_HANDLERS = {
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
       if (zone.triggered) return;
-      const hpRoll = await (new Roll("3d20").roll({ async: true }));
-      const moraleRoll = await (new Roll("4d20").roll({ async: true }));
+      const hpRoll = await (new Roll("3d20").evaluate({}));
+      const moraleRoll = await (new Roll("4d20").evaluate({}));
       await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
       await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
       await ensureDisorganized(actor, { source: "zone" });
@@ -352,8 +257,8 @@ const ZONE_HANDLERS = {
     singleUse: true,
     async onEnter({ actor, document, zone, sourceActor }) {
       if (zone.triggered) return;
-      const hpRoll = await (new Roll("2d10").roll({ async: true }));
-      const moraleRoll = await (new Roll("2d10").roll({ async: true }));
+      const hpRoll = await (new Roll("2d10").evaluate({}));
+      const moraleRoll = await (new Roll("2d10").evaluate({}));
       await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
       await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
       await ensureEffect(actor, {
@@ -396,8 +301,94 @@ function getZoneHandler(zoneKey) {
   return ZONE_HANDLERS[zoneKey] ?? null;
 }
 
+export function createZoneState({
+  type,
+  casterTokenId = null,
+  duration,
+  magical = false,
+  movementSquares,
+  template = {}
+} = {}) {
+  const zoneType = type === "fortify" ? "fortifyPosition" : type;
+  const handler = getZoneHandler(zoneType);
+  if (!handler) throw new Error(`${MODULE_ID} | Unknown zone type: ${type}`);
+  const casterToken = casterTokenId ? canvas?.tokens?.get(casterTokenId) ?? null : null;
+  const createdRound = game.combat ? Number(game.combat.round ?? 0) : null;
+  return {
+    type: zoneType,
+    casterActorId: casterToken?.actor?.id ?? null,
+    casterTokenId,
+    disposition: casterToken?.document?.disposition ?? null,
+    target: handler.target ?? "any",
+    magical: Boolean(magical),
+    createdRound,
+    remainingRounds: duration ?? handler.duration ?? null,
+    lastAdvancedRound: createdRound,
+    movement: {
+      squares: Number(movementSquares ?? handler.moveSquares ?? 0) || 0,
+      direction: null
+    },
+    template,
+    occupants: [],
+    actorTurnTriggers: {},
+    triggered: false
+  };
+}
+
 function getZoneData(document) {
   return document?.getFlag(MODULE_ID, FLAG_KEY) ?? null;
+}
+
+function canonicalZoneState(zone, legacyAoE = null) {
+  if (!zone && !legacyAoE) return null;
+  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds")) return zone;
+  const type = zone?.type ?? zone?.key ?? legacyAoE?.aoeType ?? null;
+  if (!type) return null;
+  const handler = getZoneHandler(type);
+  const createdRound = zone?.createdRound ?? zone?.extra?.placedRound ?? legacyAoE?.placedRound ?? null;
+  return {
+    type,
+    casterActorId: zone?.casterActorId ?? zone?.actorId ?? null,
+    casterTokenId: zone?.casterTokenId ?? zone?.tokenId ?? legacyAoE?.casterTokenId ?? null,
+    disposition: zone?.disposition ?? null,
+    target: zone?.target ?? handler?.target ?? "any",
+    magical: Boolean(zone?.magical ?? zone?.extra?.magical ?? legacyAoE?.data?.magical),
+    createdRound,
+    remainingRounds: zone?.remainingRounds ?? zone?.duration ?? legacyAoE?.remaining ?? legacyAoE?.duration ?? handler?.duration ?? null,
+    lastAdvancedRound: zone?.lastAdvancedRound ?? zone?.extra?.lastLifecycleRound ?? legacyAoE?.lastRound ?? createdRound,
+    movement: {
+      squares: Number(zone?.movement?.squares ?? legacyAoE?.data?.movePerRound ?? handler?.moveSquares ?? 0) || 0,
+      direction: zone?.movement?.direction ?? legacyAoE?.direction ?? null
+    },
+    template: zone?.template ?? handler?.template ?? {},
+    occupants: normalizeOccupants(zone?.occupants ?? legacyAoE?.occupants),
+    actorTurnTriggers: { ...(zone?.actorTurnTriggers ?? zone?.extra?.actorTicks ?? {}) },
+    triggered: Boolean(zone?.triggered ?? legacyAoE?.spent)
+  };
+}
+
+async function migrateZoneDocument(document) {
+  if (!document) return null;
+  const zone = getZoneData(document);
+  const legacyAoE = document.getFlag(MODULE_ID, "aoe") ?? null;
+  const canonical = canonicalZoneState(zone, legacyAoE);
+  if (!canonical) return null;
+  if (canonical !== zone) {
+    document._w4sqSkipEnter = true;
+    await document.setFlag(MODULE_ID, FLAG_KEY, canonical);
+  }
+  if (legacyAoE) {
+    document._w4sqSkipEnter = true;
+    await document.unsetFlag(MODULE_ID, "aoe");
+  }
+  return canonical;
+}
+
+export async function migrateZoneDocuments(scene = canvas?.scene) {
+  const documents = scene?.templates?.contents ?? scene?.templates ?? [];
+  for (const document of documents) {
+    await migrateZoneDocument(document);
+  }
 }
 
 function tokenCenter(token) {
@@ -526,118 +517,24 @@ function recordsEqual(a, b) {
   }
 }
 
-function zoneExtra(zone) {
-  const source = zone?.extra;
-  if (!source || typeof source !== "object") return {};
-  if (foundry?.utils?.duplicate) {
-    try {
-      return foundry.utils.duplicate(source);
-    } catch (err) {
-      console.error(`${MODULE_ID} | Failed to duplicate zone extra`, err, source);
-    }
-  }
-  try {
-    return JSON.parse(JSON.stringify(source));
-  } catch (err) {
-    console.error(`${MODULE_ID} | JSON clone failed for zone extra`, err, source);
-  }
-  return { ...source };
-}
-
-async function setZoneExtra(document, zone, extra) {
+async function updateZone(document, zone, changes) {
   if (!document || !zone) return zone;
-  const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
-  const updated = foundry.utils.mergeObject(zone, { extra }, { inplace: false });
+  const updated = foundry.utils.mergeObject(zone, changes, { inplace: false });
   try {
     document._w4sqSkipEnter = true;
-    await document.update({ [flagKey]: updated }, { diff: false, recursive: false });
+    await document.setFlag(MODULE_ID, FLAG_KEY, updated);
   } catch (err) {
-    console.error(`${MODULE_ID} | Failed to update zone extra`, err);
+    console.error(`${MODULE_ID} | Failed to update zone state`, err);
   } finally {
     document._w4sqSkipEnter = false;
   }
   return getZoneData(document) ?? updated;
 }
 
-function shouldDelayEnter(zone, handler) {
-  if (!zone || !handler?.onEnter) return false;
-  const extra = zone.extra ?? {};
-  if (Array.isArray(extra.pendingEnter) && extra.pendingEnter.length) return true;
-  if (extra.delayEnter) return true;
-  if (handler.initialDelay && !extra.delayConsumed) return true;
-  return false;
-}
-
-async function queueDelayedEnter(document, handler, tokens) {
-  if (!document || !handler || !tokens?.length) return getZoneData(document);
-  const zone = getZoneData(document);
-  if (!zone) return zone;
-  const extra = zoneExtra(zone);
-  const pending = new Set(extra.pendingEnter ?? []);
-  for (const token of tokens) {
-    if (!token?.id) continue;
-    pending.add(token.id);
-  }
-  extra.pendingEnter = [...pending];
-  extra.delayEnter = true;
-  return await setZoneExtra(document, zone, extra);
-}
-
-async function flushDelayedEnter(document, handler, zone, tokens) {
-  if (!document || !handler?.onEnter || !zone || !tokens?.length) return zone;
-  const extra = zoneExtra(zone);
-  const pending = new Set(extra.pendingEnter ?? []);
-  const processed = [];
-  for (const token of tokens) {
-    if (!token?.id) continue;
-    if (pending.has(token.id)) {
-      processed.push(token);
-      pending.delete(token.id);
-    }
-  }
-  if (!processed.length) return zone;
-
-  extra.pendingEnter = [...pending];
-  extra.delayEnter = pending.size > 0;
-  extra.delayConsumed = true;
-  const updatedZone = await setZoneExtra(document, zone, extra);
-  const sourceActor = updatedZone.actorId ? game.actors?.get(updatedZone.actorId) ?? null : null;
-  for (const token of processed) {
-    const actor = token?.actor;
-    if (!actor) continue;
-    await handler.onEnter({ actor, token, document, zone: updatedZone, sourceActor });
-  }
-  return getZoneData(document) ?? updatedZone;
-}
-
-async function removePendingEnter(document, zone, tokenIds) {
-  if (!document || !tokenIds?.length) return zone;
-  const currentZone = getZoneData(document) ?? zone;
-  if (!currentZone) return zone;
-  const extra = zoneExtra(currentZone);
-  const pending = new Set(extra.pendingEnter ?? []);
-  let changed = false;
-  for (const id of tokenIds) {
-    if (pending.delete(id)) {
-      changed = true;
-    }
-  }
-  if (!changed) return currentZone;
-  extra.pendingEnter = [...pending];
-  if (!pending.size) {
-    extra.delayEnter = false;
-  }
-  return await setZoneExtra(document, currentZone, extra);
-}
-
 async function applyZone(document, handler, tokens) {
-  let zone = getZoneData(document);
+  const zone = getZoneData(document);
   if (!zone || !handler?.onEnter) return;
-  if (shouldDelayEnter(zone, handler)) {
-    zone = await queueDelayedEnter(document, handler, tokens);
-    return;
-  }
-  const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+  const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
   for (const token of tokens) {
     const actor = token?.actor;
     if (!actor) continue;
@@ -661,7 +558,7 @@ async function syncZoneOccupants(document, handler, tokens) {
   }
 
   if (exitedRecords.length && typeof handler.onExit === "function") {
-    const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+    const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
     for (const record of exitedRecords) {
       const token = canvas?.tokens?.get(record.tokenId) ?? null;
       const actor = token?.actor ?? (record.actorId ? game.actors?.get(record.actorId) ?? null : null);
@@ -672,7 +569,6 @@ async function syncZoneOccupants(document, handler, tokens) {
         console.error(`${MODULE_ID} | Zone onExit failed`, err);
       }
     }
-    await removePendingEnter(document, zone, exitedRecords.map(rec => rec.tokenId));
   }
 
   if (!recordsEqual(previous, currentRecords)) {
@@ -691,14 +587,7 @@ async function syncZoneOccupants(document, handler, tokens) {
         console.error(`${MODULE_ID} | Failed to cache zone occupants on preview`, err);
       }
     } else {
-      try {
-        document._w4sqSkipEnter = true;
-        await document.update({ [flagKey]: updated }, { diff: false, recursive: false });
-      } catch (err) {
-        console.error(`${MODULE_ID} | Failed to update zone occupants`, err);
-      } finally {
-        document._w4sqSkipEnter = false;
-      }
+      await updateZone(document, zone, { occupants: currentRecords });
     }
   }
 
@@ -715,43 +604,26 @@ function squareDistance(squares = 1) {
   return squares * size;
 }
 
-function moveUpdate(document, handler) {
-  const squares = handler.moveSquares ?? 0;
-  if (!squares) return {};
-  const dir = randomDirection();
+function moveUpdate(document, zone) {
+  const squares = Number(zone.movement?.squares ?? 0);
+  if (!squares) return { update: {}, direction: zone.movement?.direction ?? null };
+  const dir = DIRECTIONS.find(candidate => candidate.label === zone.movement?.direction) ?? randomDirection();
   const dist = squareDistance(squares);
   const dx = dir.dx * dist;
   const dy = dir.dy * dist;
-  if (!dx && !dy) return {};
+  if (!dx && !dy) return { update: {}, direction: dir.label };
   const x = (document.x ?? 0) + dx;
   const y = (document.y ?? 0) + dy;
-  return { x, y };
+  return { update: { x, y }, direction: dir.label };
 }
 
 async function handleRoundEffects(document, handler, zone, tokensOverride, { context = {} } = {}) {
   if (!handler?.onRound) {
     return { triggered: false, zone };
   }
-  if (handler.roundOnly && context?.round != null) {
-    const extra = zoneExtra(zone);
-    const lastRound = extra.lastRound ?? null;
-    if (lastRound === context.round) {
-      return { triggered: false, zone };
-    }
-  }
-  let tokens = tokensOverride ?? tokensInTemplate(document, handler);
+  const tokens = tokensOverride ?? tokensInTemplate(document, handler);
   let currentZone = zone;
-  const pending = new Set((zone.extra?.pendingEnter ?? []));
-  if (pending.size) {
-    const pendingTokens = tokens.filter(token => pending.has(token.id));
-    if (pendingTokens.length) {
-      currentZone = await flushDelayedEnter(document, handler, zone, pendingTokens) ?? zone;
-      const skipSet = new Set(pendingTokens.map(token => token.id));
-      tokens = tokens.filter(token => !skipSet.has(token.id));
-    }
-  }
-
-  const sourceActor = currentZone.actorId ? game.actors?.get(currentZone.actorId) ?? null : null;
+  const sourceActor = currentZone.casterActorId ? game.actors?.get(currentZone.casterActorId) ?? null : null;
   let triggered = false;
   for (const token of tokens) {
     const actor = token?.actor;
@@ -760,101 +632,7 @@ async function handleRoundEffects(document, handler, zone, tokensOverride, { con
     triggered = true;
   }
 
-  if (handler.roundOnly && context?.round != null) {
-    const extra = zoneExtra(currentZone);
-    extra.lastRound = context.round;
-    currentZone = await setZoneExtra(document, currentZone, extra);
-  }
-  return { triggered: triggered || (handler.roundOnly && context?.round != null), zone: currentZone };
-}
-
-export function randomScenePoint(padding = 0) {
-  const bounds = sceneBounds();
-  if (!bounds.width || !bounds.height) return null;
-  const pad = Math.max(0, Number(padding) || 0);
-  const width = Math.max(0, bounds.width - pad * 2);
-  const height = Math.max(0, bounds.height - pad * 2);
-  const x = bounds.x + pad + Math.random() * (width || 0);
-  const y = bounds.y + pad + Math.random() * (height || 0);
-  return { x, y };
-}
-
-export async function requestZonePlacement(actor, zoneKey, options = {}) {
-  const handler = getZoneHandler(zoneKey);
-  if (!handler) {
-    console.warn(`${MODULE_ID} | Unknown zone key`, zoneKey);
-    return null;
-  }
-  if (!canvas?.scene) {
-    ui.notifications?.warn?.("No active scene for template placement.");
-    return null;
-  }
-  const originToken = getOriginToken(actor);
-  if (actor?.sheet?.rendered) {
-    try {
-      await actor.sheet.close();
-    } catch (err) {
-      console.warn(`${MODULE_ID} | Failed to close sheet before zone placement`, err);
-    }
-  }
-  const templateConfig = duplicateConfig(options.template ?? handler.template ?? {});
-  const templateData = buildTemplateData(templateConfig, originToken);
-  const zoneData = {
-    key: zoneKey,
-    duration: options.duration ?? handler.duration ?? 1,
-    actorId: actor?.id ?? null,
-    tokenId: originToken?.id ?? null,
-    disposition: originToken?.document?.disposition ?? null,
-    target: options.target ?? handler.target ?? "any",
-    extra: options.extra ?? {},
-    template: templateConfig,
-    occupants: []
-  };
-  templateData.flags = templateData.flags ?? {};
-  templateData.flags[MODULE_ID] = { [FLAG_KEY]: zoneData };
-  const DocumentClass = CONFIG.MeasuredTemplate.documentClass;
-  const document = new DocumentClass(templateData, { parent: canvas.scene });
-  const placed = await previewTemplate(document, { originToken });
-  return placed ?? null;
-}
-
-export async function spawnZone(actor, zoneKey, options = {}) {
-  const handler = getZoneHandler(zoneKey);
-  if (!handler) {
-    console.warn(`${MODULE_ID} | Unknown zone key`, zoneKey);
-    return null;
-  }
-  if (!canvas?.scene) {
-    console.warn(`${MODULE_ID} | No scene to spawn zone ${zoneKey}`);
-    return null;
-  }
-  const originToken = options.originToken ?? getOriginToken(actor);
-  const templateConfig = duplicateConfig(options.template ?? handler.template ?? {});
-  const templateData = buildTemplateData(templateConfig, originToken);
-  if (options.position) {
-    templateData.x = options.position.x ?? templateData.x;
-    templateData.y = options.position.y ?? templateData.y;
-  }
-  const zoneData = {
-    key: zoneKey,
-    duration: options.duration ?? handler.duration ?? 1,
-    actorId: actor?.id ?? null,
-    tokenId: options.tokenId ?? originToken?.id ?? null,
-    disposition: options.disposition ?? originToken?.document?.disposition ?? null,
-    target: options.target ?? handler.target ?? "any",
-    extra: options.extra ?? {},
-    template: templateConfig,
-    occupants: []
-  };
-  templateData.flags = templateData.flags ?? {};
-  templateData.flags[MODULE_ID] = { [FLAG_KEY]: zoneData };
-  try {
-    const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
-    return created?.[0] ?? null;
-  } catch (err) {
-    console.error(`${MODULE_ID} | Failed to spawn zone ${zoneKey}`, err);
-    return null;
-  }
+  return { triggered, zone: currentZone };
 }
 
 export async function handleZoneTemplateCreated(document) {
@@ -863,11 +641,16 @@ export async function handleZoneTemplateCreated(document) {
     document._w4sqSkipEnter = false;
     return;
   }
-  const zone = getZoneData(document);
+  const zone = await migrateZoneDocument(document);
   if (!zone) return;
-  const handler = getZoneHandler(zone.key);
+  const handler = getZoneHandler(zone.type);
   if (!handler) return;
   const tokens = tokensInTemplate(document, handler);
+  if (typeof handler.onPlaced === "function") {
+    const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
+    await handler.onPlaced({ document, tokens, zone, sourceActor });
+    return;
+  }
   await syncZoneOccupants(document, handler, tokens);
 }
 
@@ -878,9 +661,9 @@ export async function handleZoneTokenMove(tokenDoc, changes) {
   if (!token) return;
   const templates = canvas?.templates?.placeables ?? [];
   for (const template of templates) {
-    const zone = getZoneData(template.document);
+    const zone = await migrateZoneDocument(template.document);
     if (!zone) continue;
-    const handler = getZoneHandler(zone.key);
+    const handler = getZoneHandler(zone.type);
     if (!handler) continue;
     const tokens = tokensInTemplate(template.document, handler);
     await syncZoneOccupants(template.document, handler, tokens);
@@ -891,44 +674,70 @@ export async function handleZoneTokenCreated(tokenDoc) {
   await handleZoneTokenMove(tokenDoc, { x: tokenDoc.x, y: tokenDoc.y });
 }
 
+export async function handleZoneTemplateDeleted(document) {
+  const zone = canonicalZoneState(getZoneData(document), document?.getFlag(MODULE_ID, "aoe") ?? null);
+  if (!zone) return;
+  const handler = getZoneHandler(zone.type);
+  if (typeof handler?.onExit !== "function") return;
+  const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
+  for (const record of normalizeOccupants(zone.occupants)) {
+    const token = canvas?.tokens?.get(record.tokenId) ?? null;
+    const actor = token?.actor ?? (record.actorId ? game.actors?.get(record.actorId) ?? null : null);
+    if (!actor) continue;
+    await handler.onExit({ actor, token, document, zone, sourceActor });
+  }
+}
+
 export function getZoneHandlers() {
   return ZONE_HANDLERS;
 }
 
 export async function tickZones({ isRoundStart = false, context = {} } = {}) {
   if (!canvas?.scene) return;
-  const templates = canvas.templates?.placeables ?? [];
-  for (const template of templates) {
-    const document = template?.document;
-    const zone = getZoneData(document);
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  for (const document of documents) {
+    let zone = await migrateZoneDocument(document);
     if (!zone) continue;
-    const handler = getZoneHandler(zone.key);
+    const handler = getZoneHandler(zone.type);
     if (!handler) continue;
     if (handler.singleUse && zone.triggered) {
       await document.delete();
       continue;
     }
 
-    const extraBeforeMove = zoneExtra(zone);
-    const durationBeforeMove = Number(zone?.duration ?? handler.duration ?? 0);
     const currentRound = context?.round ?? null;
-    const expiresThisStep = handler.roundOnly
-      ? (durationBeforeMove <= 1 && currentRound != null && (extraBeforeMove.lastRound ?? null) !== currentRound)
-      : (isRoundStart && durationBeforeMove <= 1);
+    const shouldAdvance = isRoundStart
+      && currentRound != null
+      && zone.lastAdvancedRound !== currentRound
+      && (zone.createdRound == null || currentRound > zone.createdRound);
+    if (!shouldAdvance) continue;
 
-    if (isRoundStart && !expiresThisStep) {
-      const move = moveUpdate(document, handler);
-      if (Object.keys(move).length > 0) {
-        try {
-          document._w4sqSkipEnter = true;
-          await document.update(move);
-        } catch (err) {
-          console.error(`${MODULE_ID} | Failed to reposition zone`, err);
-        } finally {
-          document._w4sqSkipEnter = false;
-        }
+    const finiteDuration = zone.remainingRounds !== null && zone.remainingRounds !== undefined;
+    const nextRemaining = finiteDuration ? Math.max(0, Number(zone.remainingRounds) - 1) : null;
+    if (finiteDuration && nextRemaining <= 0) {
+      await syncZoneOccupants(document, handler, []);
+      await document.delete();
+      continue;
+    }
+
+    const movement = moveUpdate(document, zone);
+    if (Object.keys(movement.update).length > 0) {
+      document._w4sqSkipEnter = true;
+      try {
+        await document.update(movement.update);
+      } finally {
+        document._w4sqSkipEnter = false;
       }
     }
+
+    zone = await updateZone(document, zone, {
+      remainingRounds: nextRemaining,
+      lastAdvancedRound: currentRound,
+      movement: {
+        squares: Number(zone.movement?.squares ?? 0) || 0,
+        direction: movement.direction
+      }
+    });
 
     let tokens = tokensInTemplate(document, handler);
     await syncZoneOccupants(document, handler, tokens);
@@ -940,60 +749,38 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
     }
 
     tokens = tokensInTemplate(document, handler);
-    const allowRound = !handler.roundOnly || context?.round != null;
-    let roundResult = { triggered: false, zone: zoneState };
-    if (allowRound) {
+    if (typeof handler.onRound === "function") {
       try {
-        roundResult = await handleRoundEffects(document, handler, zoneState, tokens, { context }) ?? roundResult;
+        await handleRoundEffects(document, handler, zoneState, tokens, { context });
       } catch (err) {
         console.error(`${MODULE_ID} | Zone round effect failed`, err);
       }
     }
-    zoneState = roundResult.zone ?? zoneState;
+  }
+}
 
-    const extraAfter = zoneExtra(zoneState);
-    let shouldDecrement = false;
-    if (handler.roundOnly) {
-      if (currentRound != null) {
-        const beforeRound = extraBeforeMove.lastRound ?? null;
-        const afterRound = extraAfter.lastRound ?? null;
-        if (afterRound === currentRound && beforeRound !== currentRound) {
-          shouldDecrement = true;
-        }
-      }
-    } else if (isRoundStart) {
-      shouldDecrement = true;
-    }
+/** Apply turn-triggered zone effects only to the combatant whose turn begins. */
+export async function tickZonesForActor(actor, context = {}) {
+  if (!actor || !canvas?.scene) return;
+  const round = Number(context.round ?? game.combat?.round ?? 0);
+  const turn = Number(context.turn ?? game.combat?.turn ?? 0);
+  const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}`;
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
 
-    if (!shouldDecrement) {
-      continue;
-    }
+  for (const document of documents) {
+    let zone = await migrateZoneDocument(document);
+    if (!zone) continue;
+    const handler = getZoneHandler(zone.type);
+    if (typeof handler?.onTurn !== "function") continue;
+    const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
+    if (!actorTokens.length) continue;
 
-    const currentDurationState = Number(zoneState.duration ?? handler.duration ?? 0);
-    const nextDuration = currentDurationState > 0 ? currentDurationState - 1 : 0;
-    if (nextDuration <= 0) {
-      try {
-        await syncZoneOccupants(document, handler, []);
-      } catch (err) {
-        console.error(`${MODULE_ID} | Failed to flush zone occupants`, err);
-      }
-      try {
-        await document.delete();
-      } catch (err) {
-        console.error(`${MODULE_ID} | Failed to delete expired zone`, err);
-      }
-      continue;
-    }
+    const actorTurnTriggers = { ...(zone.actorTurnTriggers ?? {}) };
+    if (actorTurnTriggers[actor.id] === signature) continue;
+    actorTurnTriggers[actor.id] = signature;
+    zone = await updateZone(document, zone, { actorTurnTriggers });
 
-    const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
-    const updatedState = { ...zoneState, duration: nextDuration };
-    try {
-      document._w4sqSkipEnter = true;
-      await document.update({ [flagKey]: updatedState });
-    } catch (err) {
-      console.error(`${MODULE_ID} | Failed to update zone duration`, err);
-    } finally {
-      document._w4sqSkipEnter = false;
-    }
+    const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
+    await handler.onTurn({ actor, token: actorTokens[0], document, zone, sourceActor });
   }
 }
