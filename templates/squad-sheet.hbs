@@ -20,6 +20,8 @@
         <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.experienceTier" value="{{squad.experienceTier}}"/>
         <label>{{localize "W4SQ.Equipment"}}</label>
         <input type="number" data-dtype="Number" name="flags.wfrp4e-squads.equipmentTier" value="{{squad.equipmentTier}}"/>
+        <label>{{localize "W4SQ.MagicalWeapon"}}</label>
+        <input type="checkbox" data-dtype="Boolean" name="flags.wfrp4e-squads.magicalWeapon" {{checked squad.magicalWeapon}}/>
         <label>{{localize "W4SQ.Role"}}</label>
         <select name="flags.wfrp4e-squads.role">
           {{#each roles as |role key|}}
