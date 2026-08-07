@@ -1,42 +1,31 @@
 import { MODULE_ID } from "./config.js";
+import { createZoneState } from "./logic/zones.js";
 
 const DEFAULT_DISTANCE = 4;
 
 const AOE_DEFINITIONS = {
   firestorm: {
     template: { t: "circle", distance: 4 },
-    duration: 3,
-    roundOnly: true,
     labelKey: "W4SQ.AoEFirestorm"
   },
   fireball: {
     template: { t: "circle", distance: 3 },
-    duration: 1,
-    roundOnly: true,
     labelKey: "W4SQ.AoEFireball"
   },
   minefield: {
     template: { t: "circle", distance: 1.5 },
-    duration: 4,
-    triggerOnEntry: true,
     labelKey: "W4SQ.AoEMinefield"
   },
   wolfPits: {
     template: { t: "circle", distance: 1.5 },
-    duration: 4,
-    triggerOnEntry: true,
     labelKey: "W4SQ.AoEWolfPits"
   },
   fortify: {
     template: { t: "circle", distance: 3.5 },
-    duration: null,
-    roundOnly: true,
     labelKey: "W4SQ.AoEFortify"
   },
   lineDefense: {
     template: { t: "circle", distance: 1.5 },
-    duration: 4,
-    roundOnly: true,
     labelKey: "W4SQ.AoELineDefense"
   }
 };
@@ -203,7 +192,7 @@ export async function createAoEFromEffect(opts = {}) {
   const templateData = buildTemplateData(definition.template, {
     casterTokenId,
     type,
-    duration: duration ?? definition.duration,
+    duration,
     data,
     userId,
     sceneId,
@@ -244,32 +233,16 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
     base.y = center?.y ?? 0;
   }
 
-  const combat = game.combat;
-  const placedRound = combat ? Number(combat.round ?? 0) : null;
-
-  const casterToken = casterTokenId ? canvas?.tokens?.get(casterTokenId) : null;
-  const zoneKey = type === "fortify" ? "fortifyPosition" : type;
   base.flags = base.flags ?? {};
   base.flags[MODULE_ID] = {
-    zone: {
-      type: zoneKey,
-      casterActorId: casterToken?.actor?.id ?? null,
+    zone: createZoneState({
+      type,
       casterTokenId,
-      disposition: casterToken?.document?.disposition ?? null,
-      target: ["minefield", "wolfPits"].includes(type) ? "enemies" : (["fortify", "lineDefense"].includes(type) ? "allies" : "any"),
+      duration,
       magical: Boolean(data?.magical),
-      createdRound: placedRound,
-      remainingRounds: duration ?? null,
-      lastAdvancedRound: placedRound,
-      movement: {
-        squares: Number(data?.movePerRound ?? 0) || 0,
-        direction: null
-      },
-      template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE },
-      occupants: [],
-      actorTurnTriggers: {},
-      triggered: false
-    }
+      movementSquares: data?.movePerRound,
+      template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE }
+    })
   };
   return base;
 }
