@@ -133,12 +133,13 @@ async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
   const extraRoll = await (new Roll("1d20").evaluate({}));
   let total = base + extraRoll.total + Number(options.moraleBonus ?? 0);
   const extras = [];
-  if (attacker.getFlag(FLAG_SCOPE, "fear")) {
+  const defenderOrigin = getOrigin(defender);
+  if (defenderOrigin !== "undead" && attacker.getFlag(FLAG_SCOPE, "fear")) {
     const fearRoll = await (new Roll("1d10").evaluate({}));
     total += fearRoll.total;
     extras.push(fearRoll.total);
   }
-  if (attacker.getFlag(FLAG_SCOPE, "terror")) {
+  if (defenderOrigin !== "undead" && attacker.getFlag(FLAG_SCOPE, "terror")) {
     const terrorRoll = await (new Roll("3d10").evaluate({}));
     total += terrorRoll.total;
     extras.push(terrorRoll.total);
@@ -156,18 +157,34 @@ async function moraleLossFor(defender, attacker, finalDamage, options = {}) {
   await defender.setFlag(FLAG_SCOPE, "morale", next);
   if (morale > 0 && next <= 0) {
     await postStatusLine(defender, "W4SQ.ChatMoraleZero");
-    await ensureEffect(defender, {
-      key: "routed",
-      label: game.i18n.localize("W4SQ.EffectRouted"),
-      duration: 99,
-      mods: { tags: { routed: true, disorganized: true } }
-    }, effect => Boolean(effect?.mods?.tags?.routed));
-    await handleMoraleZero(defender, attacker);
+    if (defenderOrigin === "undead") {
+      await handleMoraleZero(defender, attacker);
+    } else {
+      await ensureEffect(defender, {
+        key: "routed",
+        label: game.i18n.localize("W4SQ.EffectRouted"),
+        duration: 99,
+        mods: { tags: { routed: true, disorganized: true } }
+      }, effect => Boolean(effect?.mods?.tags?.routed));
+      await handleMoraleZero(defender, attacker);
+    }
   }
-  if (moraleMax > 0 && next / moraleMax < 0.5) {
+  if (defenderOrigin !== "undead" && moraleMax > 0 && next / moraleMax < 0.5) {
     await ensureDisorganized(defender, { source: "morale" });
   }
   return total;
+}
+
+
+async function applyVampiricHealing(actor, damage) {
+  if (getOrigin(actor) !== "undead") return 0;
+  if (!getPassives(actor).undeadVampiric) return 0;
+  const heal = Math.min(30, Math.floor(Math.max(0, Number(damage) || 0) * 0.25));
+  if (heal <= 0) return 0;
+  const hp = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
+  const hpMax = Number(actor.getFlag(FLAG_SCOPE, "hpMax") || 0);
+  await actor.setFlag(FLAG_SCOPE, "hp", clamp(hp + heal, 0, hpMax));
+  return heal;
 }
 
 async function applyDamage(actor, defender, finalDamage, options = {}) {
@@ -195,6 +212,7 @@ export async function doSquadAction(actor, action) {
   const role = getF(actor, "role", "infantry");
   const weaponKey = role === "specialist" ? null : getF(actor, "weapon", "sword");
   const weapon = weaponKey ? (WEAPONS[weaponKey] ?? WEAPONS.sword) : { accuracyDice: "0", dmgDice: "0", pierceArmor: false };
+  const magicalWeapon = Boolean(getF(actor, "magicalWeapon", false));
   const roleDef = ROLES[role] ?? ROLES.infantry;
 
   const backlineAttack = Boolean(getF(actor, "backlineAttack", false));
@@ -294,7 +312,8 @@ export async function doSquadAction(actor, action) {
           const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
           await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
           moraleResult = (moraleResult || 0) + guardMoraleBonus;
-          if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+          if (morale > 0 && nextMorale <= 0) await handleMoraleZero(targetActor, actor);
+          if (getOrigin(targetActor) !== "undead" && moraleMax > 0 && nextMorale / moraleMax < 0.5) {
             await ensureDisorganized(targetActor, { source: "guard" });
           }
         }
@@ -319,7 +338,7 @@ export async function doSquadAction(actor, action) {
       moraleLoss: moraleResult,
       soakDetail: chipDetail.join(" • ") || game.i18n.localize("W4SQ.ChatChip"),
       hobNotes,
-      footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
+      footer: `Role ${role} · Weapon ${weaponLabel}${magicalWeapon ? " · Magical" : ""} · EXP ${exp} · EQ ${eq}`
     });
   }
 
@@ -465,7 +484,7 @@ export async function doSquadAction(actor, action) {
     const attackAdjust = await adjustAttackDamage(actor, targetActor, {
       action,
       damageType: action,
-      isMagical: Boolean(aggAttack.tags?.magical),
+      isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical),
       isCharge: Boolean(aggAttack.tags?.charged),
       hpDamage: finalDamage
     });
@@ -480,12 +499,15 @@ export async function doSquadAction(actor, action) {
       moraleBonus,
       action,
       damageType: action,
-      isMagical: Boolean(aggAttack.tags?.magical),
+      isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical),
       isAoE: Boolean(aggAttack.tags?.aoe),
       isCharge: Boolean(aggAttack.tags?.charged)
     });
     finalDamage = incomingAdjust.damage;
     moraleBonus = incomingAdjust.moraleBonus;
+    if (incomingAdjust.resistanceBlocked > 0) {
+      soakNotes.push(game.i18n.format("W4SQ.ChatNonMagicalResistance", { total: incomingAdjust.resistanceBlocked }));
+    }
   }
 
   if (success && targetActor && action === "melee" && effectiveBackline) {
@@ -508,11 +530,13 @@ export async function doSquadAction(actor, action) {
       const shots = Number(aggAttack.tags.multiShot) || 1;
       const per = aggAttack.tags.multiShotHalf ? Math.max(1, Math.floor(finalDamage / 2)) : finalDamage;
       for (let i = 0; i < shots; i++) {
-        const res = await applyDamage(actor, targetActor, per, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
+        const res = await applyDamage(actor, targetActor, per, { moraleBonus, isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical) });
+        await applyVampiricHealing(actor, per);
         moraleLoss = res.moraleLoss;
       }
     } else {
-      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
+      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical) });
+      await applyVampiricHealing(actor, finalDamage);
       moraleLoss = res.moraleLoss;
     }
     await recordDamageTaken(targetActor, { hpDamage: finalDamage });
@@ -520,7 +544,8 @@ export async function doSquadAction(actor, action) {
 
   if (targetActor && success && extraAttacks > 0) {
     for (let i = 0; i < extraAttacks; i++) {
-      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: Boolean(aggAttack.tags?.magical) });
+      const res = await applyDamage(actor, targetActor, finalDamage, { moraleBonus, isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical) });
+      await applyVampiricHealing(actor, finalDamage);
       moraleLoss = (moraleLoss || 0) + (res.moraleLoss || 0);
       await recordDamageTaken(targetActor, { hpDamage: finalDamage });
     }
@@ -544,7 +569,8 @@ export async function doSquadAction(actor, action) {
       const nextMorale = clamp(morale - guardMoraleBonus, 0, moraleMax);
       await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
       moraleLoss = (moraleLoss || 0) + guardMoraleBonus;
-      if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+      if (morale > 0 && nextMorale <= 0) await handleMoraleZero(targetActor, actor);
+      if (getOrigin(targetActor) !== "undead" && moraleMax > 0 && nextMorale / moraleMax < 0.5) {
         await ensureDisorganized(targetActor, { source: "guard" });
       }
     }
@@ -556,7 +582,8 @@ export async function doSquadAction(actor, action) {
     const nextMorale = clamp(morale - backlineMoraleBonus, 0, moraleMax);
     await targetActor.setFlag(FLAG_SCOPE, "morale", nextMorale);
     moraleLoss = (moraleLoss || 0) + backlineMoraleBonus;
-    if (moraleMax > 0 && nextMorale / moraleMax < 0.5) {
+    if (morale > 0 && nextMorale <= 0) await handleMoraleZero(targetActor, actor);
+    if (getOrigin(targetActor) !== "undead" && moraleMax > 0 && nextMorale / moraleMax < 0.5) {
       await ensureDisorganized(targetActor, { source: "backline" });
     }
   }
@@ -603,7 +630,7 @@ export async function doSquadAction(actor, action) {
   }
 
   if (success && targetActor) {
-    await applyPostAttackEffects({ attacker: actor, defender: targetActor, success: true, action, isMagical: Boolean(aggAttack.tags?.magical) });
+    await applyPostAttackEffects({ attacker: actor, defender: targetActor, success: true, action, isMagical: magicalWeapon || Boolean(aggAttack.tags?.magical) });
   }
 
   await sendActionMessage({
@@ -618,6 +645,6 @@ export async function doSquadAction(actor, action) {
     soakDetail: soakNotes.join(" • ") || game.i18n.localize("W4SQ.ChatNoSoak"),
     backline: effectiveBackline && action === "melee" && success,
     hobNotes,
-    footer: `Role ${role} · Weapon ${weaponLabel} · EXP ${exp} · EQ ${eq}`
+    footer: `Role ${role} · Weapon ${weaponLabel}${magicalWeapon ? " · Magical" : ""} · EXP ${exp} · EQ ${eq}`
   });
 }
