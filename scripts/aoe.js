@@ -94,6 +94,16 @@ async function previewAoEPlacement(opts = {}) {
   const definition = AOE_DEFINITIONS[opts.type];
   if (!definition) return;
   const radius = unitsToPixels(definition.template.distance ?? DEFAULT_DISTANCE);
+  const surface = new PIXI.Container();
+  surface.eventMode = "static";
+  surface.cursor = "crosshair";
+  surface.zIndex = Number.MAX_SAFE_INTEGER;
+  const dimensions = canvas.dimensions;
+  const sceneRect = dimensions?.sceneRect ?? dimensions?.rect;
+  surface.hitArea = sceneRect
+    ? new PIXI.Rectangle(sceneRect.x, sceneRect.y, sceneRect.width, sceneRect.height)
+    : new PIXI.Rectangle(0, 0, dimensions?.width ?? 0, dimensions?.height ?? 0);
+
   const preview = new PIXI.Graphics();
   if (typeof preview.circle === "function") {
     preview.circle(0, 0, radius)
@@ -106,35 +116,28 @@ async function previewAoEPlacement(opts = {}) {
     preview.endFill();
   }
   preview.eventMode = "none";
-  canvas.stage.addChild(preview);
+  surface.addChild(preview);
+  canvas.stage.addChild(surface);
 
-  const eventPoint = event => {
-    const rect = canvas.app.view.getBoundingClientRect();
-    const rendererPoint = new PIXI.Point(
-      (event.clientX - rect.left) * (canvas.app.renderer.width / rect.width),
-      (event.clientY - rect.top) * (canvas.app.renderer.height / rect.height)
-    );
-    return canvas.stage.worldTransform.applyInverse(rendererPoint);
-  };
   const move = event => {
-    const point = eventPoint(event);
+    const point = event.getLocalPosition(canvas.stage);
     preview.position.set(point.x, point.y);
   };
   const cleanup = () => {
-    canvas.app.view.removeEventListener("pointermove", move, true);
-    canvas.app.view.removeEventListener("pointerdown", place, true);
+    surface.off("pointermove", move);
+    surface.off("pointerdown", place);
     canvas.app.view.removeEventListener("contextmenu", cancel);
     window.removeEventListener("keydown", keydown);
-    preview.destroy();
+    surface.destroy({ children: true });
   };
   const place = event => {
+    if (event.button === 2) {
+      event.preventDefault();
+      cleanup();
+      return;
+    }
     if (event.button !== 0) return;
-    // Listen on the canvas element in the capture phase. Tokens consume PIXI
-    // pointer events, which previously made it impossible to place an area over
-    // an occupied space.
-    event.preventDefault();
-    event.stopPropagation();
-    const point = eventPoint(event);
+    const point = event.getLocalPosition(canvas.stage);
     cleanup();
     createAoEFromEffect({ ...opts, sceneId: scene.id, position: { x: point.x, y: point.y } });
   };
@@ -145,8 +148,8 @@ async function previewAoEPlacement(opts = {}) {
   const keydown = event => {
     if (event.key === "Escape") cleanup();
   };
-  canvas.app.view.addEventListener("pointermove", move, true);
-  canvas.app.view.addEventListener("pointerdown", place, true);
+  surface.on("pointermove", move);
+  surface.on("pointerdown", place);
   canvas.app.view.addEventListener("contextmenu", cancel, { once: true });
   window.addEventListener("keydown", keydown);
 }
