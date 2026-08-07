@@ -305,6 +305,26 @@ Hooks.on("createToken", document => {
   handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
 });
 
+Hooks.on("createMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
+});
+
+Hooks.on("updateMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+});
+
+Hooks.on("updateToken", (document, changes) => {
+  if (!game.user.isGM) return;
+  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
+});
+
+Hooks.on("createToken", document => {
+  if (!game.user.isGM) return;
+  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
+});
+
 Hooks.on("renderTokenHUD", (hud, html) => {
   const token = canvas?.tokens?.get(hud.object.id);
   const actor = token?.actor;
