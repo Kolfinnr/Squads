@@ -956,3 +956,31 @@ export async function tickZonesForActor(actor, context = {}) {
     await handler.onTurn({ actor, token: actorTokens[0], document, zone, sourceActor });
   }
 }
+
+/** Apply turn-triggered zone effects only to the combatant whose turn begins. */
+export async function tickZonesForActor(actor, context = {}) {
+  if (!actor || !canvas?.scene) return;
+  const round = Number(context.round ?? game.combat?.round ?? 0);
+  const turn = Number(context.turn ?? game.combat?.turn ?? 0);
+  const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}`;
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+
+  for (const document of documents) {
+    let zone = getZoneData(document);
+    if (!zone) continue;
+    const handler = getZoneHandler(zone.key);
+    if (typeof handler?.onTurn !== "function") continue;
+    const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
+    if (!actorTokens.length) continue;
+
+    const extra = zoneExtra(zone);
+    const actorTicks = { ...(extra.actorTicks ?? {}) };
+    if (actorTicks[actor.id] === signature) continue;
+    actorTicks[actor.id] = signature;
+    extra.actorTicks = actorTicks;
+    zone = await setZoneExtra(document, zone, extra);
+
+    const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+    await handler.onTurn({ actor, token: actorTokens[0], document, zone, sourceActor });
+  }
+}
