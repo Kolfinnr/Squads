@@ -43,6 +43,7 @@ export class SquadActorSheet extends ActorSheet {
       equipmentTier: f("equipmentTier", 0),
       role,
       weapon: role === "specialist" ? null : f("weapon", "sword"),
+      magicalWeapon: f("magicalWeapon", false),
       specialistType: f("specialistType", null),
       notes: f("notes", ""),
       fear: f("fear", false),
