@@ -937,7 +937,7 @@ export async function tickZonesForActor(actor, context = {}) {
     if (!zone) continue;
     const handler = getZoneHandler(zone.type);
     if (typeof handler?.onTurn !== "function") continue;
-    const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}:${document.id}`;
+    const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${context.combatantId ?? "combatant"}:${actor.id}:${document.id}`;
     const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
     if (!actorTokens.length) continue;
 

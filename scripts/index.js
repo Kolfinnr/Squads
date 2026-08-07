@@ -82,7 +82,8 @@ async function tickActorEntry(actor, context = {}) {
 const processedTurns = new Map();
 const previousTurnActors = new Map();
 const processedZoneRounds = new Map();
-const pendingZoneRounds = new Map();
+const zoneRoundChains = new Map();
+const combatRunTokens = new Map();
 
 function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
@@ -90,7 +91,8 @@ function resetProcessedTurn(combat) {
   processedTurns.delete(key);
   previousTurnActors.delete(key);
   processedZoneRounds.delete(key);
-  pendingZoneRounds.delete(key);
+  zoneRoundChains.delete(key);
+  combatRunTokens.delete(key);
 }
 
 async function processZoneRound(combat) {
@@ -98,24 +100,26 @@ async function processZoneRound(combat) {
   const key = combat.id ?? combat._id;
   const round = Number(combat.round ?? 0);
   if (!key || round < 1 || processedZoneRounds.get(key) === round) return;
-
-  const active = pendingZoneRounds.get(key);
-  if (active) {
-    try {
-      await active;
-    } catch (_err) {
-      // The failed owner logged the error. Continue so this duplicate hook can retry.
-    }
-    if (processedZoneRounds.get(key) === round) return;
+  let runToken = combatRunTokens.get(key);
+  if (!runToken) {
+    runToken = Symbol(key);
+    combatRunTokens.set(key, runToken);
   }
 
-  const pending = tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
-  pendingZoneRounds.set(key, pending);
+  // Foundry emits combatRound and updateCombat for the same advancement. Queue
+  // both on one per-combat chain: duplicates observe the completed marker, while
+  // a queued duplicate retries if the preceding document operation rejected.
+  const previous = zoneRoundChains.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => undefined).then(async () => {
+    if (processedZoneRounds.get(key) === round) return;
+    await tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
+    if (combatRunTokens.get(key) === runToken) processedZoneRounds.set(key, round);
+  });
+  zoneRoundChains.set(key, pending);
   try {
     await pending;
-    processedZoneRounds.set(key, round);
   } finally {
-    if (pendingZoneRounds.get(key) === pending) pendingZoneRounds.delete(key);
+    if (zoneRoundChains.get(key) === pending) zoneRoundChains.delete(key);
   }
 }
 
@@ -130,10 +134,10 @@ async function expireEffectsForTurnEntry(actor) {
   }
 }
 
-function markTurn(combat, round, turn) {
+function markTurn(combat, round, turn, combatantId) {
   const key = combat?.id ?? combat?._id;
   if (!key) return { key: null, processed: false };
-  const signature = `${round}:${turn}`;
+  const signature = `${round}:${turn}:${combatantId ?? "none"}`;
   const last = processedTurns.get(key);
   if (last === signature) {
     console.log("[W4SQ] processTurnTick skipped: same turn as last time", { round, turn });
@@ -158,28 +162,37 @@ async function processTurnTick(combat, context = {}) {
     console.log("[W4SQ] processTurnTick skipped: invalid round/turn", { round, turn });
     return;
   }
-  const { processed } = markTurn(combat, round, turn);
-  if (!processed) return;
   const combatant = combat.combatant;
   if (!combatant) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
   }
+  const combatantId = combatant.id ?? combatant._id ?? null;
+  const { processed } = markTurn(combat, round, turn, combatantId);
+  if (!processed) return;
+  const combatKey = combat.id ?? combat._id;
+  let runToken = combatRunTokens.get(combatKey);
+  if (!runToken) {
+    runToken = Symbol(combatKey);
+    combatRunTokens.set(combatKey, runToken);
+  }
   const tickContext = {
     ...(context ?? {}),
     combatId: combat.id ?? combat._id ?? null,
+    combatantId,
     round,
     turn
   };
   const actor = combatant.actor;
-  const combatKey = combat.id ?? combat._id;
   const previousActor = previousTurnActors.get(combatKey);
   if (previousActor) {
     await removeEffectsByTag(previousActor, "expiresAtTurnEnd", previousActor.id);
   }
   await expireEffectsForTurnEntry(actor);
+  if (combatRunTokens.get(combatKey) !== runToken) return;
   previousTurnActors.set(combatKey, actor);
   await tickZonesForActor(actor, tickContext);
+  if (combatRunTokens.get(combatKey) !== runToken) return;
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
