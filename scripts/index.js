@@ -82,6 +82,7 @@ async function tickActorEntry(actor, context = {}) {
 const processedTurns = new Map();
 const previousTurnActors = new Map();
 const processedZoneRounds = new Map();
+const pendingZoneRounds = new Map();
 
 function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
@@ -89,6 +90,7 @@ function resetProcessedTurn(combat) {
   processedTurns.delete(key);
   previousTurnActors.delete(key);
   processedZoneRounds.delete(key);
+  pendingZoneRounds.delete(key);
 }
 
 async function processZoneRound(combat) {
@@ -96,12 +98,24 @@ async function processZoneRound(combat) {
   const key = combat.id ?? combat._id;
   const round = Number(combat.round ?? 0);
   if (!key || round < 1 || processedZoneRounds.get(key) === round) return;
-  processedZoneRounds.set(key, round);
+
+  const active = pendingZoneRounds.get(key);
+  if (active) {
+    try {
+      await active;
+    } catch (_err) {
+      // The failed owner logged the error. Continue so this duplicate hook can retry.
+    }
+    if (processedZoneRounds.get(key) === round) return;
+  }
+
+  const pending = tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
+  pendingZoneRounds.set(key, pending);
   try {
-    await tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
-  } catch (err) {
-    processedZoneRounds.delete(key);
-    throw err;
+    await pending;
+    processedZoneRounds.set(key, round);
+  } finally {
+    if (pendingZoneRounds.get(key) === pending) pendingZoneRounds.delete(key);
   }
 }
 

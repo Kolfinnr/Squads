@@ -307,6 +307,7 @@ export function createZoneState({
   duration,
   magical = false,
   movementSquares,
+  position = null,
   template = {}
 } = {}) {
   const zoneType = type === "fortify" ? "fortifyPosition" : type;
@@ -314,6 +315,7 @@ export function createZoneState({
   if (!handler) throw new Error(`${MODULE_ID} | Unknown zone type: ${type}`);
   const casterToken = casterTokenId ? canvas?.tokens?.get(casterTokenId) ?? null : null;
   const createdRound = game.combat ? Number(game.combat.round ?? 0) : null;
+  const squares = Number(movementSquares ?? handler.moveSquares ?? 0) || 0;
   return {
     type: zoneType,
     casterActorId: casterToken?.actor?.id ?? null,
@@ -325,8 +327,9 @@ export function createZoneState({
     remainingRounds: duration ?? handler.duration ?? null,
     lastAdvancedRound: createdRound,
     movement: {
-      squares: Number(movementSquares ?? handler.moveSquares ?? 0) || 0,
-      direction: null
+      squares,
+      direction: squares ? randomDirection().label : null,
+      lastPosition: position ? { x: Number(position.x) || 0, y: Number(position.y) || 0 } : null
     },
     template,
     occupants: [],
@@ -339,13 +342,16 @@ function getZoneData(document) {
   return document?.getFlag(MODULE_ID, FLAG_KEY) ?? null;
 }
 
-function canonicalZoneState(zone, legacyAoE = null) {
+function canonicalZoneState(zone, legacyAoE = null, position = null) {
   if (!zone && !legacyAoE) return null;
-  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds")) return zone;
+  const existingSquares = Number(zone?.movement?.squares ?? 0) || 0;
+  const hasCanonicalMovement = !existingSquares || (zone?.movement?.direction && zone?.movement?.lastPosition);
+  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement) return zone;
   const type = zone?.type ?? zone?.key ?? legacyAoE?.aoeType ?? null;
   if (!type) return null;
   const handler = getZoneHandler(type);
   const createdRound = zone?.createdRound ?? zone?.extra?.placedRound ?? legacyAoE?.placedRound ?? null;
+  const movementSquares = Number(zone?.movement?.squares ?? legacyAoE?.data?.movePerRound ?? handler?.moveSquares ?? 0) || 0;
   return {
     type,
     casterActorId: zone?.casterActorId ?? zone?.actorId ?? null,
@@ -357,8 +363,9 @@ function canonicalZoneState(zone, legacyAoE = null) {
     remainingRounds: zone?.remainingRounds ?? zone?.duration ?? legacyAoE?.remaining ?? legacyAoE?.duration ?? handler?.duration ?? null,
     lastAdvancedRound: zone?.lastAdvancedRound ?? zone?.extra?.lastLifecycleRound ?? legacyAoE?.lastRound ?? createdRound,
     movement: {
-      squares: Number(zone?.movement?.squares ?? legacyAoE?.data?.movePerRound ?? handler?.moveSquares ?? 0) || 0,
-      direction: zone?.movement?.direction ?? legacyAoE?.direction ?? null
+      squares: movementSquares,
+      direction: zone?.movement?.direction ?? legacyAoE?.direction ?? (movementSquares ? randomDirection().label : null),
+      lastPosition: zone?.movement?.lastPosition ?? position
     },
     template: zone?.template ?? handler?.template ?? {},
     occupants: normalizeOccupants(zone?.occupants ?? legacyAoE?.occupants),
@@ -371,7 +378,7 @@ async function migrateZoneDocument(document) {
   if (!document) return null;
   const zone = getZoneData(document);
   const legacyAoE = document.getFlag(MODULE_ID, "aoe") ?? null;
-  const canonical = canonicalZoneState(zone, legacyAoE);
+  const canonical = canonicalZoneState(zone, legacyAoE, { x: document.x ?? 0, y: document.y ?? 0 });
   if (!canonical) return null;
   if (canonical !== zone) {
     document._w4sqSkipEnter = true;
@@ -525,6 +532,7 @@ async function updateZone(document, zone, changes) {
     await document.setFlag(MODULE_ID, FLAG_KEY, updated);
   } catch (err) {
     console.error(`${MODULE_ID} | Failed to update zone state`, err);
+    throw err;
   } finally {
     document._w4sqSkipEnter = false;
   }
@@ -606,15 +614,15 @@ function squareDistance(squares = 1) {
 
 function moveUpdate(document, zone) {
   const squares = Number(zone.movement?.squares ?? 0);
-  if (!squares) return { update: {}, direction: zone.movement?.direction ?? null };
+  if (!squares) return { update: {}, direction: zone.movement?.direction ?? null, position: null };
   const dir = DIRECTIONS.find(candidate => candidate.label === zone.movement?.direction) ?? randomDirection();
   const dist = squareDistance(squares);
   const dx = dir.dx * dist;
   const dy = dir.dy * dist;
-  if (!dx && !dy) return { update: {}, direction: dir.label };
-  const x = (document.x ?? 0) + dx;
-  const y = (document.y ?? 0) + dy;
-  return { update: { x, y }, direction: dir.label };
+  const previous = zone.movement?.lastPosition ?? { x: document.x ?? 0, y: document.y ?? 0 };
+  if (!dx && !dy) return { update: {}, direction: dir.label, position: previous };
+  const position = { x: Number(previous.x ?? 0) + dx, y: Number(previous.y ?? 0) + dy };
+  return { update: position, direction: dir.label, position };
 }
 
 async function handleRoundEffects(document, handler, zone, tokensOverride, { context = {} } = {}) {
@@ -675,7 +683,11 @@ export async function handleZoneTokenCreated(tokenDoc) {
 }
 
 export async function handleZoneTemplateDeleted(document) {
-  const zone = canonicalZoneState(getZoneData(document), document?.getFlag(MODULE_ID, "aoe") ?? null);
+  const zone = canonicalZoneState(
+    getZoneData(document),
+    document?.getFlag(MODULE_ID, "aoe") ?? null,
+    { x: document?.x ?? 0, y: document?.y ?? 0 }
+  );
   if (!zone) return;
   const handler = getZoneHandler(zone.type);
   if (typeof handler?.onExit !== "function") return;
@@ -696,65 +708,75 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
   if (!canvas?.scene) return;
   const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
   for (const document of documents) {
-    let zone = await migrateZoneDocument(document);
-    if (!zone) continue;
-    const handler = getZoneHandler(zone.type);
-    if (!handler) continue;
-    if (handler.singleUse && zone.triggered) {
-      await document.delete();
-      continue;
-    }
-
+    let zone = null;
     const currentRound = context?.round ?? null;
-    const shouldAdvance = isRoundStart
-      && currentRound != null
-      && zone.lastAdvancedRound !== currentRound
-      && (zone.createdRound == null || currentRound > zone.createdRound);
-    if (!shouldAdvance) continue;
-
-    const finiteDuration = zone.remainingRounds !== null && zone.remainingRounds !== undefined;
-    const nextRemaining = finiteDuration ? Math.max(0, Number(zone.remainingRounds) - 1) : null;
-    if (finiteDuration && nextRemaining <= 0) {
-      await syncZoneOccupants(document, handler, []);
-      await document.delete();
-      continue;
-    }
-
-    const movement = moveUpdate(document, zone);
-    if (Object.keys(movement.update).length > 0) {
-      document._w4sqSkipEnter = true;
-      try {
-        await document.update(movement.update);
-      } finally {
-        document._w4sqSkipEnter = false;
+    try {
+      zone = await migrateZoneDocument(document);
+      if (!zone) continue;
+      const handler = getZoneHandler(zone.type);
+      if (!handler) continue;
+      if (handler.singleUse && zone.triggered) {
+        await document.delete();
+        continue;
       }
-    }
 
-    zone = await updateZone(document, zone, {
-      remainingRounds: nextRemaining,
-      lastAdvancedRound: currentRound,
-      movement: {
-        squares: Number(zone.movement?.squares ?? 0) || 0,
-        direction: movement.direction
+      const shouldAdvance = isRoundStart
+        && currentRound != null
+        && zone.lastAdvancedRound !== currentRound
+        && (zone.createdRound == null || currentRound > zone.createdRound);
+      if (!shouldAdvance) continue;
+
+      const finiteDuration = zone.remainingRounds !== null && zone.remainingRounds !== undefined;
+      const nextRemaining = finiteDuration ? Math.max(0, Number(zone.remainingRounds) - 1) : null;
+      if (finiteDuration && nextRemaining <= 0) {
+        await syncZoneOccupants(document, handler, []);
+        await document.delete();
+        continue;
       }
-    });
 
-    let tokens = tokensInTemplate(document, handler);
-    await syncZoneOccupants(document, handler, tokens);
-    let zoneState = getZoneData(document);
-    if (!zoneState) continue;
-    if (handler.singleUse && zoneState.triggered) {
-      await document.delete();
-      continue;
-    }
-
-    tokens = tokensInTemplate(document, handler);
-    if (typeof handler.onRound === "function") {
-      try {
-        await handleRoundEffects(document, handler, zoneState, tokens, { context });
-      } catch (err) {
-        console.error(`${MODULE_ID} | Zone round effect failed`, err);
+      const movement = moveUpdate(document, zone);
+      if (Object.keys(movement.update).length > 0) {
+        document._w4sqSkipEnter = true;
+        try {
+          await document.update({ x: movement.update.x, y: movement.update.y });
+        } finally {
+          document._w4sqSkipEnter = false;
+        }
       }
+
+      let tokens = tokensInTemplate(document, handler);
+      await syncZoneOccupants(document, handler, tokens);
+      zone = getZoneData(document) ?? zone;
+      if (handler.singleUse && zone.triggered) {
+        await document.delete();
+        continue;
+      }
+
+      tokens = tokensInTemplate(document, handler);
+      if (typeof handler.onRound === "function") {
+        await handleRoundEffects(document, handler, zone, tokens, { context });
+        zone = getZoneData(document) ?? zone;
+      }
+
+      await updateZone(document, zone, {
+        remainingRounds: nextRemaining,
+        lastAdvancedRound: currentRound,
+        movement: {
+          squares: Number(zone.movement?.squares ?? 0) || 0,
+          direction: movement.direction,
+          lastPosition: movement.position
+        }
+      });
+    } catch (err) {
+      console.error(`${MODULE_ID} | Zone round advancement failed`, {
+        zoneId: document?.id ?? null,
+        round: currentRound,
+        oldPosition: zone?.movement?.lastPosition ?? { x: document?.x ?? null, y: document?.y ?? null },
+        documentPosition: { x: document?.x ?? null, y: document?.y ?? null },
+        remainingRounds: zone?.remainingRounds ?? null,
+        error: err
+      });
+      throw err;
     }
   }
 }
@@ -764,7 +786,6 @@ export async function tickZonesForActor(actor, context = {}) {
   if (!actor || !canvas?.scene) return;
   const round = Number(context.round ?? game.combat?.round ?? 0);
   const turn = Number(context.turn ?? game.combat?.turn ?? 0);
-  const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}`;
   const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
 
   for (const document of documents) {
@@ -772,6 +793,7 @@ export async function tickZonesForActor(actor, context = {}) {
     if (!zone) continue;
     const handler = getZoneHandler(zone.type);
     if (typeof handler?.onTurn !== "function") continue;
+    const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}:${document.id}`;
     const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
     if (!actorTokens.length) continue;
 

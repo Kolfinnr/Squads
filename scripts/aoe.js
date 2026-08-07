@@ -244,6 +244,7 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
       duration,
       magical: Boolean(data?.magical),
       movementSquares: data?.movePerRound,
+      position: { x: base.x, y: base.y },
       template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE }
     })
   };
