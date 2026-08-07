@@ -3,6 +3,12 @@ import { createZoneState } from "./logic/zones.js";
 
 const DEFAULT_DISTANCE = 4;
 
+function unitsToPixels(units) {
+  const size = Number(canvas?.grid?.size ?? canvas?.dimensions?.size ?? 100) || 100;
+  const distance = Number(canvas?.dimensions?.distance ?? canvas?.grid?.distance ?? 5) || 5;
+  return (Number(units) || 0) * (size / distance);
+}
+
 const AOE_DEFINITIONS = {
   firestorm: {
     template: { t: "circle", distance: 4 },
