@@ -272,14 +272,32 @@ async function applyFortifyBuffs({ actor, document, zone }) {
 }
 
 const ZONE_HANDLERS = {
+  fireball: {
+    duration: 1,
+    template: { type: "circle", radiusUnits: 3 },
+    target: "any",
+    async onPlaced({ document, tokens, zone, sourceActor }) {
+      for (const token of tokens) {
+        const actor = token?.actor;
+        if (!actor) continue;
+        const damage = await rollAndApplyDamage(actor, { hpFormula: "3d20", moraleFormula: "4d20" });
+        await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFireballImpact", {
+          name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+          target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+          hp: damage.hp,
+          morale: damage.morale
+        });
+      }
+      await document.delete();
+    }
+  },
   firestorm: {
     duration: 3,
     template: { type: "circle", radiusUnits: 4 },
     target: "any",
-    initialDelay: true,
     roundOnly: true,
-    moveSquares: 2,
-    async onEnter({ actor, document, zone, sourceActor }) {
+    moveSquares: 3,
+    async onEnter({ actor, document, zone }) {
       const duration = zone.duration ?? 1;
       const key = `zone-firestorm-${document.id}-${actor.id}`;
       const label = game.i18n.localize("W4SQ.ManeuverFirestorm");
@@ -289,16 +307,8 @@ const ZONE_HANDLERS = {
         duration,
         mods: { tags: { zoneFirestorm: true, [`zone-${document.id}`]: true } }
       }, effect => effect.key === key);
-      const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
-      const caster = sourceActor ?? (zone.actorId ? game.actors.get(zone.actorId) ?? null : null) ?? actor;
-      await postZoneChat(caster, "W4SQ.ChatFirestorm", {
-        name: caster.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        hp: damage.hp,
-        morale: damage.morale
-      });
     },
-    async onRound({ actor, zone, sourceActor }) {
+    async onTurn({ actor, sourceActor }) {
       const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
       await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFirestormPulse", {
         name: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
@@ -868,6 +878,11 @@ export async function handleZoneTemplateCreated(document) {
   const handler = getZoneHandler(zone.key);
   if (!handler) return;
   const tokens = tokensInTemplate(document, handler);
+  if (typeof handler.onPlaced === "function") {
+    const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+    await handler.onPlaced({ document, tokens, zone, sourceActor });
+    return;
+  }
   await syncZoneOccupants(document, handler, tokens);
 }
 
@@ -897,9 +912,8 @@ export function getZoneHandlers() {
 
 export async function tickZones({ isRoundStart = false, context = {} } = {}) {
   if (!canvas?.scene) return;
-  const templates = canvas.templates?.placeables ?? [];
-  for (const template of templates) {
-    const document = template?.document;
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  for (const document of documents) {
     const zone = getZoneData(document);
     if (!zone) continue;
     const handler = getZoneHandler(zone.key);
@@ -916,12 +930,23 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       ? (durationBeforeMove <= 1 && currentRound != null && (extraBeforeMove.lastRound ?? null) !== currentRound)
       : (isRoundStart && durationBeforeMove <= 1);
 
-    if (isRoundStart && !expiresThisStep) {
+    const lastMovedRound = extraBeforeMove.lastMovedRound ?? null;
+    const placedRound = extraBeforeMove.placedRound ?? null;
+    const shouldMove = isRoundStart
+      && handler.moveSquares
+      && currentRound != null
+      && lastMovedRound !== currentRound
+      && (placedRound == null || currentRound > placedRound);
+    if (shouldMove && !expiresThisStep) {
       const move = moveUpdate(document, handler);
       if (Object.keys(move).length > 0) {
         try {
+          const movedExtra = zoneExtra(zone);
+          movedExtra.lastMovedRound = currentRound;
+          const movedZone = foundry.utils.mergeObject(zone, { extra: movedExtra }, { inplace: false });
+          const flagKey = `flags.${MODULE_ID}.${FLAG_KEY}`;
           document._w4sqSkipEnter = true;
-          await document.update(move);
+          await document.update({ ...move, [flagKey]: movedZone }, { diff: false, recursive: false });
         } catch (err) {
           console.error(`${MODULE_ID} | Failed to reposition zone`, err);
         } finally {
@@ -951,15 +976,17 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
     }
     zoneState = roundResult.zone ?? zoneState;
 
-    const extraAfter = zoneExtra(zoneState);
+    let extraAfter = zoneExtra(zoneState);
     let shouldDecrement = false;
     if (handler.roundOnly) {
-      if (currentRound != null) {
-        const beforeRound = extraBeforeMove.lastRound ?? null;
-        const afterRound = extraAfter.lastRound ?? null;
-        if (afterRound === currentRound && beforeRound !== currentRound) {
-          shouldDecrement = true;
-        }
+      // Duration is zone lifecycle, not damage timing. Advance it exactly once
+      // per combat round even when a handler (such as Firestorm) has no onRound
+      // callback because its damage occurs on affected combatants' turns.
+      if (currentRound != null && extraAfter.lastLifecycleRound !== currentRound) {
+        extraAfter.lastLifecycleRound = currentRound;
+        zoneState = await setZoneExtra(document, zoneState, extraAfter);
+        extraAfter = zoneExtra(zoneState);
+        shouldDecrement = true;
       }
     } else if (isRoundStart) {
       shouldDecrement = true;
@@ -995,5 +1022,33 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
     } finally {
       document._w4sqSkipEnter = false;
     }
+  }
+}
+
+/** Apply turn-triggered zone effects only to the combatant whose turn begins. */
+export async function tickZonesForActor(actor, context = {}) {
+  if (!actor || !canvas?.scene) return;
+  const round = Number(context.round ?? game.combat?.round ?? 0);
+  const turn = Number(context.turn ?? game.combat?.turn ?? 0);
+  const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${actor.id}`;
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+
+  for (const document of documents) {
+    let zone = getZoneData(document);
+    if (!zone) continue;
+    const handler = getZoneHandler(zone.key);
+    if (typeof handler?.onTurn !== "function") continue;
+    const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
+    if (!actorTokens.length) continue;
+
+    const extra = zoneExtra(zone);
+    const actorTicks = { ...(extra.actorTicks ?? {}) };
+    if (actorTicks[actor.id] === signature) continue;
+    actorTicks[actor.id] = signature;
+    extra.actorTicks = actorTicks;
+    zone = await setZoneExtra(document, zone, extra);
+
+    const sourceActor = zone.actorId ? game.actors?.get(zone.actorId) ?? null : null;
+    await handler.onTurn({ actor, token: actorTokens[0], document, zone, sourceActor });
   }
 }

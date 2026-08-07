@@ -136,20 +136,33 @@ async function previewAoEPlacement(opts = {}) {
   preview.eventMode = "none";
   canvas.stage.addChild(preview);
 
+  const eventPoint = event => {
+    const rect = canvas.app.view.getBoundingClientRect();
+    const rendererPoint = new PIXI.Point(
+      (event.clientX - rect.left) * (canvas.app.renderer.width / rect.width),
+      (event.clientY - rect.top) * (canvas.app.renderer.height / rect.height)
+    );
+    return canvas.stage.worldTransform.applyInverse(rendererPoint);
+  };
   const move = event => {
-    const point = event.getLocalPosition(canvas.stage);
+    const point = eventPoint(event);
     preview.position.set(point.x, point.y);
   };
   const cleanup = () => {
-    canvas.stage.off("pointermove", move);
-    canvas.stage.off("pointerdown", place);
+    canvas.app.view.removeEventListener("pointermove", move, true);
+    canvas.app.view.removeEventListener("pointerdown", place, true);
     canvas.app.view.removeEventListener("contextmenu", cancel);
     window.removeEventListener("keydown", keydown);
     preview.destroy();
   };
   const place = event => {
     if (event.button !== 0) return;
-    const point = event.getLocalPosition(canvas.stage);
+    // Listen on the canvas element in the capture phase. Tokens consume PIXI
+    // pointer events, which previously made it impossible to place an area over
+    // an occupied space.
+    event.preventDefault();
+    event.stopPropagation();
+    const point = eventPoint(event);
     cleanup();
     createAoEFromEffect({ ...opts, sceneId: scene.id, position: { x: point.x, y: point.y } });
   };
@@ -160,8 +173,8 @@ async function previewAoEPlacement(opts = {}) {
   const keydown = event => {
     if (event.key === "Escape") cleanup();
   };
-  canvas.stage.on("pointermove", move);
-  canvas.stage.on("pointerdown", place);
+  canvas.app.view.addEventListener("pointermove", move, true);
+  canvas.app.view.addEventListener("pointerdown", place, true);
   canvas.app.view.addEventListener("contextmenu", cancel, { once: true });
   window.addEventListener("keydown", keydown);
 }
@@ -215,21 +228,9 @@ export async function createAoEFromEffect(opts = {}) {
   });
   templateData.flags ??= {};
   templateData.flags[MODULE_ID] ??= {};
-  const state = templateData.flags[MODULE_ID][AOE_FLAG] ?? (templateData.flags[MODULE_ID][AOE_FLAG] = {});
-
   try {
     const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
-    const doc = created?.[0] ?? null;
-    if (doc) {
-      await finalizeTemplate(doc, state);
-      if (game.user.isGM && ROUND_ONLY_TYPES.has(type)) {
-        await processTemplateTick(doc, {
-          round: Number(game.combat?.round ?? 0),
-          turn: Number(game.combat?.turn ?? 0)
-        });
-      }
-    }
-    return doc;
+    return created?.[0] ?? null;
   } catch (err) {
     console.error("[W4SQ] Failed to create AoE template", err);
     return null;
@@ -295,33 +296,12 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
       tokenId: casterTokenId,
       disposition: casterToken?.document?.disposition ?? null,
       target: ["minefield", "wolfPits"].includes(type) ? "enemies" : (["fortify", "lineDefense"].includes(type) ? "allies" : "any"),
-      extra: { magical: Boolean(data?.magical) },
+      extra: { magical: Boolean(data?.magical), placedRound },
       template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE },
       occupants: []
     }
   };
   return base;
-}
-
-async function finalizeTemplate(templateDoc, state) {
-  if (!templateDoc || !state) return;
-  await templateDoc.setFlag(MODULE_ID, AOE_FLAG, {
-    ...state,
-    templateId: templateDoc.id
-  });
-}
-
-function handleAoETemplateCreate(templateDoc) {
-  if (!game.user.isGM || !templateDoc?.getFlag?.(MODULE_ID, AOE_FLAG)) return;
-  const state = getAoEState(templateDoc);
-  if (!state || !ROUND_ONLY_TYPES.has(state.aoeType)) return;
-  if (state.userId === game.user.id) return;
-  const round = Number(game.combat?.round ?? 0);
-  const turn = Number(game.combat?.turn ?? 0);
-  setTimeout(() => {
-    processTemplateTick(templateDoc, { round, turn })
-      .catch(err => console.error("[W4SQ] Failed to activate placed AoE", err));
-  }, 0);
 }
 
 async function handleCombatRound(combat) {

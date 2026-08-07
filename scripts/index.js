@@ -8,7 +8,7 @@ import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
-import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones } from "./logic/zones.js";
+import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones, tickZonesForActor } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -81,12 +81,32 @@ async function tickActorEntry(actor, context = {}) {
 
 const processedTurns = new Map();
 const previousTurnActors = new Map();
+const processedZoneRounds = new Map();
 
 function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
   if (!key) return;
   processedTurns.delete(key);
   previousTurnActors.delete(key);
+  processedZoneRounds.delete(key);
+}
+
+async function processZoneRound(combat) {
+  if (!combat || !game.user.isGM) return;
+  const key = combat.id ?? combat._id;
+  const round = Number(combat.round ?? 0);
+  if (!key || round < 1 || processedZoneRounds.get(key) === round) return;
+  processedZoneRounds.set(key, round);
+  try {
+    await tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
+  } catch (err) {
+    processedZoneRounds.delete(key);
+    throw err;
+  }
+}
+
+function safeProcessZoneRound(combat) {
+  processZoneRound(combat).catch(err => console.error(`${MODULE_ID} | Failed to process zone round`, err));
 }
 
 async function expireEffectsForTurnEntry(actor) {
@@ -131,7 +151,6 @@ async function processTurnTick(combat, context = {}) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
   }
-  const isRoundStart = turn === 0;
   const tickContext = {
     ...(context ?? {}),
     combatId: combat.id ?? combat._id ?? null,
@@ -146,7 +165,7 @@ async function processTurnTick(combat, context = {}) {
   }
   await expireEffectsForTurnEntry(actor);
   previousTurnActors.set(combatKey, actor);
-  await tickZones({ isRoundStart, context: tickContext });
+  await tickZonesForActor(actor, tickContext);
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
@@ -244,11 +263,13 @@ Hooks.once("ready", async () => {
 Hooks.on("combatStart", combat => {
   console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
   resetProcessedTurn(combat);
+  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatStart" });
 });
 
 Hooks.on("combatRound", combat => {
   console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
+  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatRound" });
 });
 
@@ -261,6 +282,27 @@ Hooks.on("updateCombat", (combat, changed) => {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
     safeProcessTurnTick(combat, { event: "updateCombat", changed });
   }
+  if (hasRound) safeProcessZoneRound(combat);
+});
+
+Hooks.on("createMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
+});
+
+Hooks.on("updateMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+});
+
+Hooks.on("updateToken", (document, changes) => {
+  if (!game.user.isGM) return;
+  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
+});
+
+Hooks.on("createToken", document => {
+  if (!game.user.isGM) return;
+  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
 });
 
 Hooks.on("createMeasuredTemplate", document => {
