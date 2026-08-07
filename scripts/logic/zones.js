@@ -1,5 +1,6 @@
 import { MODULE_ID, FLAG_SCOPE } from "../config.js";
 import { ensureEffect, ensureDisorganized, addEffect, removeEffectByKey } from "./effects.js";
+import { adjustIncomingDamage, adjustMoraleLoss, getOrigin, handleMoraleZero } from "./origins.js";
 
 const FLAG_KEY = "zone";
 
@@ -75,42 +76,82 @@ async function postDefeatLine(actor, key) {
   });
 }
 
-async function rollAndApplyDamage(actor, { hpFormula = null, moraleFormula = null } = {}) {
-  if (!actor) return { hp: 0, morale: 0 };
-  let hp = 0;
-  let morale = 0;
-  let moraleBefore = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
-  let moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+async function rollAndApplyDamage(actor, {
+  hpFormula = null,
+  moraleFormula = null,
+  sourceActor = null,
+  magical = false
+} = {}) {
+  if (!actor) return { hp: 0, morale: 0, resistanceBlocked: 0 };
+  const hpRoll = hpFormula ? await (new Roll(hpFormula).evaluate({})) : null;
+  const moraleRoll = moraleFormula ? await (new Roll(moraleFormula).evaluate({})) : null;
+  const adjusted = await adjustIncomingDamage(actor, sourceActor, {
+    damage: Number(hpRoll?.total ?? 0),
+    moraleBonus: Number(moraleRoll?.total ?? 0),
+    damageType: "aoe",
+    isMagical: Boolean(magical),
+    isAoE: true
+  });
+  const hp = Math.max(0, Number(adjusted.damage ?? 0));
+  const morale = await adjustMoraleLoss(actor, sourceActor, {
+    total: Math.max(0, Number(adjusted.moraleBonus ?? 0)),
+    baseDamage: 0,
+    bonus: Math.max(0, Number(adjusted.moraleBonus ?? 0))
+  });
+  const origin = getOrigin(actor);
   const hpBefore = Number(actor.getFlag(FLAG_SCOPE, "hp") || 0);
-  if (hpFormula) {
-    const roll = await (new Roll(hpFormula).evaluate({}));
-    hp = roll.total;
+  if (hpRoll) {
     const result = await adjustFlag(actor, "hp", -hp, "hpMax");
     const hpAfter = result.after;
     if (hpBefore > 0 && hpAfter <= 0) {
       await postDefeatLine(actor, "W4SQ.ChatHPZero");
     }
   }
-  if (moraleFormula) {
-    const roll = await (new Roll(moraleFormula).evaluate({}));
-    morale = roll.total;
+  if (moraleRoll) {
     const result = await adjustFlag(actor, "morale", -morale, "moraleMax");
     const moraleAfter = result.after;
-    moraleBefore = result.before;
-    moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
+    const moraleBefore = result.before;
+    const moraleMax = Number(actor.getFlag(FLAG_SCOPE, "moraleMax") || 0);
     if (moraleBefore > 0 && moraleAfter <= 0) {
-      await ensureEffect(actor, {
-        key: "routed",
-        label: game.i18n.localize("W4SQ.EffectRouted"),
-        duration: 99,
-        mods: { tags: { routed: true, disorganized: true } }
-      }, effect => Boolean(effect?.mods?.tags?.routed));
+      if (origin !== "undead") {
+        await ensureEffect(actor, {
+          key: "routed",
+          label: game.i18n.localize("W4SQ.EffectRouted"),
+          duration: 99,
+          mods: { tags: { routed: true, disorganized: true } }
+        }, effect => Boolean(effect?.mods?.tags?.routed));
+      }
+      await handleMoraleZero(actor, sourceActor);
       await postDefeatLine(actor, "W4SQ.ChatMoraleZero");
-    } else if (moraleMax > 0 && moraleAfter / moraleMax < 0.5) {
+    } else if (origin !== "undead" && moraleMax > 0 && moraleAfter / moraleMax < 0.5) {
       await ensureDisorganized(actor, { source: "morale" });
     }
   }
-  return { hp, morale };
+  return { hp, morale, resistanceBlocked: Number(adjusted.resistanceBlocked ?? 0) };
+}
+
+async function postFireballResult(sourceActor, entries) {
+  if (!entries.length) {
+    await postZoneChat(sourceActor, "W4SQ.ChatFireballMiss", {
+      name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad")
+    });
+    return;
+  }
+  const targets = entries.map(entry => escapeName(entry.actor)).join(", ");
+  const hp = entries.reduce((total, entry) => total + entry.damage.hp, 0);
+  const morale = entries.reduce((total, entry) => total + entry.damage.morale, 0);
+  const resistance = entries.reduce((total, entry) => total + entry.damage.resistanceBlocked, 0);
+  const key = entries.length === 1 ? "W4SQ.ChatAoEFireballSingle" : "W4SQ.ChatAoEFireballMulti";
+  const content = `<p>${game.i18n.format(key, {
+    target: targets,
+    targets,
+    hp,
+    morale
+  })}</p>${resistance > 0 ? `<p>${game.i18n.format("W4SQ.ChatNonMagicalResistance", { total: resistance })}</p>` : ""}`;
+  await ChatMessage.create({
+    speaker: sourceActor ? ChatMessage.getSpeaker({ actor: sourceActor }) : {},
+    content
+  });
 }
 
 const DIRECTIONS = [
@@ -164,18 +205,40 @@ const ZONE_HANDLERS = {
     template: { type: "circle", radiusUnits: 3 },
     target: "any",
     async onPlaced({ document, tokens, zone, sourceActor }) {
-      for (const token of tokens) {
-        const actor = token?.actor;
-        if (!actor) continue;
-        const damage = await rollAndApplyDamage(actor, { hpFormula: "3d20", moraleFormula: "4d20" });
-        await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFireballImpact", {
-          name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-          target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-          hp: damage.hp,
-          morale: damage.morale
+      if (zone.resolution?.status) return;
+      let resolution = { status: "resolving", targetIds: tokens.map(token => token.id) };
+      zone = await updateZone(document, zone, { resolution });
+      try {
+        const entries = [];
+        for (const token of tokens) {
+          const actor = token?.actor;
+          if (!actor) continue;
+          const damage = await rollAndApplyDamage(actor, {
+            hpFormula: "3d20",
+            moraleFormula: "4d20",
+            sourceActor,
+            magical: true
+          });
+          entries.push({ actor, damage });
+        }
+        await postFireballResult(sourceActor, entries);
+        resolution = { ...resolution, status: "complete" };
+        await updateZone(document, zone, { resolution });
+        await document.delete();
+      } catch (err) {
+        resolution = { ...resolution, status: "failed", message: err?.message ?? String(err) };
+        try {
+          await updateZone(document, getZoneData(document) ?? zone, { resolution });
+        } catch (stateErr) {
+          console.error(`${MODULE_ID} | Failed to persist Fireball failure state`, stateErr);
+        }
+        console.error(`${MODULE_ID} | Fireball impact failed; template retained`, {
+          zoneId: document.id,
+          targets: resolution.targetIds,
+          error: err
         });
+        ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatFireballFailure"));
       }
-      await document.delete();
     }
   },
   firestorm: {
@@ -196,7 +259,12 @@ const ZONE_HANDLERS = {
       }, effect => effect.key === key);
     },
     async onTurn({ actor, sourceActor }) {
-      const damage = await rollAndApplyDamage(actor, { hpFormula: "4d20", moraleFormula: "6d20" });
+      const damage = await rollAndApplyDamage(actor, {
+        hpFormula: "4d20",
+        moraleFormula: "6d20",
+        sourceActor,
+        magical: true
+      });
       await postZoneChat(sourceActor ?? actor, "W4SQ.ChatFirestormPulse", {
         name: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
         hp: damage.hp,
@@ -334,7 +402,8 @@ export function createZoneState({
     template,
     occupants: [],
     actorTurnTriggers: {},
-    triggered: false
+    triggered: false,
+    resolution: null
   };
 }
 
@@ -370,7 +439,8 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
     template: zone?.template ?? handler?.template ?? {},
     occupants: normalizeOccupants(zone?.occupants ?? legacyAoE?.occupants),
     actorTurnTriggers: { ...(zone?.actorTurnTriggers ?? zone?.extra?.actorTicks ?? {}) },
-    triggered: Boolean(zone?.triggered ?? legacyAoE?.spent)
+    triggered: Boolean(zone?.triggered ?? legacyAoE?.spent),
+    resolution: zone?.resolution ?? null
   };
 }
 

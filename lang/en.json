@@ -300,6 +300,8 @@
   "W4SQ.ChatFirestormPulse": "Firestorm continues to lash {name}, burning {hp} HP and {morale} Morale!",
   "W4SQ.ChatFireball": "{name} hurls a fireball—place the impact zone!",
   "W4SQ.ChatFireballImpact": "{name}'s Fireball strikes {target} for {hp} HP and {morale} Morale damage.",
+  "W4SQ.ChatFireballMiss": "{name}'s Fireball struck no formations.",
+  "W4SQ.ChatFireballFailure": "Fireball impact failed. The template was retained for GM diagnosis.",
   "W4SQ.ManeuverGuard": "Guard",
   "W4SQ.ManeuverDoom": "Doom & Gloom",
   "W4SQ.ChatDoom": "Shadows claw at {target}, draining {morale} Morale!",

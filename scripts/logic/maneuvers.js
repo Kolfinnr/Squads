@@ -496,7 +496,7 @@ export const MANEUVERS = {
     specialistType: "mage",
     difficulty: "hard",
     cooldown: 4,
-    target: "enemy",
+    target: "none",
     apply: async ({ actor }) => {
       const token = firstActiveToken(actor);
       await postAoEPlacementChat(actor, {
