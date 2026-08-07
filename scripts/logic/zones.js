@@ -3,6 +3,7 @@ import { ensureEffect, ensureDisorganized, addEffect, removeEffectByKey } from "
 import { adjustIncomingDamage, adjustMoraleLoss, getOrigin, handleMoraleZero } from "./origins.js";
 
 const FLAG_KEY = "zone";
+const zoneDocumentChains = new Map();
 
 function gridSize() {
   return canvas?.grid?.size ?? 100;
@@ -777,7 +778,7 @@ async function refreshZoneOccupants(document, handler, zone, tokens) {
   }
 }
 
-export async function handleZoneTemplateCreated(document, { refresh = false } = {}) {
+async function processZoneTemplateCreated(document, { refresh = false } = {}) {
   if (!document) return;
   if (document._w4sqSkipEnter) {
     document._w4sqSkipEnter = false;
@@ -806,6 +807,19 @@ export async function handleZoneTemplateCreated(document, { refresh = false } = 
   }
 }
 
+export async function handleZoneTemplateCreated(document, options = {}) {
+  if (!document) return;
+  const key = document.uuid ?? document.id;
+  const previous = zoneDocumentChains.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => undefined).then(() => processZoneTemplateCreated(document, options));
+  zoneDocumentChains.set(key, pending);
+  try {
+    await pending;
+  } finally {
+    if (zoneDocumentChains.get(key) === pending) zoneDocumentChains.delete(key);
+  }
+}
+
 export async function handleZoneTokenMove(tokenDoc, changes) {
   if (!tokenDoc) return;
   if (changes && !("x" in changes) && !("y" in changes)) return;
@@ -827,6 +841,7 @@ export async function handleZoneTokenCreated(tokenDoc) {
 }
 
 export async function handleZoneTemplateDeleted(document) {
+  zoneDocumentChains.delete(document?.uuid ?? document?.id);
   const zone = canonicalZoneState(
     getZoneData(document),
     document?.getFlag(MODULE_ID, "aoe") ?? null,

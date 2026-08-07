@@ -184,6 +184,10 @@ async function processTurnTick(combat, context = {}) {
     turn
   };
   const actor = combatant.actor;
+  // Round hooks differ slightly between Foundry releases. The first combatant
+  // entry is a reliable fallback, while the per-combat chain deduplicates it
+  // against combatRound and updateCombat.
+  if (turn === 0) await processZoneRound(combat);
   const previousActor = previousTurnActors.get(combatKey);
   if (previousActor) {
     await removeEffectsByTag(previousActor, "expiresAtTurnEnd", previousActor.id);

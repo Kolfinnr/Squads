@@ -1,5 +1,5 @@
 import { MODULE_ID } from "./config.js";
-import { createZoneState } from "./logic/zones.js";
+import { createZoneState, handleZoneTemplateCreated } from "./logic/zones.js";
 
 const DEFAULT_DISTANCE = 4;
 
@@ -227,7 +227,13 @@ export async function createAoEFromEffect(opts = {}) {
   templateData.flags[MODULE_ID] ??= {};
   try {
     const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
-    return created?.[0] ?? null;
+    const document = created?.[0] ?? null;
+    // Foundry does not consistently deliver createMeasuredTemplate to the
+    // originating GM before createEmbeddedDocuments resolves. Process the
+    // authoritative document directly; the zone-side document lock deduplicates
+    // this against the hook when it is delivered as well.
+    if (document && game.user.isGM) await handleZoneTemplateCreated(document);
+    return document;
   } catch (err) {
     console.error("[W4SQ] Failed to create AoE template", err);
     return null;
