@@ -8,7 +8,7 @@ import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
-import { handleZoneTemplateCreated, handleZoneTokenMove, handleZoneTokenCreated, tickZones, tickZonesForActor } from "./logic/zones.js";
+import { handleZoneTemplateCreated, handleZoneTemplateDeleted, handleZoneTokenMove, handleZoneTokenCreated, migrateZoneDocuments, tickZones, tickZonesForActor } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -258,6 +258,9 @@ Hooks.once("ready", async () => {
   game.w4sq = game.w4sq || {};
   game.w4sq.openCommand = openCommandDashboard;
   AOE.registerAoEHooks();
+  for (const scene of game.scenes?.contents ?? []) {
+    await migrateZoneDocuments(scene);
+  }
 });
 
 Hooks.on("combatStart", combat => {
@@ -295,24 +298,9 @@ Hooks.on("updateMeasuredTemplate", document => {
   handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
 });
 
-Hooks.on("updateToken", (document, changes) => {
+Hooks.on("deleteMeasuredTemplate", document => {
   if (!game.user.isGM) return;
-  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
-});
-
-Hooks.on("createToken", document => {
-  if (!game.user.isGM) return;
-  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
-});
-
-Hooks.on("createMeasuredTemplate", document => {
-  if (!game.user.isGM) return;
-  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
-});
-
-Hooks.on("updateMeasuredTemplate", document => {
-  if (!game.user.isGM) return;
-  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+  handleZoneTemplateDeleted(document).catch(err => console.error(`${MODULE_ID} | Zone deletion cleanup failed`, err));
 });
 
 Hooks.on("updateToken", (document, changes) => {
