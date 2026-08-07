@@ -309,7 +309,7 @@ Hooks.on("createMeasuredTemplate", document => {
 
 Hooks.on("updateMeasuredTemplate", document => {
   if (!game.user.isGM) return;
-  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+  handleZoneTemplateCreated(document, { refresh: true }).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
 });
 
 Hooks.on("deleteMeasuredTemplate", document => {

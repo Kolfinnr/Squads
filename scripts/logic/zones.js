@@ -199,6 +199,53 @@ async function applyFortifyBuffs({ actor, document, zone }) {
   }
 }
 
+async function resolveEntryTrap({
+  actor,
+  document,
+  zone,
+  sourceActor,
+  hpFormula,
+  moraleFormula,
+  chatKey,
+  applyEffect
+}) {
+  if (!actor || zone.triggered || zone.resolution?.status) return;
+  let resolution = { status: "resolving", targetId: actor.id };
+  zone = await updateZone(document, zone, { resolution });
+  try {
+    const damage = await rollAndApplyDamage(actor, {
+      hpFormula,
+      moraleFormula,
+      sourceActor,
+      magical: false
+    });
+    if (applyEffect) await applyEffect();
+    await postZoneChat(sourceActor ?? actor, chatKey, {
+      name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+      target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
+      hp: damage.hp,
+      morale: damage.morale
+    });
+    resolution = { ...resolution, status: "complete" };
+    await updateZone(document, getZoneData(document) ?? zone, { triggered: true, resolution });
+    await document.delete();
+  } catch (err) {
+    resolution = { ...resolution, status: "failed", message: err?.message ?? String(err) };
+    try {
+      await updateZone(document, getZoneData(document) ?? zone, { resolution });
+    } catch (stateErr) {
+      console.error(`${MODULE_ID} | Failed to persist trap failure state`, stateErr);
+    }
+    console.error(`${MODULE_ID} | Entry-triggered zone failed; template retained`, {
+      zoneId: document.id,
+      zoneType: zone.type,
+      targetId: actor.id,
+      error: err
+    });
+    ui.notifications?.error?.(game.i18n.localize("W4SQ.ChatZoneTriggerFailure"));
+  }
+}
+
 const ZONE_HANDLERS = {
   fireball: {
     duration: 1,
@@ -293,6 +340,9 @@ const ZONE_HANDLERS = {
     async onExit({ actor, document }) {
       if (!actor) return;
       await removeEffectByKey(actor, `zone-line-defense-${document.id}-${actor.id}`);
+    },
+    async onRefresh(context) {
+      await this.onEnter(context);
     }
   },
   minefield: {
@@ -300,22 +350,18 @@ const ZONE_HANDLERS = {
     template: { type: "circle", radiusUnits: 1.5 },
     target: "enemies",
     singleUse: true,
+    triggerOnEntry: true,
     async onEnter({ actor, document, zone, sourceActor }) {
-      if (zone.triggered) return;
-      const hpRoll = await (new Roll("3d20").evaluate({}));
-      const moraleRoll = await (new Roll("4d20").evaluate({}));
-      await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
-      await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
-      await ensureDisorganized(actor, { source: "zone" });
-      await postZoneChat(sourceActor ?? actor, "W4SQ.ChatMinefield", {
-        name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        hp: hpRoll.total,
-        morale: moraleRoll.total
+      await resolveEntryTrap({
+        actor,
+        document,
+        zone,
+        sourceActor,
+        hpFormula: "3d20",
+        moraleFormula: "4d20",
+        chatKey: "W4SQ.ChatMinefield",
+        applyEffect: () => ensureDisorganized(actor, { source: "zone" })
       });
-      const updated = { ...zone, triggered: true };
-      await document.setFlag(MODULE_ID, FLAG_KEY, updated);
-      await document.delete();
     }
   },
   wolfPits: {
@@ -323,27 +369,23 @@ const ZONE_HANDLERS = {
     template: { type: "circle", radiusUnits: 1.5 },
     target: "enemies",
     singleUse: true,
+    triggerOnEntry: true,
     async onEnter({ actor, document, zone, sourceActor }) {
-      if (zone.triggered) return;
-      const hpRoll = await (new Roll("2d10").evaluate({}));
-      const moraleRoll = await (new Roll("2d10").evaluate({}));
-      await adjustFlag(actor, "hp", -hpRoll.total, "hpMax");
-      await adjustFlag(actor, "morale", -moraleRoll.total, "moraleMax");
-      await ensureEffect(actor, {
-        key: `zone-wolf-pits-${document.id}-${actor.id}`,
-        label: game.i18n.localize("W4SQ.ManeuverWolfPits"),
-        duration: 1,
-        mods: { tags: { skipTurn: true } }
-      }, effect => effect.key === `zone-wolf-pits-${document.id}-${actor.id}`);
-      await postZoneChat(sourceActor ?? actor, "W4SQ.ChatWolfPits", {
-        name: sourceActor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        target: actor.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-        hp: hpRoll.total,
-        morale: moraleRoll.total
+      await resolveEntryTrap({
+        actor,
+        document,
+        zone,
+        sourceActor,
+        hpFormula: "2d10",
+        moraleFormula: "2d10",
+        chatKey: "W4SQ.ChatWolfPits",
+        applyEffect: () => ensureEffect(actor, {
+          key: `zone-wolf-pits-${document.id}-${actor.id}`,
+          label: game.i18n.localize("W4SQ.ManeuverWolfPits"),
+          duration: 1,
+          mods: { tags: { skipTurn: true } }
+        }, effect => effect.key === `zone-wolf-pits-${document.id}-${actor.id}`)
       });
-      const updated = { ...zone, triggered: true };
-      await document.setFlag(MODULE_ID, FLAG_KEY, updated);
-      await document.delete();
     }
   },
   fortifyPosition: {
@@ -355,6 +397,9 @@ const ZONE_HANDLERS = {
     },
     async onRound({ actor, document, zone }) {
       await applyFortifyBuffs({ actor, document, zone });
+    },
+    async onRefresh(context) {
+      await applyFortifyBuffs(context);
     },
     async onExit({ actor, document }) {
       if (!actor) return;
@@ -403,6 +448,7 @@ export function createZoneState({
     occupants: [],
     actorTurnTriggers: {},
     triggered: false,
+    armed: !handler.triggerOnEntry,
     resolution: null
   };
 }
@@ -415,7 +461,8 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
   if (!zone && !legacyAoE) return null;
   const existingSquares = Number(zone?.movement?.squares ?? 0) || 0;
   const hasCanonicalMovement = !existingSquares || (zone?.movement?.direction && zone?.movement?.lastPosition);
-  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement) return zone;
+  const hasCanonicalEntryState = Object.prototype.hasOwnProperty.call(zone ?? {}, "armed");
+  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement && hasCanonicalEntryState) return zone;
   const type = zone?.type ?? zone?.key ?? legacyAoE?.aoeType ?? null;
   if (!type) return null;
   const handler = getZoneHandler(type);
@@ -440,6 +487,7 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
     occupants: normalizeOccupants(zone?.occupants ?? legacyAoE?.occupants),
     actorTurnTriggers: { ...(zone?.actorTurnTriggers ?? zone?.extra?.actorTicks ?? {}) },
     triggered: Boolean(zone?.triggered ?? legacyAoE?.spent),
+    armed: Boolean(zone?.armed ?? legacyAoE?.armed ?? true),
     resolution: zone?.resolution ?? null
   };
 }
@@ -613,7 +661,8 @@ async function applyZone(document, handler, tokens) {
   const zone = getZoneData(document);
   if (!zone || !handler?.onEnter) return;
   const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
-  for (const token of tokens) {
+  const entrants = handler.singleUse ? tokens.slice(0, 1) : tokens;
+  for (const token of entrants) {
     const actor = token?.actor;
     if (!actor) continue;
     await handler.onEnter({ actor, token, document, zone, sourceActor });
@@ -621,7 +670,7 @@ async function applyZone(document, handler, tokens) {
 }
 
 async function syncZoneOccupants(document, handler, tokens) {
-  const zone = getZoneData(document);
+  let zone = getZoneData(document);
   if (!zone) return { entered: [], exited: [] };
   const previous = normalizeOccupants(zone.occupants);
   const prevMap = new Map(previous.map(rec => [rec.tokenId, rec]));
@@ -633,6 +682,11 @@ async function syncZoneOccupants(document, handler, tokens) {
 
   if (enteredTokens.length) {
     await applyZone(document, handler, enteredTokens);
+    const latest = getZoneData(document);
+    if (handler.singleUse && latest?.triggered) {
+      return { entered: enteredTokens, exited: [] };
+    }
+    zone = latest ?? zone;
   }
 
   if (exitedRecords.length && typeof handler.onExit === "function") {
@@ -713,7 +767,17 @@ async function handleRoundEffects(document, handler, zone, tokensOverride, { con
   return { triggered, zone: currentZone };
 }
 
-export async function handleZoneTemplateCreated(document) {
+async function refreshZoneOccupants(document, handler, zone, tokens) {
+  if (typeof handler?.onRefresh !== "function") return;
+  const sourceActor = zone.casterActorId ? game.actors?.get(zone.casterActorId) ?? null : null;
+  for (const token of tokens) {
+    const actor = token?.actor;
+    if (!actor) continue;
+    await handler.onRefresh({ actor, token, document, zone, sourceActor });
+  }
+}
+
+export async function handleZoneTemplateCreated(document, { refresh = false } = {}) {
   if (!document) return;
   if (document._w4sqSkipEnter) {
     document._w4sqSkipEnter = false;
@@ -729,7 +793,17 @@ export async function handleZoneTemplateCreated(document) {
     await handler.onPlaced({ document, tokens, zone, sourceActor });
     return;
   }
+  if (handler.triggerOnEntry && !zone.armed) {
+    await updateZone(document, zone, {
+      armed: true,
+      occupants: recordsFromTokens(tokens)
+    });
+    return;
+  }
   await syncZoneOccupants(document, handler, tokens);
+  if (refresh) {
+    await refreshZoneOccupants(document, handler, getZoneData(document) ?? zone, tokens);
+  }
 }
 
 export async function handleZoneTokenMove(tokenDoc, changes) {
