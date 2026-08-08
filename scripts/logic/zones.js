@@ -293,7 +293,7 @@ const ZONE_HANDLERS = {
     duration: 3,
     template: { type: "circle", radiusUnits: 4 },
     target: "any",
-    roundOnly: true,
+    lifecycle: "casterTurn",
     moveSquares: 3,
     async onEnter({ actor, document, zone }) {
       const duration = zone.remainingRounds ?? 1;
@@ -415,6 +415,10 @@ function getZoneHandler(zoneKey) {
   return ZONE_HANDLERS[zoneKey] ?? null;
 }
 
+function turnSignature({ combatId = null, round = 0, turn = 0, combatantId = null } = {}) {
+  return `${combatId ?? "combat"}:${Number(round) || 0}:${Number(turn) || 0}:${combatantId ?? "combatant"}`;
+}
+
 export function createZoneState({
   type,
   casterTokenId = null,
@@ -428,7 +432,14 @@ export function createZoneState({
   const handler = getZoneHandler(zoneType);
   if (!handler) throw new Error(`${MODULE_ID} | Unknown zone type: ${type}`);
   const casterToken = casterTokenId ? canvas?.tokens?.get(casterTokenId) ?? null : null;
-  const createdRound = game.combat ? Number(game.combat.round ?? 0) : null;
+  const combat = game.combat;
+  const createdRound = combat ? Number(combat.round ?? 0) : null;
+  const createdTurn = combat ? {
+    combatId: combat.id ?? combat._id ?? null,
+    round: createdRound,
+    turn: Number(combat.turn ?? 0),
+    combatantId: combat.combatant?.id ?? combat.combatant?._id ?? null
+  } : null;
   const squares = Number(movementSquares ?? handler.moveSquares ?? 0) || 0;
   return {
     type: zoneType,
@@ -442,9 +453,12 @@ export function createZoneState({
     lastAdvancedRound: createdRound,
     movement: {
       squares,
-      direction: squares ? randomDirection().label : null,
+      direction: null,
+      directionRoll: null,
       lastPosition: position ? { x: Number(position.x) || 0, y: Number(position.y) || 0 } : null
     },
+    createdTurn,
+    lastAdvancedTurn: createdTurn ? turnSignature(createdTurn) : null,
     template,
     occupants: [],
     actorTurnTriggers: {},
@@ -461,7 +475,7 @@ function getZoneData(document) {
 function canonicalZoneState(zone, legacyAoE = null, position = null) {
   if (!zone && !legacyAoE) return null;
   const existingSquares = Number(zone?.movement?.squares ?? 0) || 0;
-  const hasCanonicalMovement = !existingSquares || (zone?.movement?.direction && zone?.movement?.lastPosition);
+  const hasCanonicalMovement = !existingSquares || Boolean(zone?.movement?.lastPosition);
   const hasCanonicalEntryState = Object.prototype.hasOwnProperty.call(zone ?? {}, "armed");
   if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement && hasCanonicalEntryState) return zone;
   const type = zone?.type ?? zone?.key ?? legacyAoE?.aoeType ?? null;
@@ -481,9 +495,12 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
     lastAdvancedRound: zone?.lastAdvancedRound ?? zone?.extra?.lastLifecycleRound ?? legacyAoE?.lastRound ?? createdRound,
     movement: {
       squares: movementSquares,
-      direction: zone?.movement?.direction ?? legacyAoE?.direction ?? (movementSquares ? randomDirection().label : null),
+      direction: zone?.movement?.direction ?? legacyAoE?.direction ?? null,
+      directionRoll: zone?.movement?.directionRoll ?? null,
       lastPosition: zone?.movement?.lastPosition ?? position
     },
+    createdTurn: zone?.createdTurn ?? null,
+    lastAdvancedTurn: zone?.lastAdvancedTurn ?? null,
     template: zone?.template ?? handler?.template ?? {},
     occupants: normalizeOccupants(zone?.occupants ?? legacyAoE?.occupants),
     actorTurnTriggers: { ...(zone?.actorTurnTriggers ?? zone?.extra?.actorTicks ?? {}) },
@@ -750,6 +767,70 @@ function moveUpdate(document, zone) {
   return { update: position, direction: dir.label, position };
 }
 
+async function ensureFirestormDirection(document, zone) {
+  if (zone.type !== "firestorm" || zone.movement?.direction) return zone;
+  const roll = await (new Roll("1d8").evaluate({}));
+  const result = Math.min(8, Math.max(1, Number(roll.total) || 1));
+  const direction = DIRECTIONS[result - 1] ?? DIRECTIONS[0];
+  return updateZone(document, zone, {
+    movement: {
+      squares: 3,
+      direction: direction.label,
+      directionRoll: result,
+      lastPosition: zone.movement?.lastPosition ?? { x: document.x ?? 0, y: document.y ?? 0 }
+    }
+  });
+}
+
+async function advanceCasterTurnZones(actor, context = {}) {
+  if (!actor || !canvas?.scene) return;
+  const signature = turnSignature({
+    combatId: context.combatId ?? game.combat?.id ?? null,
+    round: context.round ?? game.combat?.round ?? 0,
+    turn: context.turn ?? game.combat?.turn ?? 0,
+    combatantId: context.combatantId ?? game.combat?.combatant?.id ?? null
+  });
+  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  for (const document of documents) {
+    let zone = await migrateZoneDocument(document);
+    if (!zone || zone.casterActorId !== actor.id) continue;
+    const handler = getZoneHandler(zone.type);
+    if (handler?.lifecycle !== "casterTurn" || zone.lastAdvancedTurn === signature) continue;
+    zone = await ensureFirestormDirection(document, zone);
+
+    const finiteDuration = zone.remainingRounds !== null && zone.remainingRounds !== undefined;
+    const nextRemaining = finiteDuration ? Math.max(0, Number(zone.remainingRounds) - 1) : null;
+    if (finiteDuration && nextRemaining <= 0) {
+      await syncZoneOccupants(document, handler, []);
+      await document.delete();
+      continue;
+    }
+
+    const movement = moveUpdate(document, zone);
+    if (Object.keys(movement.update).length) {
+      document._w4sqSkipEnter = true;
+      try {
+        await document.update({ x: movement.update.x, y: movement.update.y });
+      } finally {
+        document._w4sqSkipEnter = false;
+      }
+    }
+    const tokens = tokensInTemplate(document, handler);
+    await syncZoneOccupants(document, handler, tokens);
+    zone = getZoneData(document) ?? zone;
+    await updateZone(document, zone, {
+      remainingRounds: nextRemaining,
+      lastAdvancedTurn: signature,
+      movement: {
+        squares: 3,
+        direction: movement.direction,
+        directionRoll: zone.movement?.directionRoll ?? null,
+        lastPosition: movement.position
+      }
+    });
+  }
+}
+
 async function handleRoundEffects(document, handler, zone, tokensOverride, { context = {} } = {}) {
   if (!handler?.onRound) {
     return { triggered: false, zone };
@@ -784,8 +865,9 @@ async function processZoneTemplateCreated(document, { refresh = false } = {}) {
     document._w4sqSkipEnter = false;
     return;
   }
-  const zone = await migrateZoneDocument(document);
+  let zone = await migrateZoneDocument(document);
   if (!zone) return;
+  zone = await ensureFirestormDirection(document, zone);
   const handler = getZoneHandler(zone.type);
   if (!handler) return;
   const tokens = tokensInTemplate(document, handler);
@@ -874,6 +956,7 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       if (!zone) continue;
       const handler = getZoneHandler(zone.type);
       if (!handler) continue;
+      if (handler.lifecycle === "casterTurn") continue;
       if (handler.singleUse && zone.triggered) {
         await document.delete();
         continue;
@@ -943,6 +1026,7 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
 /** Apply turn-triggered zone effects only to the combatant whose turn begins. */
 export async function tickZonesForActor(actor, context = {}) {
   if (!actor || !canvas?.scene) return;
+  await advanceCasterTurnZones(actor, context);
   const round = Number(context.round ?? game.combat?.round ?? 0);
   const turn = Number(context.turn ?? game.combat?.turn ?? 0);
   const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
