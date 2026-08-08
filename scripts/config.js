@@ -12,6 +12,7 @@ export const DEFAULT_FLAGS = {
   equipmentTier: 0,
   role: "infantry",
   weapon: "sword",
+  magicalWeapon: false,
   origin: null,
   passives: {},
   notes: "",
