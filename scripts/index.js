@@ -1,13 +1,14 @@
 // DIAG MODE: remove logs when stable
 import { MODULE_ID, ACTOR_TYPES, SETTINGS, FLAG_SCOPE } from "./config.js";
 import { SquadActorSheet } from "./sheets/squad-sheet.js";
-import { tickEffects, ensureDisorganized } from "./logic/effects.js";
+import { tickEffects, ensureDisorganized, removeEffectsByTag, advanceEffectsByTag } from "./logic/effects.js";
 import { tickCooldowns } from "./logic/cooldowns.js";
 import { W4SQCommandApp, openCommandDashboard } from "./features/command-dashboard.js";
 import { clearSpecialistRoundFlags } from "./logic/specialists.js";
-import { handleTurnTick } from "./logic/origins.js";
+import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
+import { handleZoneTemplateCreated, handleZoneTemplateDeleted, handleZoneTokenMove, handleZoneTokenCreated, migrateZoneDocuments, tickZones, tickZonesForActor } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -16,37 +17,10 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
+  "./logic/zones.js",
   "./services/gm-bridge.js",
   "./aoe.js"
 ];
-
-function bridgeRenderChatMessageHook() {
-  if (Hooks._w4sqPatchedRenderChatMessage) return;
-  Hooks._w4sqPatchedRenderChatMessage = true;
-  const originalCallAll = Hooks.callAll.bind(Hooks);
-  Hooks.callAll = function patchedCallAll(hook, ...args) {
-    if (hook !== "renderChatMessage") {
-      return originalCallAll(hook, ...args);
-    }
-    const [message, html, data] = args;
-    const element = html instanceof HTMLElement ? html : html?.[0];
-    try {
-      originalCallAll("renderChatMessageHTML", message, element, data);
-    } catch (err) {
-      console.error(`${MODULE_ID} | Failed to forward renderChatMessageHTML`, err);
-    }
-    const listeners = Array.from(Hooks._hooks?.[hook] ?? []);
-    for (const listener of listeners) {
-      try {
-        listener.fn(...args);
-      } catch (err) {
-        console.error(`${MODULE_ID} | renderChatMessage handler failed`, err);
-      }
-      if (listener.once) Hooks.off(hook, listener.fn);
-    }
-    return listeners.length;
-  };
-}
 
 function isSquadActor(actor) {
   return actor && ACTOR_TYPES.includes(actor.type) && actor.getFlag(FLAG_SCOPE, "hp") !== undefined;
@@ -56,6 +30,7 @@ async function enforceMoraleState(actor) {
   const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
   if (!moraleMax) return;
   const morale = Number(actor.getFlag(FLAG_SCOPE, "morale") || 0);
+  if (getOrigin(actor) === "undead") return;
   if (moraleMax > 0 && morale / moraleMax < 0.5) {
     await ensureDisorganized(actor, { source: "morale" });
   }
@@ -70,9 +45,9 @@ async function reduceActiveManeuver(actor) {
   }
   let active;
   try {
-    active = foundry.utils.duplicate(current);
+    active = foundry.utils.deepClone(current);
   } catch (err) {
-    console.error(`${MODULE_ID} | Failed to duplicate active maneuver`, err, current);
+    console.error(`${MODULE_ID} | Failed to clone active maneuver`, err, current);
     await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
     return;
   }
@@ -105,17 +80,64 @@ async function tickActorEntry(actor, context = {}) {
 }
 
 const processedTurns = new Map();
+const previousTurnActors = new Map();
+const processedZoneRounds = new Map();
+const zoneRoundChains = new Map();
+const combatRunTokens = new Map();
 
 function resetProcessedTurn(combat) {
   const key = combat?.id ?? combat?._id;
   if (!key) return;
   processedTurns.delete(key);
+  previousTurnActors.delete(key);
+  processedZoneRounds.delete(key);
+  zoneRoundChains.delete(key);
+  combatRunTokens.delete(key);
 }
 
-function markTurn(combat, round, turn) {
+async function processZoneRound(combat) {
+  if (!combat || !game.user.isGM) return;
+  const key = combat.id ?? combat._id;
+  const round = Number(combat.round ?? 0);
+  if (!key || round < 1 || processedZoneRounds.get(key) === round) return;
+  let runToken = combatRunTokens.get(key);
+  if (!runToken) {
+    runToken = Symbol(key);
+    combatRunTokens.set(key, runToken);
+  }
+
+  // Foundry emits combatRound and updateCombat for the same advancement. Queue
+  // both on one per-combat chain: duplicates observe the completed marker, while
+  // a queued duplicate retries if the preceding document operation rejected.
+  const previous = zoneRoundChains.get(key) ?? Promise.resolve();
+  const pending = previous.catch(() => undefined).then(async () => {
+    if (processedZoneRounds.get(key) === round) return;
+    await tickZones({ isRoundStart: true, context: { combatId: key, round, turn: 0 } });
+    if (combatRunTokens.get(key) === runToken) processedZoneRounds.set(key, round);
+  });
+  zoneRoundChains.set(key, pending);
+  try {
+    await pending;
+  } finally {
+    if (zoneRoundChains.get(key) === pending) zoneRoundChains.delete(key);
+  }
+}
+
+function safeProcessZoneRound(combat) {
+  processZoneRound(combat).catch(err => console.error(`${MODULE_ID} | Failed to process zone round`, err));
+}
+
+async function expireEffectsForTurnEntry(actor) {
+  if (!actor) return;
+  for (const candidate of game.actors?.contents ?? []) {
+    await advanceEffectsByTag(candidate, "expiresOnActorTurn", actor.id);
+  }
+}
+
+function markTurn(combat, round, turn, combatantId) {
   const key = combat?.id ?? combat?._id;
   if (!key) return { key: null, processed: false };
-  const signature = `${round}:${turn}`;
+  const signature = `${round}:${turn}:${combatantId ?? "none"}`;
   const last = processedTurns.get(key);
   if (last === signature) {
     console.log("[W4SQ] processTurnTick skipped: same turn as last time", { round, turn });
@@ -140,21 +162,42 @@ async function processTurnTick(combat, context = {}) {
     console.log("[W4SQ] processTurnTick skipped: invalid round/turn", { round, turn });
     return;
   }
-  const { processed } = markTurn(combat, round, turn);
-  if (!processed) return;
   const combatant = combat.combatant;
   if (!combatant) {
     console.log("[W4SQ] processTurnTick skipped: no combatant", { round, turn });
     return;
   }
-  const isRoundStart = turn === 0;
+  const combatantId = combatant.id ?? combatant._id ?? null;
+  const { processed } = markTurn(combat, round, turn, combatantId);
+  if (!processed) return;
+  const combatKey = combat.id ?? combat._id;
+  let runToken = combatRunTokens.get(combatKey);
+  if (!runToken) {
+    runToken = Symbol(combatKey);
+    combatRunTokens.set(combatKey, runToken);
+  }
   const tickContext = {
     ...(context ?? {}),
     combatId: combat.id ?? combat._id ?? null,
+    combatantId,
+    tokenId: combatant.tokenId ?? combatant.token?.id ?? null,
     round,
     turn
   };
   const actor = combatant.actor;
+  // Round hooks differ slightly between Foundry releases. The first combatant
+  // entry is a reliable fallback, while the per-combat chain deduplicates it
+  // against combatRound and updateCombat.
+  if (turn === 0) await processZoneRound(combat);
+  const previousActor = previousTurnActors.get(combatKey);
+  if (previousActor) {
+    await removeEffectsByTag(previousActor, "expiresAtTurnEnd", previousActor.id);
+  }
+  await expireEffectsForTurnEntry(actor);
+  if (combatRunTokens.get(combatKey) !== runToken) return;
+  previousTurnActors.set(combatKey, actor);
+  await tickZonesForActor(actor, tickContext);
+  if (combatRunTokens.get(combatKey) !== runToken) return;
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
@@ -168,7 +211,6 @@ function safeProcessTurnTick(combat, context) {
 
 Hooks.once("init", () => {
   console.log(`${MODULE_ID} | Initialising squads v1.0.2`);
-  bridgeRenderChatMessageHook();
   patchFlagOverrides();
   Actors.registerSheet(MODULE_ID, SquadActorSheet, { types: ACTOR_TYPES, makeDefault: false, label: "Squad" });
 
@@ -248,16 +290,21 @@ Hooks.once("ready", async () => {
   game.w4sq = game.w4sq || {};
   game.w4sq.openCommand = openCommandDashboard;
   AOE.registerAoEHooks();
+  for (const scene of game.scenes?.contents ?? []) {
+    await migrateZoneDocuments(scene);
+  }
 });
 
 Hooks.on("combatStart", combat => {
   console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
   resetProcessedTurn(combat);
+  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatStart" });
 });
 
 Hooks.on("combatRound", combat => {
   console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
+  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatRound" });
 });
 
@@ -270,6 +317,32 @@ Hooks.on("updateCombat", (combat, changed) => {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
     safeProcessTurnTick(combat, { event: "updateCombat", changed });
   }
+  if (hasRound) safeProcessZoneRound(combat);
+});
+
+Hooks.on("createMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
+});
+
+Hooks.on("updateMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateCreated(document, { refresh: true }).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
+});
+
+Hooks.on("deleteMeasuredTemplate", document => {
+  if (!game.user.isGM) return;
+  handleZoneTemplateDeleted(document).catch(err => console.error(`${MODULE_ID} | Zone deletion cleanup failed`, err));
+});
+
+Hooks.on("updateToken", (document, changes) => {
+  if (!game.user.isGM) return;
+  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
+});
+
+Hooks.on("createToken", document => {
+  if (!game.user.isGM) return;
+  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
 });
 
 Hooks.on("renderTokenHUD", (hud, html) => {
