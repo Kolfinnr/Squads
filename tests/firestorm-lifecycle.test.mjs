@@ -85,3 +85,21 @@ test("turn ticking suppresses no-op synthetic actor updates", async () => {
   assert.match(tick, /if \(changed\) await actor\.setFlag/);
   assert.doesNotMatch(tick, /\n\s*await actor\.setFlag\(FLAG_SCOPE, "effects", next\);/);
 });
+
+test("clearing channelled magic batches synthetic actor state", async () => {
+  const source = await readFile(new URL("../scripts/logic/specialists.js", import.meta.url), "utf8");
+  const start = source.indexOf("export async function clearChannelledMagic");
+  const end = source.indexOf("\n}\n", start) + 2;
+  const clear = source.slice(start, end);
+  assert.match(clear, /if \(Object\.keys\(changes\)\.length\) await actor\.update\(changes\)/);
+  assert.doesNotMatch(clear, /actor\.setFlag/);
+});
+
+test("Firestorm records the active combatant token when the caster has several tokens", async () => {
+  const source = await readFile(new URL("../scripts/logic/maneuvers.js", import.meta.url), "utf8");
+  const start = source.indexOf("  firestorm: {");
+  const end = source.indexOf("  fireball: {", start);
+  const firestorm = source.slice(start, end);
+  assert.match(firestorm, /activeCombatant\.tokenId/);
+  assert.match(firestorm, /canvas\?\.tokens\?\.get\(combatTokenId\)/);
+});

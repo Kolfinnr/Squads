@@ -478,7 +478,11 @@ export const MANEUVERS = {
     cooldown: 4,
     target: "self",
     apply: async ({ actor }) => {
-      const token = firstActiveToken(actor);
+      const activeCombatant = game.combat?.combatant;
+      const combatTokenId = activeCombatant?.actor?.id === actor.id
+        ? (activeCombatant.tokenId ?? activeCombatant.token?.id ?? null)
+        : null;
+      const token = (combatTokenId ? canvas?.tokens?.get(combatTokenId) : null) ?? firstActiveToken(actor);
       await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
