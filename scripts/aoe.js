@@ -1,7 +1,8 @@
 import { MODULE_ID } from "./config.js";
-import { createZoneState, handleZoneTemplateCreated } from "./logic/zones.js";
+import { createZoneState } from "./logic/zones.js";
 
 const DEFAULT_DISTANCE = 4;
+const pendingPlacements = new Map();
 
 function unitsToPixels(units) {
   const size = Number(canvas?.grid?.size ?? canvas?.dimensions?.size ?? 100) || 100;
@@ -46,11 +47,15 @@ export function registerAoEHooks() {
 }
 
 export async function postAoEPlacementChat(actor, opts = {}, messageKey = "W4SQ.ChatAoEReady") {
+  const options = {
+    ...opts,
+    placementId: opts.placementId ?? foundry.utils.randomID()
+  };
   const payload = encodeURIComponent(JSON.stringify({
     type: "W4SQAoE",
-    options: opts
+    options
   }));
-  const label = game.i18n.localize(AOE_DEFINITIONS[opts.type]?.labelKey ?? "W4SQ.AoEUnknown");
+  const label = game.i18n.localize(AOE_DEFINITIONS[options.type]?.labelKey ?? "W4SQ.AoEUnknown");
   const prompt = game.i18n.format(messageKey, { name: actor?.name ?? "" });
   const linkText = game.i18n.format("W4SQ.ChatAoEDragLink", { aoe: label });
   return ChatMessage.create({
@@ -197,6 +202,7 @@ export async function createAoEFromEffect(opts = {}) {
     userId = game.user.id,
     casterTokenId = null,
     type = "firestorm",
+    placementId = foundry.utils.randomID(),
     duration,
     data = {},
     position = null
@@ -214,33 +220,42 @@ export async function createAoEFromEffect(opts = {}) {
     return null;
   }
 
-  const templateData = buildTemplateData(definition.template, {
-    casterTokenId,
-    type,
-    duration,
-    data,
-    userId,
-    sceneId,
-    position
-  });
-  templateData.flags ??= {};
-  templateData.flags[MODULE_ID] ??= {};
+  const existing = scene.templates?.contents?.find(document =>
+    document.getFlag(MODULE_ID, "zone")?.placementId === placementId
+  );
+  if (existing) return existing;
+  if (pendingPlacements.has(placementId)) return pendingPlacements.get(placementId);
+
+  const pending = (async () => {
+    const templateData = buildTemplateData(definition.template, {
+      casterTokenId,
+      type,
+      placementId,
+      duration,
+      data,
+      userId,
+      sceneId,
+      position
+    });
+    templateData.flags ??= {};
+    templateData.flags[MODULE_ID] ??= {};
+    try {
+      const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+      return created?.[0] ?? null;
+    } catch (err) {
+      console.error("[W4SQ] Failed to create AoE template", err);
+      return null;
+    }
+  })();
+  pendingPlacements.set(placementId, pending);
   try {
-    const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
-    const document = created?.[0] ?? null;
-    // Foundry does not consistently deliver createMeasuredTemplate to the
-    // originating GM before createEmbeddedDocuments resolves. Process the
-    // authoritative document directly; the zone-side document lock deduplicates
-    // this against the hook when it is delivered as well.
-    if (document && game.user.isGM) await handleZoneTemplateCreated(document);
-    return document;
-  } catch (err) {
-    console.error("[W4SQ] Failed to create AoE template", err);
-    return null;
+    return await pending;
+  } finally {
+    if (pendingPlacements.get(placementId) === pending) pendingPlacements.delete(placementId);
   }
 }
 
-function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration, data, userId, sceneId, position } = {}) {
+function buildTemplateData(templateConfig = {}, { casterTokenId, type, placementId, duration, data, userId, sceneId, position } = {}) {
   const base = {
     t: templateConfig.t ?? "circle",
     user: userId,
@@ -268,6 +283,7 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
   base.flags[MODULE_ID] = {
     zone: createZoneState({
       type,
+      placementId,
       casterTokenId,
       duration,
       magical: Boolean(data?.magical),

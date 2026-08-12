@@ -15,11 +15,11 @@ function gridDistance() {
 
 function duplicateConfig(source = {}) {
   const data = source || {};
-  if (globalThis?.foundry?.utils?.duplicate) {
+  if (globalThis?.foundry?.utils?.deepClone) {
     try {
-      return foundry.utils.duplicate(data);
+      return foundry.utils.deepClone(data);
     } catch (err) {
-      console.error(`${MODULE_ID} | Failed to duplicate template config`, err, data);
+      console.error(`${MODULE_ID} | Failed to clone template config`, err, data);
     }
   }
   if (typeof structuredClone === "function") {
@@ -421,6 +421,7 @@ function turnSignature({ combatId = null, round = 0, turn = 0, combatantId = nul
 
 export function createZoneState({
   type,
+  placementId = null,
   casterTokenId = null,
   duration,
   magical = false,
@@ -443,6 +444,7 @@ export function createZoneState({
   const squares = Number(movementSquares ?? handler.moveSquares ?? 0) || 0;
   return {
     type: zoneType,
+    placementId,
     casterActorId: casterToken?.actor?.id ?? null,
     casterTokenId,
     disposition: casterToken?.document?.disposition ?? null,
@@ -485,6 +487,7 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
   const movementSquares = Number(zone?.movement?.squares ?? legacyAoE?.data?.movePerRound ?? handler?.moveSquares ?? 0) || 0;
   return {
     type,
+    placementId: zone?.placementId ?? legacyAoE?.placementId ?? null,
     casterActorId: zone?.casterActorId ?? zone?.actorId ?? null,
     casterTokenId: zone?.casterTokenId ?? zone?.tokenId ?? legacyAoE?.casterTokenId ?? null,
     disposition: zone?.disposition ?? null,
@@ -867,6 +870,20 @@ async function processZoneTemplateCreated(document, { refresh = false } = {}) {
   }
   let zone = await migrateZoneDocument(document);
   if (!zone) return;
+  if (zone.placementId) {
+    const documents = document.parent?.templates?.contents ?? document.parent?.templates ?? [];
+    const duplicates = [...documents]
+      .filter(candidate => getZoneData(candidate)?.placementId === zone.placementId)
+      .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    const keeper = duplicates[0];
+    if (keeper && keeper.id !== document.id) {
+      await document.delete();
+      return;
+    }
+    for (const duplicate of duplicates.slice(1)) {
+      if (duplicate.id !== document.id) await duplicate.delete();
+    }
+  }
   zone = await ensureFirestormDirection(document, zone);
   const handler = getZoneHandler(zone.type);
   if (!handler) return;
@@ -1030,15 +1047,19 @@ export async function tickZonesForActor(actor, context = {}) {
   const round = Number(context.round ?? game.combat?.round ?? 0);
   const turn = Number(context.turn ?? game.combat?.turn ?? 0);
   const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  const processedPlacements = new Set();
 
   for (const document of documents) {
     let zone = await migrateZoneDocument(document);
     if (!zone) continue;
     const handler = getZoneHandler(zone.type);
     if (typeof handler?.onTurn !== "function") continue;
+    const placementKey = zone.placementId ?? document.id;
+    if (processedPlacements.has(placementKey)) continue;
     const signature = `${context.combatId ?? game.combat?.id ?? "combat"}:${round}:${turn}:${context.combatantId ?? "combatant"}:${actor.id}:${document.id}`;
     const actorTokens = tokensInTemplate(document, handler).filter(token => token.actor?.id === actor.id);
     if (!actorTokens.length) continue;
+    processedPlacements.add(placementKey);
 
     const actorTurnTriggers = { ...(zone.actorTurnTriggers ?? {}) };
     if (actorTurnTriggers[actor.id] === signature) continue;
