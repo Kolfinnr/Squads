@@ -1,6 +1,7 @@
 import { MODULE_ID, FLAG_SCOPE } from "../config.js";
 import { ensureEffect, ensureDisorganized, addEffect, removeEffectByKey } from "./effects.js";
 import { adjustIncomingDamage, adjustMoraleLoss, getOrigin, handleMoraleZero } from "./origins.js";
+import { isZoneCasterTurn, resolveZoneCaster } from "./zone-lifecycle.js";
 
 const FLAG_KEY = "zone";
 const zoneDocumentChains = new Map();
@@ -445,12 +446,17 @@ export function createZoneState({
     combatantId: combat.combatant?.id ?? combat.combatant?._id ?? null
   } : null;
   const squares = Number(movementSquares ?? handler.moveSquares ?? 0) || 0;
+  const caster = resolveZoneCaster({
+    casterActorId,
+    casterCombatantId,
+    casterTokenId,
+    createdTurn,
+    casterToken
+  });
   return {
     type: zoneType,
     placementId,
-    casterActorId: casterActorId ?? casterToken?.actor?.id ?? null,
-    casterCombatantId: casterCombatantId ?? createdTurn?.combatantId ?? null,
-    casterTokenId,
+    ...caster,
     disposition: casterToken?.document?.disposition ?? null,
     target: handler.target ?? "any",
     magical: Boolean(magical),
@@ -807,9 +813,11 @@ async function advanceCasterTurnZones(actor, context = {}) {
   for (const document of documents) {
     let zone = await migrateZoneDocument(document);
     if (!zone) continue;
-    const isCasterTurn = (zone.casterActorId && zone.casterActorId === actor.id)
-      || (zone.casterCombatantId && zone.casterCombatantId === context.combatantId)
-      || (zone.casterTokenId && zone.casterTokenId === combatantTokenId);
+    const isCasterTurn = isZoneCasterTurn(zone, {
+      actorId: actor.id,
+      combatantId: context.combatantId,
+      tokenId: combatantTokenId
+    });
     if (!isCasterTurn) continue;
     const handler = getZoneHandler(zone.type);
     if (handler?.lifecycle !== "casterTurn" || zone.lastAdvancedTurn === signature) continue;
