@@ -482,6 +482,8 @@ export const MANEUVERS = {
       await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
+        casterActorId: actor.id,
+        casterCombatantId: game.combat?.combatant?.id ?? null,
         casterTokenId: token?.id ?? null,
         type: "firestorm",
         duration: 3,
@@ -502,6 +504,8 @@ export const MANEUVERS = {
       await postAoEPlacementChat(actor, {
         sceneId: token?.document?.parent?.id ?? canvas.scene?.id,
         userId: game.user.id,
+        casterActorId: actor.id,
+        casterCombatantId: game.combat?.combatant?.id ?? null,
         casterTokenId: token?.id ?? null,
         type: "fireball",
         duration: 1,

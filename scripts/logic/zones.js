@@ -423,6 +423,8 @@ function turnSignature({ combatId = null, round = 0, turn = 0, combatantId = nul
 export function createZoneState({
   type,
   placementId = null,
+  casterActorId = null,
+  casterCombatantId = null,
   casterTokenId = null,
   duration,
   magical = false,
@@ -446,7 +448,8 @@ export function createZoneState({
   return {
     type: zoneType,
     placementId,
-    casterActorId: casterToken?.actor?.id ?? null,
+    casterActorId: casterActorId ?? casterToken?.actor?.id ?? null,
+    casterCombatantId: casterCombatantId ?? createdTurn?.combatantId ?? null,
     casterTokenId,
     disposition: casterToken?.document?.disposition ?? null,
     target: handler.target ?? "any",
@@ -480,7 +483,8 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
   const existingSquares = Number(zone?.movement?.squares ?? 0) || 0;
   const hasCanonicalMovement = !existingSquares || Boolean(zone?.movement?.lastPosition);
   const hasCanonicalEntryState = Object.prototype.hasOwnProperty.call(zone ?? {}, "armed");
-  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement && hasCanonicalEntryState) return zone;
+  const hasCasterCombatant = Object.prototype.hasOwnProperty.call(zone ?? {}, "casterCombatantId");
+  if (zone?.type && Object.prototype.hasOwnProperty.call(zone, "remainingRounds") && hasCanonicalMovement && hasCanonicalEntryState && hasCasterCombatant) return zone;
   const type = zone?.type ?? zone?.key ?? legacyAoE?.aoeType ?? null;
   if (!type) return null;
   const handler = getZoneHandler(type);
@@ -490,6 +494,7 @@ function canonicalZoneState(zone, legacyAoE = null, position = null) {
     type,
     placementId: zone?.placementId ?? legacyAoE?.placementId ?? null,
     casterActorId: zone?.casterActorId ?? zone?.actorId ?? null,
+    casterCombatantId: zone?.casterCombatantId ?? zone?.createdTurn?.combatantId ?? null,
     casterTokenId: zone?.casterTokenId ?? zone?.tokenId ?? legacyAoE?.casterTokenId ?? null,
     disposition: zone?.disposition ?? null,
     target: zone?.target ?? handler?.target ?? "any",
@@ -803,6 +808,7 @@ async function advanceCasterTurnZones(actor, context = {}) {
     let zone = await migrateZoneDocument(document);
     if (!zone) continue;
     const isCasterTurn = (zone.casterActorId && zone.casterActorId === actor.id)
+      || (zone.casterCombatantId && zone.casterCombatantId === context.combatantId)
       || (zone.casterTokenId && zone.casterTokenId === combatantTokenId);
     if (!isCasterTurn) continue;
     const handler = getZoneHandler(zone.type);

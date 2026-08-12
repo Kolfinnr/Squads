@@ -200,6 +200,8 @@ export async function createAoEFromEffect(opts = {}) {
   const {
     sceneId = canvas?.scene?.id,
     userId = game.user.id,
+    casterActorId = null,
+    casterCombatantId = null,
     casterTokenId = null,
     type = "firestorm",
     placementId = foundry.utils.randomID(),
@@ -229,6 +231,8 @@ export async function createAoEFromEffect(opts = {}) {
   const pending = (async () => {
     const templateData = buildTemplateData(definition.template, {
       casterTokenId,
+      casterActorId,
+      casterCombatantId,
       type,
       placementId,
       duration,
@@ -255,7 +259,18 @@ export async function createAoEFromEffect(opts = {}) {
   }
 }
 
-function buildTemplateData(templateConfig = {}, { casterTokenId, type, placementId, duration, data, userId, sceneId, position } = {}) {
+function buildTemplateData(templateConfig = {}, {
+  casterActorId,
+  casterCombatantId,
+  casterTokenId,
+  type,
+  placementId,
+  duration,
+  data,
+  userId,
+  sceneId,
+  position
+} = {}) {
   const base = {
     t: templateConfig.t ?? "circle",
     user: userId,
@@ -284,6 +299,8 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, placement
     zone: createZoneState({
       type,
       placementId,
+      casterActorId,
+      casterCombatantId,
       casterTokenId,
       duration,
       magical: Boolean(data?.magical),
