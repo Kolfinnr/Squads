@@ -155,6 +155,8 @@ async function handleAethyricEcho(actor, context = {}) {
     await createAoEFromEffect({
       sceneId: sceneIdForToken(targetToken ?? origin),
       userId: game.user.id,
+      casterActorId: actor.id,
+      casterCombatantId: game.combat?.combatant?.id ?? null,
       casterTokenId: origin?.id ?? null,
       type: config.type,
       duration: config.duration,

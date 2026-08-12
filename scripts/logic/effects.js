@@ -45,6 +45,45 @@ export function actorHasTag(actor, tag) {
   return getEffects(actor).some(effect => effectHasTag(effect, tag));
 }
 
+export async function removeEffectsByTag(actor, tag, value = true) {
+  if (!actor || !tag) return 0;
+  const current = getEffects(actor);
+  const next = current.filter(effect => effect?.mods?.tags?.[tag] !== value);
+  if (next.length !== current.length) {
+    await actor.setFlag(FLAG_SCOPE, "effects", next);
+  }
+  return current.length - next.length;
+}
+
+export async function advanceEffectsByTag(actor, tag, value) {
+  if (!actor || !tag) return 0;
+  const current = getEffects(actor);
+  let expired = 0;
+  const next = [];
+  for (const effect of current) {
+    if (effect?.mods?.tags?.[tag] !== value) {
+      next.push(effect);
+      continue;
+    }
+    const turns = Math.max(1, Number(effect?.mods?.tags?.expiryTurns ?? 1));
+    if (turns <= 1) {
+      expired += 1;
+      continue;
+    }
+    next.push({
+      ...effect,
+      mods: {
+        ...(effect.mods ?? {}),
+        tags: { ...(effect.mods?.tags ?? {}), expiryTurns: turns - 1 }
+      }
+    });
+  }
+  if (expired || next.some((effect, index) => effect !== current[index])) {
+    await actor.setFlag(FLAG_SCOPE, "effects", next);
+  }
+  return expired;
+}
+
 function hasAnyTag(effect, tags) {
   if (!tags || !effect?.mods?.tags) return false;
   for (const key of Object.keys(effect.mods.tags)) {
@@ -95,45 +134,6 @@ function createTiredFollowUp(label, extraTags = {}) {
   });
 }
 
-async function postZoneMessage(actor, key, data = {}) {
-  if (!actor) return;
-  const speaker = ChatMessage.getSpeaker({ actor });
-  const content = `<p>${game.i18n?.format?.(key, data) ?? key}</p>`;
-  await ChatMessage.create({ speaker, content });
-}
-
-async function applyFlagDelta(actor, key, delta, maxKey = null) {
-  const current = Number(actor?.getFlag(FLAG_SCOPE, key) || 0);
-  let max = null;
-  if (maxKey) {
-    max = Number(actor?.getFlag(FLAG_SCOPE, maxKey) || 0) || null;
-  }
-  let next = current + delta;
-  if (max !== null) next = Math.min(max, next);
-  next = Math.max(0, next);
-  await actor?.setFlag(FLAG_SCOPE, key, next);
-  return { before: current, after: next };
-}
-
-async function handleSpecialEffect(actor, effect) {
-  const tags = effect?.mods?.tags ?? {};
-  if (tags.zoneFirestorm) {
-    const hpRoll = await (new Roll("4d20").evaluate({}));
-    const moraleRoll = await (new Roll("6d20").evaluate({}));
-    await applyFlagDelta(actor, "hp", -hpRoll.total, "hpMax");
-    const moraleResult = await applyFlagDelta(actor, "morale", -moraleRoll.total, "moraleMax");
-    const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-    if (moraleMax > 0 && moraleResult.after / moraleMax < 0.5) {
-      await ensureDisorganized(actor, { source: "zone" });
-    }
-    await postZoneMessage(actor, "W4SQ.ChatFirestormPulse", {
-      name: actor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-      hp: hpRoll.total,
-      morale: moraleRoll.total
-    });
-  }
-}
-
 function followUpsForExpired(effect) {
   const key = effect?.key;
   switch (key) {
@@ -150,7 +150,7 @@ function followUpsForExpired(effect) {
 }
 
 export function getEffects(actor) {
-  return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "effects") ?? []);
+  return foundry.utils.deepClone(actor.getFlag(FLAG_SCOPE, "effects") ?? []);
 }
 
 export function effectPolarity(effect) {
@@ -231,6 +231,9 @@ export function summarizeEffect(effect) {
 
 function shouldBlockEffect(actor, effect) {
   const tags = effect?.mods?.tags ?? {};
+  const origin = actor?.getFlag?.(FLAG_SCOPE, "origin");
+  const passives = actor?.getFlag?.(FLAG_SCOPE, "passives") ?? {};
+  if (origin === "undead" && passives.undeadPuppetHost && tags.tired) return true;
   if (tags.flanked && (actorHasTag(actor, "immuneFlank") || actorHasTag(actor, "fortified"))) return true;
   if (tags.encircled && actorHasTag(actor, "immuneEncircle")) return true;
   return false;
@@ -240,7 +243,7 @@ export async function addEffect(actor, effect) {
   if (!actor || !effect) return;
   if (shouldBlockEffect(actor, effect)) return;
   const list = getEffects(actor);
-  list.push(ensureKey(foundry.utils.duplicate(effect)));
+  list.push(ensureKey(foundry.utils.deepClone(effect)));
   await actor.setFlag(FLAG_SCOPE, "effects", list);
 }
 
@@ -278,7 +281,6 @@ export async function tickEffects(actor) {
   const guardCleanup = [];
   const current = getEffects(actor);
   for (const eff of current) {
-    await handleSpecialEffect(actor, eff);
     const duration = Number(eff.duration ?? 0);
     if (duration <= 1) {
       const buff = eff?.mods?.tags?.nextRoundBuff;
@@ -355,7 +357,7 @@ export function aggregateForAttack(actor, context = {}) {
     }
     pushDice(tnParts, mods.tnDice);
     pushDice(dmgParts, mods.dmgDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
   }
@@ -395,7 +397,7 @@ export function aggregateForDefense(actor, options = {}) {
     pushDice(defSoakParts, mods.defSoakDice);
     pushDice(defPenaltyParts, mods.defPenaltyDice);
     pushDice(rangedResistParts, mods.rangedResistDice);
-    if (mods.tags?.tired) hasTired = true;
+    if (!(actor?.getFlag?.(FLAG_SCOPE, "origin") === "undead" && actor?.getFlag?.(FLAG_SCOPE, "passives")?.undeadPuppetHost) && mods.tags?.tired) hasTired = true;
     if (mods.tags?.disorganized) hasDisorganized = true;
     Object.assign(tags, mods.tags ?? {});
     if (mods.tags?.fortified && action === "ranged") {

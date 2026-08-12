@@ -31,8 +31,8 @@ export function formatCooldownRounds(value) {
 
 export function getCooldowns(actor) {
   const raw = actor?.getFlag?.(FLAG_SCOPE, "cooldowns") ?? {};
-  const duplicate = foundry?.utils?.duplicate
-    ? foundry.utils.duplicate
+  const duplicate = foundry?.utils?.deepClone
+    ? foundry.utils.deepClone
     : (data => {
         if (typeof structuredClone === "function") return structuredClone(data);
         try {
