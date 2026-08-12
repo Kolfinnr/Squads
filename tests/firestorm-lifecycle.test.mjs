@@ -64,12 +64,24 @@ test("caster combatant is resolved from the casting token, not the active turn",
   }), "casting-mage");
 });
 
-test("AoE templates use the Foundry 14 measured-template schema", async () => {
+test("AoEs use Foundry 14 Regions instead of deprecated measured templates", async () => {
   const source = await readFile(new URL("../scripts/aoe.js", import.meta.url), "utf8");
-  assert.match(source, /const base = \{\s*type:/);
-  assert.match(source, /author: userId/);
-  assert.doesNotMatch(source, /\btemplate:\s*\{\s*t:/);
-  assert.doesNotMatch(source, /const base = \{\s*t:/);
+  assert.match(source, /createEmbeddedDocuments\("Region", \[regionData\]\)/);
+  assert.match(source, /shapes: \[\{ type: "circle", x: center\.x, y: center\.y, radius \}\]/);
+  assert.doesNotMatch(source, /MeasuredTemplate/);
+});
+
+test("zone runtime uses Region collections and hooks", async () => {
+  const [zones, index] = await Promise.all([
+    readFile(new URL("../scripts/logic/zones.js", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/index.js", import.meta.url), "utf8")
+  ]);
+  assert.match(zones, /scene\?\.regions/);
+  assert.doesNotMatch(zones, /scene\?\.templates|canvas\.scene\.templates|canvas\?\.templates/);
+  assert.match(index, /Hooks\.on\("createRegion"/);
+  assert.match(index, /Hooks\.on\("updateRegion"/);
+  assert.match(index, /Hooks\.on\("deleteRegion"/);
+  assert.doesNotMatch(index, /MeasuredTemplate/);
 });
 
 test("Firestorm does not mutate synthetic actors merely to track occupancy", async () => {

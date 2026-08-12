@@ -222,14 +222,14 @@ export async function createAoEFromEffect(opts = {}) {
     return null;
   }
 
-  const existing = scene.templates?.contents?.find(document =>
+  const existing = scene.regions?.contents?.find(document =>
     document.getFlag(MODULE_ID, "zone")?.placementId === placementId
   );
   if (existing) return existing;
   if (pendingPlacements.has(placementId)) return pendingPlacements.get(placementId);
 
   const pending = (async () => {
-    const templateData = buildTemplateData(definition.template, {
+    const regionData = buildRegionData(definition.template, {
       casterTokenId,
       casterActorId,
       casterCombatantId,
@@ -241,10 +241,10 @@ export async function createAoEFromEffect(opts = {}) {
       sceneId,
       position
     });
-    templateData.flags ??= {};
-    templateData.flags[MODULE_ID] ??= {};
+    regionData.flags ??= {};
+    regionData.flags[MODULE_ID] ??= {};
     try {
-      const created = await scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+      const created = await scene.createEmbeddedDocuments("Region", [regionData]);
       return created?.[0] ?? null;
     } catch (err) {
       console.error("[W4SQ] Failed to create AoE template", err);
@@ -259,7 +259,7 @@ export async function createAoEFromEffect(opts = {}) {
   }
 }
 
-function buildTemplateData(templateConfig = {}, {
+function buildRegionData(templateConfig = {}, {
   casterActorId,
   casterCombatantId,
   casterTokenId,
@@ -271,30 +271,23 @@ function buildTemplateData(templateConfig = {}, {
   sceneId,
   position
 } = {}) {
-  const base = {
-    type: templateConfig.type ?? "circle",
-    author: userId,
-    distance: templateConfig.distance ?? DEFAULT_DISTANCE,
-    direction: 0,
-    fillColor: game.user?.color ?? "#ff0000"
-  };
-
-  if (templateConfig.type === "rect") {
-    base.distance = templateConfig.distance ?? 4;
-    base.width = templateConfig.width ?? base.distance;
-  }
-
+  const center = { x: 0, y: 0 };
   if (position) {
-    base.x = position.x ?? 0;
-    base.y = position.y ?? 0;
+    center.x = position.x ?? 0;
+    center.y = position.y ?? 0;
   } else {
     const caster = casterTokenId ? canvas?.tokens?.get(casterTokenId) : null;
-    const center = caster?.center ?? caster?.document?.center ?? null;
-    base.x = center?.x ?? 0;
-    base.y = center?.y ?? 0;
+    const tokenCenter = caster?.center ?? caster?.document?.center ?? null;
+    center.x = tokenCenter?.x ?? 0;
+    center.y = tokenCenter?.y ?? 0;
   }
-
-  base.flags = base.flags ?? {};
+  const radius = unitsToPixels(templateConfig.distance ?? DEFAULT_DISTANCE);
+  const base = {
+    name: game.i18n.localize(AOE_DEFINITIONS[type]?.labelKey ?? "W4SQ.AoEUnknown"),
+    color: game.user?.color ?? "#ff0000",
+    shapes: [{ type: "circle", x: center.x, y: center.y, radius }],
+    flags: {}
+  };
   base.flags[MODULE_ID] = {
     zone: createZoneState({
       type,
@@ -305,7 +298,7 @@ function buildTemplateData(templateConfig = {}, {
       duration,
       magical: Boolean(data?.magical),
       movementSquares: data?.movePerRound,
-      position: { x: base.x, y: base.y },
+      position: center,
       template: { type: templateConfig.type ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE }
     })
   };

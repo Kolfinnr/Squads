@@ -14,6 +14,24 @@ function gridDistance() {
   return canvas?.dimensions?.distance ?? canvas?.grid?.distance ?? 5;
 }
 
+function zoneDocuments(scene = canvas?.scene) {
+  return scene?.regions?.contents ?? scene?.regions ?? [];
+}
+
+function zonePosition(document) {
+  const shape = document?.shapes?.[0] ?? document?._source?.shapes?.[0];
+  return { x: Number(shape?.x ?? 0), y: Number(shape?.y ?? 0) };
+}
+
+function zonePositionUpdate(document, position) {
+  const shapes = Array.from(document?.shapes ?? document?._source?.shapes ?? []).map(shape => ({
+    ...(shape?.toObject?.() ?? shape),
+    x: Number(position.x) || 0,
+    y: Number(position.y) || 0
+  }));
+  return { shapes };
+}
+
 function duplicateConfig(source = {}) {
   const data = source || {};
   if (globalThis?.foundry?.utils?.deepClone) {
@@ -520,7 +538,7 @@ async function migrateZoneDocument(document) {
   if (!document) return null;
   const zone = getZoneData(document);
   const legacyAoE = document.getFlag(MODULE_ID, "aoe") ?? null;
-  const canonical = canonicalZoneState(zone, legacyAoE, { x: document.x ?? 0, y: document.y ?? 0 });
+  const canonical = canonicalZoneState(zone, legacyAoE, zonePosition(document));
   if (!canonical) return null;
   if (canonical !== zone) {
     document._w4sqSkipEnter = true;
@@ -534,7 +552,7 @@ async function migrateZoneDocument(document) {
 }
 
 export async function migrateZoneDocuments(scene = canvas?.scene) {
-  const documents = scene?.templates?.contents ?? scene?.templates ?? [];
+  const documents = zoneDocuments(scene);
   for (const document of documents) {
     await migrateZoneDocument(document);
   }
@@ -609,7 +627,7 @@ function tokensInTemplate(document, handler) {
   const config = templateConfigFor(zone, handler, document);
   const type = (config.type ?? document?.type ?? "circle").toLowerCase();
   const angle = normalizeAngle(document?.direction ?? config.direction ?? 0);
-  const center = { x: document?.x ?? 0, y: document?.y ?? 0 };
+  const center = zonePosition(document);
 
   const matches = tokens.filter(token => {
     if (!tokenMatchesTarget(zone, handler, token)) return false;
@@ -767,7 +785,7 @@ function moveUpdate(document, zone) {
   const dist = squareDistance(squares);
   const dx = dir.dx * dist;
   const dy = dir.dy * dist;
-  const previous = zone.movement?.lastPosition ?? { x: document.x ?? 0, y: document.y ?? 0 };
+  const previous = zone.movement?.lastPosition ?? zonePosition(document);
   if (!dx && !dy) return { update: {}, direction: dir.label, position: previous };
   const position = { x: Number(previous.x ?? 0) + dx, y: Number(previous.y ?? 0) + dy };
   return { update: position, direction: dir.label, position };
@@ -783,7 +801,7 @@ async function ensureFirestormDirection(document, zone) {
       squares: 3,
       direction: direction.label,
       directionRoll: result,
-      lastPosition: zone.movement?.lastPosition ?? { x: document.x ?? 0, y: document.y ?? 0 }
+      lastPosition: zone.movement?.lastPosition ?? zonePosition(document)
     }
   });
 }
@@ -796,7 +814,7 @@ async function advanceCasterTurnZones(actor, context = {}) {
     turn: context.turn ?? game.combat?.turn ?? 0,
     combatantId: context.combatantId ?? game.combat?.combatant?.id ?? null
   });
-  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  const documents = zoneDocuments();
   const combatantTokenId = context.tokenId
     ?? game.combat?.combatant?.tokenId
     ?? game.combat?.combatant?.token?.id
@@ -821,7 +839,7 @@ async function advanceCasterTurnZones(actor, context = {}) {
     if (Object.keys(movement.update).length) {
       document._w4sqSkipEnter = true;
       try {
-        await document.update({ x: movement.update.x, y: movement.update.y });
+        await document.update(zonePositionUpdate(document, movement.update));
       } finally {
         document._w4sqSkipEnter = false;
       }
@@ -884,7 +902,7 @@ async function processZoneTemplateCreated(document, { refresh = false } = {}) {
   let zone = await migrateZoneDocument(document);
   if (!zone) return;
   if (zone.placementId) {
-    const documents = document.parent?.templates?.contents ?? document.parent?.templates ?? [];
+    const documents = zoneDocuments(document.parent);
     const duplicates = [...documents]
       .filter(candidate => getZoneData(candidate)?.placementId === zone.placementId)
       .sort((left, right) => String(left.id).localeCompare(String(right.id)));
@@ -937,14 +955,14 @@ export async function handleZoneTokenMove(tokenDoc, changes) {
   if (changes && !("x" in changes) && !("y" in changes)) return;
   const token = canvas?.tokens?.get(tokenDoc.id);
   if (!token) return;
-  const templates = canvas?.templates?.placeables ?? [];
-  for (const template of templates) {
-    const zone = await migrateZoneDocument(template.document);
+  const documents = zoneDocuments();
+  for (const document of documents) {
+    const zone = await migrateZoneDocument(document);
     if (!zone) continue;
     const handler = getZoneHandler(zone.type);
     if (!handler) continue;
-    const tokens = tokensInTemplate(template.document, handler);
-    await syncZoneOccupants(template.document, handler, tokens);
+    const tokens = tokensInTemplate(document, handler);
+    await syncZoneOccupants(document, handler, tokens);
   }
 }
 
@@ -957,7 +975,7 @@ export async function handleZoneTemplateDeleted(document) {
   const zone = canonicalZoneState(
     getZoneData(document),
     document?.getFlag(MODULE_ID, "aoe") ?? null,
-    { x: document?.x ?? 0, y: document?.y ?? 0 }
+    zonePosition(document)
   );
   if (!zone) return;
   const handler = getZoneHandler(zone.type);
@@ -977,7 +995,7 @@ export function getZoneHandlers() {
 
 export async function tickZones({ isRoundStart = false, context = {} } = {}) {
   if (!canvas?.scene) return;
-  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  const documents = zoneDocuments();
   for (const document of documents) {
     let zone = null;
     const currentRound = context?.round ?? null;
@@ -1010,7 +1028,7 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       if (Object.keys(movement.update).length > 0) {
         document._w4sqSkipEnter = true;
         try {
-          await document.update({ x: movement.update.x, y: movement.update.y });
+          await document.update(zonePositionUpdate(document, movement.update));
         } finally {
           document._w4sqSkipEnter = false;
         }
@@ -1043,8 +1061,8 @@ export async function tickZones({ isRoundStart = false, context = {} } = {}) {
       console.error(`${MODULE_ID} | Zone round advancement failed`, {
         zoneId: document?.id ?? null,
         round: currentRound,
-        oldPosition: zone?.movement?.lastPosition ?? { x: document?.x ?? null, y: document?.y ?? null },
-        documentPosition: { x: document?.x ?? null, y: document?.y ?? null },
+        oldPosition: zone?.movement?.lastPosition ?? zonePosition(document),
+        documentPosition: zonePosition(document),
         remainingRounds: zone?.remainingRounds ?? null,
         error: err
       });
@@ -1059,7 +1077,7 @@ export async function tickZonesForActor(actor, context = {}) {
   await advanceCasterTurnZones(actor, context);
   const round = Number(context.round ?? game.combat?.round ?? 0);
   const turn = Number(context.turn ?? game.combat?.turn ?? 0);
-  const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  const documents = zoneDocuments();
   const processedPlacements = new Set();
 
   for (const document of documents) {
