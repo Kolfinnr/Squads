@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { isZoneCasterTurn, resolveZoneCaster } from "../scripts/logic/zone-lifecycle.js";
+import { findCasterCombatantId, isZoneCasterTurn, resolveZoneCaster } from "../scripts/logic/zone-lifecycle.js";
 
 test("module targets Foundry VTT 14", async () => {
   const manifest = JSON.parse(await readFile(new URL("../module.json", import.meta.url), "utf8"));
@@ -53,10 +53,28 @@ test("caster turn matching supports stable and synthetic identities", () => {
   }), false);
 });
 
+test("caster combatant is resolved from the casting token, not the active turn", () => {
+  const combat = { combatants: { contents: [
+    { id: "active-enemy", tokenId: "enemy-token", actorId: "enemy" },
+    { id: "casting-mage", tokenId: "mage-token", actorId: "mage" }
+  ] } };
+  assert.equal(findCasterCombatantId(combat, {
+    tokenId: "mage-token",
+    actorId: "synthetic-mage"
+  }), "casting-mage");
+});
+
 test("AoE templates use the Foundry 14 measured-template schema", async () => {
   const source = await readFile(new URL("../scripts/aoe.js", import.meta.url), "utf8");
   assert.match(source, /const base = \{\s*type:/);
   assert.match(source, /author: userId/);
   assert.doesNotMatch(source, /\btemplate:\s*\{\s*t:/);
   assert.doesNotMatch(source, /const base = \{\s*t:/);
+});
+
+test("Firestorm does not mutate synthetic actors merely to track occupancy", async () => {
+  const source = await readFile(new URL("../scripts/logic/zones.js", import.meta.url), "utf8");
+  const firestorm = source.slice(source.indexOf("  firestorm: {"), source.indexOf("  lineDefense: {"));
+  assert.doesNotMatch(firestorm, /ensureEffect|addEffect|setFlag/);
+  assert.match(firestorm, /async onTurn/);
 });
