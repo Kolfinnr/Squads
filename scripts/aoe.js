@@ -12,27 +12,27 @@ function unitsToPixels(units) {
 
 const AOE_DEFINITIONS = {
   firestorm: {
-    template: { t: "circle", distance: 4 },
+    template: { type: "circle", distance: 4 },
     labelKey: "W4SQ.AoEFirestorm"
   },
   fireball: {
-    template: { t: "circle", distance: 3 },
+    template: { type: "circle", distance: 3 },
     labelKey: "W4SQ.AoEFireball"
   },
   minefield: {
-    template: { t: "circle", distance: 1.5 },
+    template: { type: "circle", distance: 1.5 },
     labelKey: "W4SQ.AoEMinefield"
   },
   wolfPits: {
-    template: { t: "circle", distance: 1.5 },
+    template: { type: "circle", distance: 1.5 },
     labelKey: "W4SQ.AoEWolfPits"
   },
   fortify: {
-    template: { t: "circle", distance: 3.5 },
+    template: { type: "circle", distance: 3.5 },
     labelKey: "W4SQ.AoEFortify"
   },
   lineDefense: {
-    template: { t: "circle", distance: 1.5 },
+    template: { type: "circle", distance: 1.5 },
     labelKey: "W4SQ.AoELineDefense"
   }
 };
@@ -272,14 +272,14 @@ function buildTemplateData(templateConfig = {}, {
   position
 } = {}) {
   const base = {
-    t: templateConfig.t ?? "circle",
-    user: userId,
+    type: templateConfig.type ?? "circle",
+    author: userId,
     distance: templateConfig.distance ?? DEFAULT_DISTANCE,
     direction: 0,
     fillColor: game.user?.color ?? "#ff0000"
   };
 
-  if (templateConfig.t === "rect") {
+  if (templateConfig.type === "rect") {
     base.distance = templateConfig.distance ?? 4;
     base.width = templateConfig.width ?? base.distance;
   }
@@ -306,7 +306,7 @@ function buildTemplateData(templateConfig = {}, {
       magical: Boolean(data?.magical),
       movementSquares: data?.movePerRound,
       position: { x: base.x, y: base.y },
-      template: { type: templateConfig.t ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE }
+      template: { type: templateConfig.type ?? "circle", radiusUnits: templateConfig.distance ?? DEFAULT_DISTANCE }
     })
   };
   return base;
