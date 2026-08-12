@@ -243,10 +243,18 @@ export async function applyChannelledMagic(actor) {
 
 export async function clearChannelledMagic(actor) {
   if (!actor) return;
-  await actor.setFlag(FLAG_SCOPE, "channelledMagic", false);
   const effects = actor.getFlag(FLAG_SCOPE, "effects") ?? [];
   const filtered = effects.filter(effect => effect.key !== "channelled-magic");
-  await actor.setFlag(FLAG_SCOPE, "effects", filtered);
+  const changes = {};
+  if (actor.getFlag(FLAG_SCOPE, "channelledMagic") !== false) {
+    changes[`flags.${FLAG_SCOPE}.channelledMagic`] = false;
+  }
+  if (filtered.length !== effects.length) {
+    changes[`flags.${FLAG_SCOPE}.effects`] = filtered;
+  }
+  // A synthetic WFRP actor rebuilds all embedded Items after each update.
+  // Submit one update, and submit none when channel state is already clear.
+  if (Object.keys(changes).length) await actor.update(changes);
 }
 
 const MINOR_PERILS = [
