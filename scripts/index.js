@@ -8,7 +8,6 @@ import { clearSpecialistRoundFlags } from "./logic/specialists.js";
 import { getOrigin, handleTurnTick } from "./logic/origins.js";
 import { patchFlagOverrides, registerSocketBridge } from "./services/gm-bridge.js";
 import * as AOE from "./aoe.js";
-import { handleZoneTemplateCreated, handleZoneTemplateDeleted, handleZoneTokenMove, handleZoneTokenCreated, migrateZoneDocuments, tickZones, tickZonesForActor } from "./logic/zones.js";
 
 const IMPORT_PATHS = [
   "./config.js",
@@ -17,7 +16,6 @@ const IMPORT_PATHS = [
   "./logic/cooldowns.js",
   "./features/command-dashboard.js",
   "./logic/specialists.js",
-  "./logic/zones.js",
   "./services/gm-bridge.js",
   "./aoe.js"
 ];
@@ -196,8 +194,6 @@ async function processTurnTick(combat, context = {}) {
   await expireEffectsForTurnEntry(actor);
   if (combatRunTokens.get(combatKey) !== runToken) return;
   previousTurnActors.set(combatKey, actor);
-  await tickZonesForActor(actor, tickContext);
-  if (combatRunTokens.get(combatKey) !== runToken) return;
   if (!isSquadActor(actor)) {
     console.log("[W4SQ] processTurnTick skipped: not a squad actor", { actor: actor?.name });
     return;
@@ -290,21 +286,16 @@ Hooks.once("ready", async () => {
   game.w4sq = game.w4sq || {};
   game.w4sq.openCommand = openCommandDashboard;
   AOE.registerAoEHooks();
-  for (const scene of game.scenes?.contents ?? []) {
-    await migrateZoneDocuments(scene);
-  }
 });
 
 Hooks.on("combatStart", combat => {
   console.log("[W4SQ] combatStart fired", combat?.id, combat?.round);
   resetProcessedTurn(combat);
-  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatStart" });
 });
 
 Hooks.on("combatRound", combat => {
   console.log("[W4SQ] combatRound fired", combat?.id, combat?.round);
-  safeProcessZoneRound(combat);
   safeProcessTurnTick(combat, { event: "combatRound" });
 });
 
@@ -317,33 +308,8 @@ Hooks.on("updateCombat", (combat, changed) => {
     console.log("[W4SQ] updateCombat fired", combat?.id, combat?.round, changed);
     safeProcessTurnTick(combat, { event: "updateCombat", changed });
   }
-  if (hasRound) safeProcessZoneRound(combat);
 });
 
-Hooks.on("createMeasuredTemplate", document => {
-  if (!game.user.isGM) return;
-  handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
-});
-
-Hooks.on("updateMeasuredTemplate", document => {
-  if (!game.user.isGM) return;
-  handleZoneTemplateCreated(document, { refresh: true }).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
-});
-
-Hooks.on("deleteMeasuredTemplate", document => {
-  if (!game.user.isGM) return;
-  handleZoneTemplateDeleted(document).catch(err => console.error(`${MODULE_ID} | Zone deletion cleanup failed`, err));
-});
-
-Hooks.on("updateToken", (document, changes) => {
-  if (!game.user.isGM) return;
-  handleZoneTokenMove(document, changes).catch(err => console.error(`${MODULE_ID} | Zone movement failed`, err));
-});
-
-Hooks.on("createToken", document => {
-  if (!game.user.isGM) return;
-  handleZoneTokenCreated(document).catch(err => console.error(`${MODULE_ID} | Zone token creation failed`, err));
-});
 
 Hooks.on("renderTokenHUD", (hud, html) => {
   const token = canvas?.tokens?.get(hud.object.id);
