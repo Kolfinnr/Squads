@@ -1,6 +1,7 @@
 import { MODULE_ID, FLAG_SCOPE } from "../config.js";
 import { ensureEffect, ensureDisorganized, addEffect, removeEffectByKey } from "./effects.js";
 import { adjustIncomingDamage, adjustMoraleLoss, getOrigin, handleMoraleZero } from "./origins.js";
+import { findCasterCombatantId, isZoneCasterTurn, resolveZoneCaster } from "./zone-lifecycle.js";
 
 const FLAG_KEY = "zone";
 const zoneDocumentChains = new Map();
@@ -295,18 +296,6 @@ const ZONE_HANDLERS = {
     target: "any",
     lifecycle: "casterTurn",
     moveSquares: 3,
-    async onEnter({ actor, document, zone }) {
-      const key = `zone-firestorm-${document.id}-${actor.id}`;
-      const label = game.i18n.localize("W4SQ.ManeuverFirestorm");
-      await ensureEffect(actor, {
-        key,
-        label,
-        // This effect is only a visible occupancy marker. The zone document is
-        // the sole owner of Firestorm damage and lifetime, and onExit removes it.
-        duration: 99,
-        mods: { tags: { zoneFirestorm: true, [`zone-${document.id}`]: true } }
-      }, effect => effect.key === key);
-    },
     async onTurn({ actor, sourceActor }) {
       const damage = await rollAndApplyDamage(actor, {
         hpFormula: "4d20",
@@ -320,10 +309,9 @@ const ZONE_HANDLERS = {
         morale: damage.morale
       });
     },
-    async onExit({ actor, document }) {
-      if (!actor) return;
-      await removeEffectByKey(actor, `zone-firestorm-${document.id}-${actor.id}`);
-    }
+    // Firestorm occupancy is derived geometrically on every turn. Do not write
+    // marker effects to synthetic WFRP actors: those updates re-clean every
+    // embedded item and can emit hundreds of MoneyModel migration warnings.
   },
   lineDefense: {
     duration: 3,
@@ -444,13 +432,22 @@ export function createZoneState({
     turn: Number(combat.turn ?? 0),
     combatantId: combat.combatant?.id ?? combat.combatant?._id ?? null
   } : null;
+  const matchedCombatantId = findCasterCombatantId(combat, {
+    tokenId: casterTokenId,
+    actorId: casterActorId ?? casterToken?.actor?.id ?? null
+  });
   const squares = Number(movementSquares ?? handler.moveSquares ?? 0) || 0;
+  const caster = resolveZoneCaster({
+    casterActorId,
+    casterCombatantId: matchedCombatantId ?? casterCombatantId,
+    casterTokenId,
+    createdTurn,
+    casterToken
+  });
   return {
     type: zoneType,
     placementId,
-    casterActorId: casterActorId ?? casterToken?.actor?.id ?? null,
-    casterCombatantId: casterCombatantId ?? createdTurn?.combatantId ?? null,
-    casterTokenId,
+    ...caster,
     disposition: casterToken?.document?.disposition ?? null,
     target: handler.target ?? "any",
     magical: Boolean(magical),
@@ -565,8 +562,8 @@ function templateConfigFor(zone, handler, document) {
   if (zone?.template) {
     return foundry.utils.mergeObject(base, zone.template, { inplace: false });
   }
-  if (document?.t && !base.type) {
-    base.type = document.t;
+  if (document?.type && !base.type) {
+    base.type = document.type;
   }
   return base;
 }
@@ -610,7 +607,7 @@ function tokensInTemplate(document, handler) {
   const tokens = canvas?.tokens?.placeables ?? [];
   if (!tokens.length) return [];
   const config = templateConfigFor(zone, handler, document);
-  const type = (config.type ?? document?.t ?? "circle").toLowerCase();
+  const type = (config.type ?? document?.type ?? "circle").toLowerCase();
   const angle = normalizeAngle(document?.direction ?? config.direction ?? 0);
   const center = { x: document?.x ?? 0, y: document?.y ?? 0 };
 
@@ -807,9 +804,11 @@ async function advanceCasterTurnZones(actor, context = {}) {
   for (const document of documents) {
     let zone = await migrateZoneDocument(document);
     if (!zone) continue;
-    const isCasterTurn = (zone.casterActorId && zone.casterActorId === actor.id)
-      || (zone.casterCombatantId && zone.casterCombatantId === context.combatantId)
-      || (zone.casterTokenId && zone.casterTokenId === combatantTokenId);
+    const isCasterTurn = isZoneCasterTurn(zone, {
+      actorId: actor.id,
+      combatantId: context.combatantId,
+      tokenId: combatantTokenId
+    });
     if (!isCasterTurn) continue;
     const handler = getZoneHandler(zone.type);
     if (handler?.lifecycle !== "casterTurn" || zone.lastAdvancedTurn === signature) continue;
@@ -817,11 +816,6 @@ async function advanceCasterTurnZones(actor, context = {}) {
 
     const finiteDuration = zone.remainingRounds !== null && zone.remainingRounds !== undefined;
     const nextRemaining = finiteDuration ? Math.max(0, Number(zone.remainingRounds) - 1) : null;
-    if (finiteDuration && nextRemaining <= 0) {
-      await syncZoneOccupants(document, handler, []);
-      await document.delete();
-      continue;
-    }
 
     const movement = moveUpdate(document, zone);
     if (Object.keys(movement.update).length) {
@@ -834,6 +828,11 @@ async function advanceCasterTurnZones(actor, context = {}) {
     }
     const tokens = tokensInTemplate(document, handler);
     await syncZoneOccupants(document, handler, tokens);
+    if (finiteDuration && nextRemaining <= 0) {
+      await syncZoneOccupants(document, handler, []);
+      await document.delete();
+      continue;
+    }
     zone = getZoneData(document) ?? zone;
     await updateZone(document, zone, {
       remainingRounds: nextRemaining,
