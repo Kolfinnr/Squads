@@ -571,8 +571,8 @@ function templateConfigFor(zone, handler, document) {
   if (zone?.template) {
     return foundry.utils.mergeObject(base, zone.template, { inplace: false });
   }
-  if (document?.t && !base.type) {
-    base.type = document.t;
+  if (document?.type && !base.type) {
+    base.type = document.type;
   }
   return base;
 }
@@ -616,7 +616,7 @@ function tokensInTemplate(document, handler) {
   const tokens = canvas?.tokens?.placeables ?? [];
   if (!tokens.length) return [];
   const config = templateConfigFor(zone, handler, document);
-  const type = (config.type ?? document?.t ?? "circle").toLowerCase();
+  const type = (config.type ?? document?.type ?? "circle").toLowerCase();
   const angle = normalizeAngle(document?.direction ?? config.direction ?? 0);
   const center = { x: document?.x ?? 0, y: document?.y ?? 0 };
 

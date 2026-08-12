@@ -52,3 +52,11 @@ test("caster turn matching supports stable and synthetic identities", () => {
     tokenId: "different-token"
   }), false);
 });
+
+test("AoE templates use the Foundry 14 measured-template schema", async () => {
+  const source = await readFile(new URL("../scripts/aoe.js", import.meta.url), "utf8");
+  assert.match(source, /const base = \{\s*type:/);
+  assert.match(source, /author: userId/);
+  assert.doesNotMatch(source, /\btemplate:\s*\{\s*t:/);
+  assert.doesNotMatch(source, /const base = \{\s*t:/);
+});
