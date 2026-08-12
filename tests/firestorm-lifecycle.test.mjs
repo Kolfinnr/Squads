@@ -78,3 +78,10 @@ test("Firestorm does not mutate synthetic actors merely to track occupancy", asy
   assert.doesNotMatch(firestorm, /ensureEffect|addEffect|setFlag/);
   assert.match(firestorm, /async onTurn/);
 });
+
+test("turn ticking suppresses no-op synthetic actor updates", async () => {
+  const source = await readFile(new URL("../scripts/logic/effects.js", import.meta.url), "utf8");
+  const tick = source.slice(source.indexOf("export async function tickEffects"), source.indexOf("export async function tickEffects", source.indexOf("export async function tickEffects") + 1) === -1 ? undefined : source.indexOf("export async function tickEffects", source.indexOf("export async function tickEffects") + 1));
+  assert.match(tick, /if \(changed\) await actor\.setFlag/);
+  assert.doesNotMatch(tick, /\n\s*await actor\.setFlag\(FLAG_SCOPE, "effects", next\);/);
+});
