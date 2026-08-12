@@ -134,45 +134,6 @@ function createTiredFollowUp(label, extraTags = {}) {
   });
 }
 
-async function postZoneMessage(actor, key, data = {}) {
-  if (!actor) return;
-  const speaker = ChatMessage.getSpeaker({ actor });
-  const content = `<p>${game.i18n?.format?.(key, data) ?? key}</p>`;
-  await ChatMessage.create({ speaker, content });
-}
-
-async function applyFlagDelta(actor, key, delta, maxKey = null) {
-  const current = Number(actor?.getFlag(FLAG_SCOPE, key) || 0);
-  let max = null;
-  if (maxKey) {
-    max = Number(actor?.getFlag(FLAG_SCOPE, maxKey) || 0) || null;
-  }
-  let next = current + delta;
-  if (max !== null) next = Math.min(max, next);
-  next = Math.max(0, next);
-  await actor?.setFlag(FLAG_SCOPE, key, next);
-  return { before: current, after: next };
-}
-
-async function handleSpecialEffect(actor, effect) {
-  const tags = effect?.mods?.tags ?? {};
-  if (tags.zoneFirestorm) {
-    const hpRoll = await (new Roll("4d20").evaluate({}));
-    const moraleRoll = await (new Roll("6d20").evaluate({}));
-    await applyFlagDelta(actor, "hp", -hpRoll.total, "hpMax");
-    const moraleResult = await applyFlagDelta(actor, "morale", -moraleRoll.total, "moraleMax");
-    const moraleMax = Number(actor?.getFlag(FLAG_SCOPE, "moraleMax") || 0);
-    if (moraleMax > 0 && moraleResult.after / moraleMax < 0.5) {
-      await ensureDisorganized(actor, { source: "zone" });
-    }
-    await postZoneMessage(actor, "W4SQ.ChatFirestormPulse", {
-      name: actor?.name ?? game.i18n.localize("W4SQ.UnknownSquad"),
-      hp: hpRoll.total,
-      morale: moraleRoll.total
-    });
-  }
-}
-
 function followUpsForExpired(effect) {
   const key = effect?.key;
   switch (key) {
@@ -189,7 +150,7 @@ function followUpsForExpired(effect) {
 }
 
 export function getEffects(actor) {
-  return foundry.utils.duplicate(actor.getFlag(FLAG_SCOPE, "effects") ?? []);
+  return foundry.utils.deepClone(actor.getFlag(FLAG_SCOPE, "effects") ?? []);
 }
 
 export function effectPolarity(effect) {
@@ -282,7 +243,7 @@ export async function addEffect(actor, effect) {
   if (!actor || !effect) return;
   if (shouldBlockEffect(actor, effect)) return;
   const list = getEffects(actor);
-  list.push(ensureKey(foundry.utils.duplicate(effect)));
+  list.push(ensureKey(foundry.utils.deepClone(effect)));
   await actor.setFlag(FLAG_SCOPE, "effects", list);
 }
 
@@ -320,7 +281,6 @@ export async function tickEffects(actor) {
   const guardCleanup = [];
   const current = getEffects(actor);
   for (const eff of current) {
-    await handleSpecialEffect(actor, eff);
     const duration = Number(eff.duration ?? 0);
     if (duration <= 1) {
       const buff = eff?.mods?.tags?.nextRoundBuff;

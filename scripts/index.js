@@ -45,9 +45,9 @@ async function reduceActiveManeuver(actor) {
   }
   let active;
   try {
-    active = foundry.utils.duplicate(current);
+    active = foundry.utils.deepClone(current);
   } catch (err) {
-    console.error(`${MODULE_ID} | Failed to duplicate active maneuver`, err, current);
+    console.error(`${MODULE_ID} | Failed to clone active maneuver`, err, current);
     await actor.unsetFlag(FLAG_SCOPE, "activeManeuver");
     return;
   }
@@ -180,6 +180,7 @@ async function processTurnTick(combat, context = {}) {
     ...(context ?? {}),
     combatId: combat.id ?? combat._id ?? null,
     combatantId,
+    tokenId: combatant.tokenId ?? combatant.token?.id ?? null,
     round,
     turn
   };

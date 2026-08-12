@@ -33,7 +33,7 @@ export class SquadActorSheet extends ActorSheet {
     const squadSystem = foundry.utils.getProperty(this.actor.system ?? this.actor.data?.data, "squad") || {};
     const originFlag = f("origin", null);
     const origin = typeof originFlag === "string" ? originFlag : (squadSystem.origin ?? "");
-    const passiveState = foundry.utils.duplicate(f("passives", squadSystem.passives ?? {})) || {};
+    const passiveState = foundry.utils.deepClone(f("passives", squadSystem.passives ?? {})) || {};
     data.squad = {
       hp: f("hp", 100),
       hpMax: f("hpMax", 100),
@@ -52,7 +52,7 @@ export class SquadActorSheet extends ActorSheet {
       backlineAttack: f("backlineAttack", false),
       playerControlled: f("playerControlled", null),
       isCommander: f("isCommander", false),
-      cp: foundry.utils.duplicate(f("cp", DEFAULT_FLAGS.cp)),
+      cp: foundry.utils.deepClone(f("cp", DEFAULT_FLAGS.cp)),
       lastTargetName: f("lastTargetName", ""),
       origin,
       passives: passiveState
@@ -265,7 +265,7 @@ export class SquadActorSheet extends ActorSheet {
     }
 
     const originLabel = game.i18n.localize(getOriginLabelKey(origin));
-    const passiveState = foundry.utils.duplicate(this.actor.getFlag(FLAG_SCOPE, "passives") || {});
+    const passiveState = foundry.utils.deepClone(this.actor.getFlag(FLAG_SCOPE, "passives") || {});
     const rows = passiveKeys.map(key => {
       const label = game.i18n.localize(getPassiveLabel(key));
       const checked = passiveState?.[key] ? "checked" : "";

@@ -78,7 +78,7 @@ function canSee(token) {
 
 function getCP(actor) {
   const source = actor?.getFlag(FLAG_SCOPE, "cp") ?? DEFAULT_FLAGS.cp;
-  const cp = foundry.utils.duplicate(source ?? {});
+  const cp = foundry.utils.deepClone(source ?? {});
   const fallback = DEFAULT_FLAGS.cp ?? { current: 0, cap: 0 };
   return {
     current: Number(cp.current ?? fallback.current ?? 0),

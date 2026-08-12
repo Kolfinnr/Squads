@@ -296,13 +296,14 @@ const ZONE_HANDLERS = {
     lifecycle: "casterTurn",
     moveSquares: 3,
     async onEnter({ actor, document, zone }) {
-      const duration = zone.remainingRounds ?? 1;
       const key = `zone-firestorm-${document.id}-${actor.id}`;
       const label = game.i18n.localize("W4SQ.ManeuverFirestorm");
       await ensureEffect(actor, {
         key,
         label,
-        duration,
+        // This effect is only a visible occupancy marker. The zone document is
+        // the sole owner of Firestorm damage and lifetime, and onExit removes it.
+        duration: 99,
         mods: { tags: { zoneFirestorm: true, [`zone-${document.id}`]: true } }
       }, effect => effect.key === key);
     },
@@ -794,9 +795,16 @@ async function advanceCasterTurnZones(actor, context = {}) {
     combatantId: context.combatantId ?? game.combat?.combatant?.id ?? null
   });
   const documents = canvas.scene.templates?.contents ?? canvas.scene.templates ?? [];
+  const combatantTokenId = context.tokenId
+    ?? game.combat?.combatant?.tokenId
+    ?? game.combat?.combatant?.token?.id
+    ?? null;
   for (const document of documents) {
     let zone = await migrateZoneDocument(document);
-    if (!zone || zone.casterActorId !== actor.id) continue;
+    if (!zone) continue;
+    const isCasterTurn = (zone.casterActorId && zone.casterActorId === actor.id)
+      || (zone.casterTokenId && zone.casterTokenId === combatantTokenId);
+    if (!isCasterTurn) continue;
     const handler = getZoneHandler(zone.type);
     if (handler?.lifecycle !== "casterTurn" || zone.lastAdvancedTurn === signature) continue;
     zone = await ensureFirestormDirection(document, zone);
