@@ -320,17 +320,17 @@ Hooks.on("updateCombat", (combat, changed) => {
   if (hasRound) safeProcessZoneRound(combat);
 });
 
-Hooks.on("createMeasuredTemplate", document => {
+Hooks.on("createRegion", document => {
   if (!game.user.isGM) return;
   handleZoneTemplateCreated(document).catch(err => console.error(`${MODULE_ID} | Zone creation failed`, err));
 });
 
-Hooks.on("updateMeasuredTemplate", document => {
+Hooks.on("updateRegion", document => {
   if (!game.user.isGM) return;
   handleZoneTemplateCreated(document, { refresh: true }).catch(err => console.error(`${MODULE_ID} | Zone update failed`, err));
 });
 
-Hooks.on("deleteMeasuredTemplate", document => {
+Hooks.on("deleteRegion", document => {
   if (!game.user.isGM) return;
   handleZoneTemplateDeleted(document).catch(err => console.error(`${MODULE_ID} | Zone deletion cleanup failed`, err));
 });

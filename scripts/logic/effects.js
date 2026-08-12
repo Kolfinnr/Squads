@@ -307,7 +307,20 @@ export async function tickEffects(actor) {
     }
     next.push({ ...eff, duration: duration - 1 });
   }
-  await actor.setFlag(FLAG_SCOPE, "effects", next);
+  // Updating an unlinked token's synthetic actor makes WFRP4e reconstruct and
+  // migrate every embedded Item. In Foundry 14 that also produces one
+  // MoneyModel compatibility warning per item. Most turn entries do not
+  // actually change the effect list, so do not submit a no-op ActorDelta.
+  const changed = next.length !== current.length || next.some((effect, index) => {
+    const previous = current[index];
+    if (effect === previous) return false;
+    try {
+      return JSON.stringify(effect) !== JSON.stringify(previous);
+    } catch (_err) {
+      return true;
+    }
+  });
+  if (changed) await actor.setFlag(FLAG_SCOPE, "effects", next);
 
   for (const entry of guardCleanup) {
     if (entry.type === "guarding" && entry.targetId) {
