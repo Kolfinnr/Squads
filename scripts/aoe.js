@@ -130,13 +130,13 @@ function buildTemplateData(templateConfig = {}, { casterTokenId, type, duration,
   }
 
   if (position) {
-    base.x = position.x ?? 0;
-    base.y = position.y ?? 0;
+    center.x = position.x ?? 0;
+    center.y = position.y ?? 0;
   } else {
     const caster = casterTokenId ? canvas?.tokens?.get(casterTokenId) : null;
-    const center = caster?.center ?? caster?.document?.center ?? null;
-    base.x = center?.x ?? 0;
-    base.y = center?.y ?? 0;
+    const tokenCenter = caster?.center ?? caster?.document?.center ?? null;
+    center.x = tokenCenter?.x ?? 0;
+    center.y = tokenCenter?.y ?? 0;
   }
 
   const combat = game.combat;
